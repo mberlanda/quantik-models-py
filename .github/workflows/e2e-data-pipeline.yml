@@ -23,7 +23,7 @@ jobs:
       RUST: ${{ github.workspace }}/quantik-core-rust
       CORE_PY: ${{ github.workspace }}/quantik-core-py
       MODELS: ${{ github.workspace }}/quantik-models-py
-      OUT: ${{ runner.temp }}/quantik-e2e-data
+      OUT: ${{ github.workspace }}/quantik-e2e-data
       RUST_PROFILE: debug
       BOOK_DEPTH: "1"
       OPENING_BOOK_EXTRA_ARGS: --max-positions 16 --batch-size 16 --quiet
@@ -109,5 +109,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: quantik-e2e-data-pipeline
-          path: ${{ runner.temp }}/quantik-e2e-data
+          path: ${{ github.workspace }}/quantik-e2e-data
           if-no-files-found: error
