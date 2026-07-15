@@ -50,8 +50,8 @@ pushes, pull requests, and manual dispatch. The workflow intentionally uses
 small counts and debug Rust builds:
 
 - opening book depth: `1` by default,
-- positions: one per phase, with `POSITIONS_USE_BOOK=0` in CI until the Rust
-  searched-book and benchmark-book SQLite schemas converge,
+- positions: one per phase, with `POSITIONS_USE_BOOK=1` so the searched
+  depth-book is read through (and written back to) by position generation,
 - engines: `random,minimax`,
 - H2H positions/seeds: `1`,
 - self-play games: `1`,
