@@ -57,6 +57,14 @@ generates positions, observations, H2H rows, and MCTS self-play rows, converts
 contract rows to Parquet where supported, and materializes `.npz` training
 views.
 
+## CI Data Pipeline
+
+`.github/workflows/e2e-data-pipeline.yml` runs a tiny version of the same flow
+on GitHub Actions. It checks out contracts, Rust core, Python core, and this
+repository; generates a small book/dataset/observation/H2H/self-play corpus;
+materializes training views; verifies the output arrays; and uploads the smoke
+artifacts.
+
 ## Materialize A Training View
 
 From observations:
@@ -76,4 +84,5 @@ quantik-models-materialize \
 ```
 
 See `docs/model-report.md`, `docs/pipeline.md`, `docs/tensor-structure.md`,
-`docs/labeling-strategy.md`, and `docs/autoplay-training.md`.
+`docs/labeling-strategy.md`, `docs/autoplay-training.md`, and
+`docs/frontend-play.md`.

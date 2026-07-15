@@ -1,0 +1,117 @@
+name: E2E Data Pipeline
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      book_depth:
+        description: Tiny opening-book depth for the CI proof run
+        default: "1"
+        required: false
+      selfplay_games:
+        description: Tiny self-play game count for the CI proof run
+        default: "1"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-data-pipeline:
+    name: Contracts -> Rust data -> model view
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      QUANTIK_NS: ${{ github.workspace }}
+      CONTRACTS: ${{ github.workspace }}/quantik-core-contracts
+      RUST: ${{ github.workspace }}/quantik-core-rust
+      CORE_PY: ${{ github.workspace }}/quantik-core-py
+      MODELS: ${{ github.workspace }}/quantik-models-py
+      OUT: ${{ runner.temp }}/quantik-e2e-data
+      RUST_PROFILE: debug
+      BOOK_DEPTH: ${{ inputs.book_depth || '1' }}
+      OPENING_BOOK_EXTRA_ARGS: --max-positions 16 --batch-size 16 --quiet
+      # The searched depth-book is generated as an artifact in this proof run,
+      # but dataset read-through is disabled until the Rust searched-book and
+      # benchmark-book SQLite schemas converge.
+      POSITIONS_USE_BOOK: "0"
+      OPENING_POSITIONS: "1"
+      EARLY_MID_POSITIONS: "1"
+      LATE_MID_POSITIONS: "1"
+      ENDGAME_POSITIONS: "1"
+      SOLVE_BUDGET: "0.05"
+      ENGINES: random,minimax
+      OBSERVATION_SEEDS: "1"
+      MINIMAX_DEPTH: "1"
+      MINIMAX_TIME: "0.01"
+      MCTS_ITERATIONS: "8"
+      MCTS_DEPTH: "4"
+      BEAM_WIDTH: "4"
+      BEAM_DEPTH: "4"
+      WORKERS: "1"
+      H2H_ENGINES: random,minimax
+      H2H_POSITIONS: "1"
+      H2H_SEEDS: "1"
+      H2H_OBSERVATION_SEEDS: "1"
+      SELFPLAY_GAMES: ${{ inputs.selfplay_games || '1' }}
+      SELFPLAY_ITERATIONS: "8"
+      SELFPLAY_SEED: "20260713"
+
+    steps:
+      - name: Check out model repository
+        uses: actions/checkout@v4
+        with:
+          path: quantik-models-py
+
+      - name: Check out contracts repository
+        uses: actions/checkout@v4
+        with:
+          repository: mberlanda/quantik-core-contracts
+          path: quantik-core-contracts
+
+      - name: Check out Rust core repository
+        uses: actions/checkout@v4
+        with:
+          repository: mberlanda/quantik-core-rust
+          path: quantik-core-rust
+
+      - name: Check out Python core repository
+        uses: actions/checkout@v4
+        with:
+          repository: mberlanda/quantik-core-py
+          path: quantik-core-py
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "$CORE_PY[arrow]"
+          python -m pip install -e "$MODELS[dev,arrow]"
+
+      - name: Run model unit tests
+        working-directory: quantik-models-py
+        run: python -m pytest
+
+      - name: Run tiny end-to-end data pipeline
+        working-directory: quantik-models-py
+        run: scripts/run_smoke_pipeline.sh
+
+      - name: Verify generated training artifacts
+        working-directory: quantik-models-py
+        run: python scripts/verify_smoke_outputs.py "$OUT"
+
+      - name: Upload generated smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantik-e2e-data-pipeline
+          path: ${{ runner.temp }}/quantik-e2e-data
+          if-no-files-found: error

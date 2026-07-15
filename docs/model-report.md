@@ -140,3 +140,5 @@ exporting contract-compatible rows.
 - Add Rust book-guided autoplay/self-play export up to depth 6.
 - Add cross-stack evaluation reports comparing model-guided engines against
   opening-book, MCTS, beam, and minimax baselines.
+- Add a frontend/game-session layer for human-vs-human, human-vs-CPU, and
+  CPU-vs-CPU autoplay using the same core rules and engine adapters.

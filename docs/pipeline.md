@@ -41,3 +41,23 @@ The script runs:
 
 Large runs should override counts with environment variables such as
 `OPENING_POSITIONS`, `MCTS_ITERATIONS`, `SELFPLAY_GAMES`, and `OUT`.
+
+
+## GitHub Actions proof run
+
+The `E2E Data Pipeline` workflow runs a tiny proof version of this pipeline on
+pushes, pull requests, and manual dispatch. The workflow intentionally uses
+small counts and debug Rust builds:
+
+- opening book depth: `1` by default,
+- positions: one per phase, with `POSITIONS_USE_BOOK=0` in CI until the Rust
+  searched-book and benchmark-book SQLite schemas converge,
+- engines: `random,minimax`,
+- H2H positions/seeds: `1`,
+- self-play games: `1`,
+- MCTS iterations: `8`.
+
+The goal is not model strength; it is to prove that contracts validation, Rust
+data generation, row export, Python materialization, and artifact verification
+all still connect end to end. The workflow uploads the generated smoke corpus as
+`quantik-e2e-data-pipeline`.
