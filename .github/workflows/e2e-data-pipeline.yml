@@ -1,17 +1,20 @@
-name: E2E Data Pipeline
+name: "E2E Data Pipeline"
 
-on:
-  pull_request:
+"on":
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
   e2e-data-pipeline:
-    name: Contracts -> Rust data -> model view
+    name: "Contracts to Rust data to model view"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
