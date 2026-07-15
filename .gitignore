@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+*.egg-info/
+*.npz
+*.parquet
+*.jsonl
+outputs/
+artifacts/
+.coverage

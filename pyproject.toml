@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantik-models"
+version = "0.1.0"
+description = "Training and model tooling for Quantik policy/value checkpoints"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+  "mypy>=1.8,<3",
+]
+arrow = [
+  "pyarrow>=16,<22",
+]
+torch = [
+  "torch>=2.4",
+]
+all = [
+  "quantik-models[dev,arrow,torch]",
+]
+
+[project.scripts]
+quantik-models-materialize = "quantik_models.data.materialize:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config"]
