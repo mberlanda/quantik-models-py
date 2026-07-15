@@ -4,13 +4,27 @@ This repository owns the model-training side of the Quantik pipeline. The
 contracts repository remains the source of truth for artifact IDs and field
 semantics.
 
+## Clone The Workspace
+
+```bash
+export QUANTIK_NS="$HOME/Code/quantik-ns"
+mkdir -p "$QUANTIK_NS"
+cd "$QUANTIK_NS"
+
+git clone https://github.com/mberlanda/quantik-core-contracts.git
+git clone https://github.com/mberlanda/quantik-core-rust.git
+git clone https://github.com/mberlanda/quantik-core-py.git
+git clone https://github.com/mberlanda/quantik-models-py.git
+```
+
 ## One-command smoke
 
 ```bash
-export CONTRACTS=/Users/mauroberlanda/Code/quantik-ns/quantik-core-contracts
-export RUST=/Users/mauroberlanda/Code/quantik-ns/quantik-core-rust
-export CORE_PY=/Users/mauroberlanda/Code/quantik-ns/quantik/quantik-core-py
-export MODELS=/Users/mauroberlanda/Code/quantik-ns/quantik-models-py
+export QUANTIK_NS="${QUANTIK_NS:-$HOME/Code/quantik-ns}"
+export CONTRACTS="$QUANTIK_NS/quantik-core-contracts"
+export RUST="$QUANTIK_NS/quantik-core-rust"
+export CORE_PY="$QUANTIK_NS/quantik-core-py"
+export MODELS="$QUANTIK_NS/quantik-models-py"
 cd "$MODELS"
 scripts/run_smoke_pipeline.sh
 ```

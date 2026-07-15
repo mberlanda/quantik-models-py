@@ -24,6 +24,19 @@ The core libraries should expose APIs for reading, validating, probing, and
 using model artifacts. The model repository owns the design and training of the
 artifacts themselves.
 
+## Clone The Workspace
+
+```bash
+export QUANTIK_NS="$HOME/Code/quantik-ns"
+mkdir -p "$QUANTIK_NS"
+cd "$QUANTIK_NS"
+
+git clone https://github.com/mberlanda/quantik-core-contracts.git
+git clone https://github.com/mberlanda/quantik-core-rust.git
+git clone https://github.com/mberlanda/quantik-core-py.git
+git clone https://github.com/mberlanda/quantik-models-py.git
+```
+
 ## Current Artifact Flow
 
 ```text
@@ -40,7 +53,7 @@ contracts validate
 Run the smoke flow with:
 
 ```bash
-cd /Users/mauroberlanda/Code/quantik-ns/quantik-models-py
+cd "$QUANTIK_NS/quantik-models-py"
 scripts/run_smoke_pipeline.sh
 ```
 

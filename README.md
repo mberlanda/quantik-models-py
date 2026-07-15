@@ -15,13 +15,29 @@ Core libraries stay small and stable:
 - `quantik-models-py`: training views, model architecture, training loops,
   exported checkpoints, calibration reports.
 
+## Clone The Workspace
+
+Choose any parent directory for the Quantik repositories:
+
+```bash
+export QUANTIK_NS="$HOME/Code/quantik-ns"
+mkdir -p "$QUANTIK_NS"
+cd "$QUANTIK_NS"
+
+git clone https://github.com/mberlanda/quantik-core-contracts.git
+git clone https://github.com/mberlanda/quantik-core-rust.git
+git clone https://github.com/mberlanda/quantik-core-py.git
+git clone https://github.com/mberlanda/quantik-models-py.git
+```
+
 ## Setup
 
 ```bash
-export CONTRACTS=/Users/mauroberlanda/Code/quantik-ns/quantik-core-contracts
-export RUST=/Users/mauroberlanda/Code/quantik-ns/quantik-core-rust
-export CORE_PY=/Users/mauroberlanda/Code/quantik-ns/quantik/quantik-core-py
-export MODELS=/Users/mauroberlanda/Code/quantik-ns/quantik-models-py
+export QUANTIK_NS="${QUANTIK_NS:-$HOME/Code/quantik-ns}"
+export CONTRACTS="$QUANTIK_NS/quantik-core-contracts"
+export RUST="$QUANTIK_NS/quantik-core-rust"
+export CORE_PY="$QUANTIK_NS/quantik-core-py"
+export MODELS="$QUANTIK_NS/quantik-models-py"
 
 cd "$MODELS"
 test -d .venv || python -m venv .venv

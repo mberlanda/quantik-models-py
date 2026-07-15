@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONTRACTS="${CONTRACTS:-/Users/mauroberlanda/Code/quantik-ns/quantik-core-contracts}"
-RUST="${RUST:-/Users/mauroberlanda/Code/quantik-ns/quantik-core-rust}"
-CORE_PY="${CORE_PY:-/Users/mauroberlanda/Code/quantik-ns/quantik/quantik-core-py}"
-MODELS="${MODELS:-/Users/mauroberlanda/Code/quantik-ns/quantik-models-py}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+MODELS_DEFAULT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+QUANTIK_NS="${QUANTIK_NS:-$(CDPATH= cd -- "$MODELS_DEFAULT/.." && pwd)}"
+
+CONTRACTS="${CONTRACTS:-$QUANTIK_NS/quantik-core-contracts}"
+RUST="${RUST:-$QUANTIK_NS/quantik-core-rust}"
+CORE_PY="${CORE_PY:-$QUANTIK_NS/quantik-core-py}"
+MODELS="${MODELS:-$MODELS_DEFAULT}"
 RUN_ID="${RUN_ID:-smoke-$(date +%Y%m%d-%H%M%S)}"
 OUT="${OUT:-$MODELS/outputs/$RUN_ID}"
 
