@@ -27,10 +27,11 @@ jobs:
       RUST_PROFILE: debug
       BOOK_DEPTH: "1"
       OPENING_BOOK_EXTRA_ARGS: --max-positions 16 --batch-size 16 --quiet
-      # The searched depth-book is generated as an artifact in this proof run,
-      # but dataset read-through is disabled until the Rust searched-book and
-      # benchmark-book SQLite schemas converge.
-      POSITIONS_USE_BOOK: "0"
+      # The searched depth-book is generated and then read through by the
+      # positions step: quantik-core-rust upgrades bench_bfs searched books
+      # in place on open, so `generate_positions.sh --book` reuses and
+      # writes back solved references against the same SQLite file.
+      POSITIONS_USE_BOOK: "1"
       OPENING_POSITIONS: "1"
       EARLY_MID_POSITIONS: "1"
       LATE_MID_POSITIONS: "1"
