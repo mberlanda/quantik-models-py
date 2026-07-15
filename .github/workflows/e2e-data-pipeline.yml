@@ -5,15 +5,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      book_depth:
-        description: Tiny opening-book depth for the CI proof run
-        default: "1"
-        required: false
-      selfplay_games:
-        description: Tiny self-play game count for the CI proof run
-        default: "1"
-        required: false
 
 permissions:
   contents: read
@@ -31,7 +22,7 @@ jobs:
       MODELS: ${{ github.workspace }}/quantik-models-py
       OUT: ${{ runner.temp }}/quantik-e2e-data
       RUST_PROFILE: debug
-      BOOK_DEPTH: ${{ inputs.book_depth || '1' }}
+      BOOK_DEPTH: "1"
       OPENING_BOOK_EXTRA_ARGS: --max-positions 16 --batch-size 16 --quiet
       # The searched depth-book is generated as an artifact in this proof run,
       # but dataset read-through is disabled until the Rust searched-book and
@@ -55,7 +46,7 @@ jobs:
       H2H_POSITIONS: "1"
       H2H_SEEDS: "1"
       H2H_OBSERVATION_SEEDS: "1"
-      SELFPLAY_GAMES: ${{ inputs.selfplay_games || '1' }}
+      SELFPLAY_GAMES: "1"
       SELFPLAY_ITERATIONS: "8"
       SELFPLAY_SEED: "20260713"
 
