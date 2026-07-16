@@ -37,6 +37,8 @@ def test_masked_log_softmax_zeroes_illegal() -> None:
     # masked entries must not produce NaN gradients
     loss = (probs[0, :4]).sum()
     loss.backward()
+    assert logits.grad is not None
+    assert not torch.isnan(logits.grad).any()
 
 
 def test_preset_sizes() -> None:

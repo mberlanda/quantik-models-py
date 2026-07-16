@@ -85,6 +85,9 @@ class PolicyValueNet(nn.Module):
 
 def masked_log_softmax(logits: Tensor, legal_mask: Tensor) -> Tensor:
     """Log-softmax with illegal logits forced to -inf (prob 0)."""
+    # Note: an all-False mask row yields a uniform distribution over all 64
+    # actions rather than NaN, since finfo.min keeps the arithmetic finite;
+    # callers must not pass all-illegal rows expecting an error.
     masked = logits.masked_fill(~legal_mask, torch.finfo(logits.dtype).min)
     return torch.log_softmax(masked, dim=-1)
 
