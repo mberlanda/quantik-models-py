@@ -39,7 +39,8 @@ def split_assignments(
 ) -> np.ndarray:
     """Deterministic per-row split labels.
 
-    bucket = sha1(tensor_bytes || policy_bytes || tag) mod 100:
+    bucket = (first 8 big-endian bytes of sha1(tensor_bytes || policy_bytes
+    || tag)) mod 100:
     [0, train_pct) -> train, [train_pct, train_pct+val_pct) -> val,
     the rest -> test.
     """

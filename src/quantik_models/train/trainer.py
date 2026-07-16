@@ -128,15 +128,15 @@ def _validate(
         value_loss_weight,
         logits_value=(logits, value),
     )
+    # Weight the per-row metrics the same way the losses are weighted so all
+    # validation numbers describe the same distribution.
+    norm = weight.sum().clamp_min(1e-8)
     masked_logp = masked_log_softmax(logits, legal_mask)
-    top1 = (
-        (masked_logp.argmax(dim=-1) == policy_target.argmax(dim=-1))
-        .float()
-        .mean()
-        .item()
-    )
+    top1_hits = (masked_logp.argmax(dim=-1) == policy_target.argmax(dim=-1)).float()
+    top1 = ((top1_hits * weight).sum() / norm).item()
     premask_probs = torch.softmax(logits, dim=-1)
-    illegal_mass = premask_probs.masked_fill(legal_mask, 0.0).sum(dim=-1).mean().item()
+    illegal_rows = premask_probs.masked_fill(legal_mask, 0.0).sum(dim=-1)
+    illegal_mass = ((illegal_rows * weight).sum() / norm).item()
     model.train()
     return {
         "val_policy_loss": float(policy_loss.item()),
