@@ -39,7 +39,10 @@ def export_checkpoint(
     # safetensors serializes CPU tensors; the model may live on an accelerator.
     state_dict = {k: v.detach().cpu() for k, v in model.state_dict().items()}
     save_file(state_dict, str(weights_path))
-    weights_bytes = weights_path.read_bytes()
+    weights_digest = hashlib.sha256()
+    with weights_path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            weights_digest.update(chunk)
 
     report_path = out_dir / _REPORT_NAME
     report_path.write_text(json.dumps(training_report, indent=2, sort_keys=True))
@@ -54,7 +57,7 @@ def export_checkpoint(
         "input_contracts": ["tensor-board.v1", "bitboard.v1", "action-index.v1"],
         "output_contract": "policy-logits-64+value-tanh",
         "weights_format": "safetensors",
-        "weights_hash": f"sha256:{hashlib.sha256(weights_bytes).hexdigest()}",
+        "weights_hash": f"sha256:{weights_digest.hexdigest()}",
         "size_bytes": weights_path.stat().st_size,
         "training_data_manifest": _REPORT_NAME,
         "calibration_report": _REPORT_NAME,

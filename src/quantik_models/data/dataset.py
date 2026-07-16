@@ -92,19 +92,29 @@ def load_training_data(
     tags = tuple(
         _TAG_JOIN.join(row_tags) for v in views for row_tags in v.source_tags
     )
-    if split is not None:
-        labels = split_assignments(
-            tensors, policy, tags, train_pct=train_pct, val_pct=val_pct
-        )
-        keep = labels == split
-        tensors, policy, value = tensors[keep], policy[keep], value[keep]
-        weight, mask = weight[keep], mask[keep]
-        tags = tuple(t for t, k in zip(tags, keep) if k)
-    return LoadedTrainingData(
+    data = LoadedTrainingData(
         tensors=tensors,
         policy_target=policy,
         value_target=value,
         sample_weight=weight,
         legal_mask=mask,
         source_tags=tags,
+    )
+    if split is not None:
+        labels = split_assignments(
+            tensors, policy, tags, train_pct=train_pct, val_pct=val_pct
+        )
+        data = subset(data, labels == split)
+    return data
+
+
+def subset(data: LoadedTrainingData, keep: np.ndarray) -> LoadedTrainingData:
+    """Row-filter a loaded view by a boolean mask."""
+    return LoadedTrainingData(
+        tensors=data.tensors[keep],
+        policy_target=data.policy_target[keep],
+        value_target=data.value_target[keep],
+        sample_weight=data.sample_weight[keep],
+        legal_mask=data.legal_mask[keep],
+        source_tags=tuple(t for t, k in zip(data.source_tags, keep) if k),
     )

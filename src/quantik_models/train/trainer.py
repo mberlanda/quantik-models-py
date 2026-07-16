@@ -20,7 +20,12 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from ..data.dataset import LoadedTrainingData, load_training_data
+from ..data.dataset import (
+    LoadedTrainingData,
+    load_training_data,
+    split_assignments,
+    subset,
+)
 from ..export.checkpoint import export_checkpoint
 from ..model.policy_value_net import (
     PRESETS,
@@ -147,12 +152,21 @@ def _validate(
 
 
 def train(config: TrainConfig) -> dict[str, Any]:
+    if config.epochs < 1:
+        raise ValueError(f"epochs must be >= 1, got {config.epochs}")
+    if config.batch_size < 1:
+        raise ValueError(f"batch_size must be >= 1, got {config.batch_size}")
     started = time.monotonic()
     _seed_everything(config.seed)
     device = _resolve_device(config.device)
 
-    train_data = load_training_data(config.npz_paths, split="train")
-    val_data = load_training_data(config.npz_paths, split="val")
+    # Load the views once; both splits slice the same in-memory arrays.
+    full = load_training_data(config.npz_paths)
+    labels = split_assignments(
+        full.tensors, full.policy_target, full.source_tags
+    )
+    train_data = subset(full, labels == "train")
+    val_data = subset(full, labels == "val")
     if train_data.tensors.shape[0] == 0:
         raise ValueError("training split is empty")
     # Tiny corpora can shard into an empty val split; fall back to train.
@@ -266,7 +280,10 @@ def main(argv: list[str] | None = None) -> int:
         out_dir=args.out_dir,
         model_id=args.model_id,
     )
-    report = train(config)
+    try:
+        report = train(config)
+    except ValueError as exc:
+        parser.error(str(exc))
     final = report["final"]
     print(
         "trained "
