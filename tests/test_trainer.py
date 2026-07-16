@@ -55,6 +55,8 @@ def test_train_smoke_loss_decreases_and_exports(tmp_path: Path) -> None:
     assert saved["final"] == epochs[-1]
     # legality masking: probability mass on illegal actions is ~0 post-mask
     assert epochs[-1]["val_illegal_mass_premask"] >= 0.0
+    assert isinstance(epochs[-1]["epoch"], int)
+    assert 0.0 <= epochs[-1]["val_top1_agreement"] <= 1.0
 
 
 def test_train_is_seeded_deterministic(tmp_path: Path) -> None:

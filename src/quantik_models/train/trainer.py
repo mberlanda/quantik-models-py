@@ -92,8 +92,9 @@ def _losses(
     weight: Tensor,
     legal_mask: Tensor,
     value_loss_weight: float,
+    logits_value: tuple[Tensor, Tensor] | None = None,
 ) -> tuple[Tensor, Tensor, Tensor]:
-    logits, value = model(x)
+    logits, value = logits_value if logits_value is not None else model(x)
     logp = masked_log_softmax(logits, legal_mask)
     # Soft-target CE; rows can carry zero policy mass on illegal actions
     # by construction of the training view.
@@ -116,12 +117,23 @@ def _validate(
     value_loss_weight: float,
 ) -> dict[str, float]:
     model.eval()
+    logits, value = model(x)
     _, policy_loss, value_loss = _losses(
-        model, x, policy_target, value_target, weight, legal_mask, value_loss_weight
+        model,
+        x,
+        policy_target,
+        value_target,
+        weight,
+        legal_mask,
+        value_loss_weight,
+        logits_value=(logits, value),
     )
-    logits, _ = model(x)
+    masked_logp = masked_log_softmax(logits, legal_mask)
     top1 = (
-        (logits.argmax(dim=-1) == policy_target.argmax(dim=-1)).float().mean().item()
+        (masked_logp.argmax(dim=-1) == policy_target.argmax(dim=-1))
+        .float()
+        .mean()
+        .item()
     )
     premask_probs = torch.softmax(logits, dim=-1)
     illegal_mass = premask_probs.masked_fill(legal_mask, 0.0).sum(dim=-1).mean().item()
@@ -155,15 +167,15 @@ def train(config: TrainConfig) -> dict[str, Any]:
     x, pt, vt, w, m = _to_tensors(train_data, device)
     vx, vpt, vvt, vw, vm = _to_tensors(val_data, device)
 
-    epochs_report: list[dict[str, float]] = []
+    epochs_report: list[dict[str, Any]] = []
     n = x.shape[0]
     generator = torch.Generator().manual_seed(config.seed)
     for epoch in range(config.epochs):
         perm = torch.randperm(n, generator=generator)
-        policy_sum = value_sum = 0.0
-        batches = 0
+        policy_sum = value_sum = weight_sum = 0.0
         for start in range(0, n, config.batch_size):
             idx = perm[start : start + config.batch_size]
+            batch_weight_sum = w[idx].sum().item()
             optimizer.zero_grad()
             total, policy_loss, value_loss = _losses(
                 model, x[idx], pt[idx], vt[idx], w[idx], m[idx],
@@ -171,13 +183,13 @@ def train(config: TrainConfig) -> dict[str, Any]:
             )
             total.backward()
             optimizer.step()
-            policy_sum += float(policy_loss.item())
-            value_sum += float(value_loss.item())
-            batches += 1
-        entry: dict[str, float] = {
-            "epoch": float(epoch),
-            "train_policy_loss": policy_sum / max(batches, 1),
-            "train_value_mse": value_sum / max(batches, 1),
+            policy_sum += float(policy_loss.item()) * batch_weight_sum
+            value_sum += float(value_loss.item()) * batch_weight_sum
+            weight_sum += batch_weight_sum
+        entry: dict[str, Any] = {
+            "epoch": epoch,
+            "train_policy_loss": policy_sum / max(weight_sum, 1e-8),
+            "train_value_mse": value_sum / max(weight_sum, 1e-8),
         }
         entry.update(
             _validate(model, vx, vpt, vvt, vw, vm, config.value_loss_weight)
