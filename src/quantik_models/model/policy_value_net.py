@@ -84,7 +84,8 @@ class PolicyValueNet(nn.Module):
 
 
 def masked_log_softmax(logits: Tensor, legal_mask: Tensor) -> Tensor:
-    """Log-softmax with illegal logits forced to -inf (prob 0)."""
+    """Log-softmax with illegal logits filled with the dtype's most negative
+    finite value, giving them probability exactly zero."""
     # Note: an all-False mask row yields a uniform distribution over all 64
     # actions rather than NaN, since finfo.min keeps the arithmetic finite;
     # callers must not pass all-illegal rows expecting an error.

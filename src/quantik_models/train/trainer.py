@@ -219,8 +219,9 @@ def train(config: TrainConfig) -> dict[str, Any]:
         "elapsed_seconds": time.monotonic() - started,
     }
 
+    net_config = model.config
     model_id = config.model_id or (
-        f"quantik-pv-{config.preset}-seed{config.seed}"
+        f"quantik-pv-c{net_config.channels}-b{net_config.blocks}-seed{config.seed}"
     )
     export_checkpoint(
         model.cpu(),
