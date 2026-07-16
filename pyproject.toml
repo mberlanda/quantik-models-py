@@ -22,6 +22,7 @@ arrow = [
 ]
 torch = [
   "torch>=2.4",
+  "safetensors>=0.4",
 ]
 all = [
   "quantik-models[dev,arrow,torch]",
@@ -29,6 +30,7 @@ all = [
 
 [project.scripts]
 quantik-models-materialize = "quantik_models.data.materialize:main"
+quantik-models-train = "quantik_models.train.trainer:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

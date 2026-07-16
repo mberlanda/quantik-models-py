@@ -1,0 +1,134 @@
+name: "Train Smoke"
+
+"on":
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "scripts/**"
+      - ".github/workflows/train-smoke.yml"
+      - "pyproject.toml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "examples/**"
+      - "scripts/**"
+      - ".github/workflows/train-smoke.yml"
+      - "pyproject.toml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  train-smoke:
+    name: "Train smoke preset and inspect checkpoint"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      QUANTIK_NS: ${{ github.workspace }}
+      CONTRACTS: ${{ github.workspace }}/quantik-core-contracts
+      RUST: ${{ github.workspace }}/quantik-core-rust
+      CORE_PY: ${{ github.workspace }}/quantik-core-py
+      MODELS: ${{ github.workspace }}/quantik-models-py
+      OUT: ${{ github.workspace }}/quantik-e2e-data
+      RUST_PROFILE: debug
+      BOOK_DEPTH: "1"
+      OPENING_BOOK_EXTRA_ARGS: --max-positions 16 --batch-size 16 --quiet
+      # The searched depth-book is generated and then read through by the
+      # positions step: quantik-core-rust upgrades bench_bfs searched books
+      # in place on open, so `generate_positions.sh --book` reuses and
+      # writes back solved references against the same SQLite file.
+      POSITIONS_USE_BOOK: "1"
+      OPENING_POSITIONS: "1"
+      EARLY_MID_POSITIONS: "1"
+      LATE_MID_POSITIONS: "1"
+      ENDGAME_POSITIONS: "1"
+      SOLVE_BUDGET: "0.05"
+      ENGINES: random,minimax
+      OBSERVATION_SEEDS: "1"
+      MINIMAX_DEPTH: "1"
+      MINIMAX_TIME: "0.01"
+      MCTS_ITERATIONS: "8"
+      MCTS_DEPTH: "4"
+      BEAM_WIDTH: "4"
+      BEAM_DEPTH: "4"
+      WORKERS: "1"
+      H2H_ENGINES: random,minimax
+      H2H_POSITIONS: "1"
+      H2H_SEEDS: "1"
+      H2H_OBSERVATION_SEEDS: "1"
+      SELFPLAY_GAMES: "1"
+      SELFPLAY_ITERATIONS: "8"
+      SELFPLAY_SEED: "20260713"
+
+    steps:
+      - name: Check out model repository
+        uses: actions/checkout@v4
+        with:
+          path: quantik-models-py
+
+      - name: Check out contracts repository
+        uses: actions/checkout@v4
+        with:
+          repository: mberlanda/quantik-core-contracts
+          path: quantik-core-contracts
+
+      - name: Check out Rust core repository
+        uses: actions/checkout@v4
+        with:
+          repository: mberlanda/quantik-core-rust
+          path: quantik-core-rust
+
+      - name: Check out Python core repository
+        uses: actions/checkout@v4
+        with:
+          repository: mberlanda/quantik-core-py
+          path: quantik-core-py
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Install quantik-models with training extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "quantik-models-py[dev,torch]" \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Run tiny pipeline
+        run: quantik-models-py/scripts/run_smoke_pipeline.sh
+
+      - name: Train smoke preset
+        run: |
+          quantik-models-train \
+            --npz "$OUT/training-view-observations.npz" \
+            --npz "$OUT/training-view-selfplay.npz" \
+            --preset smoke --epochs 3 --batch-size 16 \
+            --seed 20260715 --device cpu \
+            --out-dir "$OUT/checkpoint"
+        env:
+          PYTHONPATH: ${{ github.workspace }}/quantik-core-py/src
+
+      - name: Inspect checkpoint
+        run: |
+          python quantik-models-py/examples/inspect_checkpoint.py \
+            "$OUT/checkpoint" --npz "$OUT/training-view-selfplay.npz"
+        env:
+          PYTHONPATH: ${{ github.workspace }}/quantik-core-py/src
+
+      - name: Upload checkpoint artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-checkpoint
+          path: ${{ env.OUT }}/checkpoint
