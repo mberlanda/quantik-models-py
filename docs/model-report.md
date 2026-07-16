@@ -133,9 +133,16 @@ exporting contract-compatible rows.
 
 ## Open Implementation Slices
 
-- Add the first PyTorch training module and CLI.
-- Add deterministic train/validation/test sharding.
-- Add checkpoint export and manifest generation.
+Implemented:
+
+- `quantik-models-train`, the PyTorch policy/value training CLI, at the
+  `smoke`/`small`/`target` presets (see `docs/scaling-guide.md`).
+- Deterministic content-hash train/validation/test sharding.
+- Checkpoint export to `weights.safetensors` plus a `model-checkpoint.v1`
+  `manifest.json` and `training-report.json`.
+
+Open:
+
 - Add core-library checkpoint loading/probe APIs without bundling weights.
 - Add Rust book-guided autoplay/self-play export up to depth 6.
 - Add cross-stack evaluation reports comparing model-guided engines against
