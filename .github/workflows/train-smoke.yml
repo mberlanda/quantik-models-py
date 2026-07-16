@@ -7,6 +7,7 @@ name: "Train Smoke"
     paths:
       - "src/**"
       - "examples/**"
+      - "scripts/**"
       - ".github/workflows/train-smoke.yml"
       - "pyproject.toml"
   pull_request:
@@ -15,6 +16,7 @@ name: "Train Smoke"
     paths:
       - "src/**"
       - "examples/**"
+      - "scripts/**"
       - ".github/workflows/train-smoke.yml"
       - "pyproject.toml"
   workflow_dispatch: {}

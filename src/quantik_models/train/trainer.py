@@ -186,10 +186,14 @@ def train(config: TrainConfig) -> dict[str, Any]:
     generator = torch.Generator().manual_seed(config.seed)
     for epoch in range(config.epochs):
         perm = torch.randperm(n, generator=generator)
-        policy_sum = value_sum = weight_sum = 0.0
+        # Accumulate on-device; a per-batch .item() would force a device
+        # sync on cuda/mps every step.
+        policy_sum = torch.zeros((), device=device)
+        value_sum = torch.zeros((), device=device)
+        weight_sum = torch.zeros((), device=device)
         for start in range(0, n, config.batch_size):
             idx = perm[start : start + config.batch_size]
-            batch_weight_sum = w[idx].sum().item()
+            batch_weight_sum = w[idx].sum().detach()
             optimizer.zero_grad()
             total, policy_loss, value_loss = _losses(
                 model, x[idx], pt[idx], vt[idx], w[idx], m[idx],
@@ -197,13 +201,14 @@ def train(config: TrainConfig) -> dict[str, Any]:
             )
             total.backward()
             optimizer.step()
-            policy_sum += float(policy_loss.item()) * batch_weight_sum
-            value_sum += float(value_loss.item()) * batch_weight_sum
+            policy_sum += policy_loss.detach() * batch_weight_sum
+            value_sum += value_loss.detach() * batch_weight_sum
             weight_sum += batch_weight_sum
+        norm = float(weight_sum.item())
         entry: dict[str, Any] = {
             "epoch": epoch,
-            "train_policy_loss": policy_sum / max(weight_sum, 1e-8),
-            "train_value_mse": value_sum / max(weight_sum, 1e-8),
+            "train_policy_loss": float(policy_sum.item()) / max(norm, 1e-8),
+            "train_value_mse": float(value_sum.item()) / max(norm, 1e-8),
         }
         entry.update(
             _validate(model, vx, vpt, vvt, vw, vm, config.value_loss_weight)
