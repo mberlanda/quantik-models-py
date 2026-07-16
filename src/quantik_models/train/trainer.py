@@ -2,8 +2,8 @@
 
 Loss = sample-weighted soft-target cross-entropy over legality-masked
 log-probabilities, plus MSE on the tanh value, optimized with AdamW.
-CPU-first: `--device auto` prefers cuda > mps > cpu but never requires
-an accelerator.
+`--device auto` prefers cuda > mps > cpu; CPU is always sufficient —
+no accelerator is required.
 """
 
 from __future__ import annotations

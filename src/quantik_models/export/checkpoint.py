@@ -36,7 +36,9 @@ def export_checkpoint(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     weights_path = out_dir / _WEIGHTS_NAME
-    save_file(model.state_dict(), str(weights_path))
+    # safetensors serializes CPU tensors; the model may live on an accelerator.
+    state_dict = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+    save_file(state_dict, str(weights_path))
     weights_bytes = weights_path.read_bytes()
 
     report_path = out_dir / _REPORT_NAME
