@@ -46,6 +46,16 @@ def test_weights_round_trip(tmp_path: Path) -> None:
     from safetensors.torch import load_file
 
     model = PolicyValueNet(PRESETS["smoke"])
+
+    # Drive the model in train() mode with a few random batches so BatchNorm
+    # running stats diverge from their defaults (running_mean=0,
+    # running_var=1). Otherwise a regression that drops BN buffers from the
+    # export would go undetected, since a freshly-constructed model already
+    # matches the untouched defaults.
+    model.train()
+    for _ in range(3):
+        model(torch.rand(8, 9, 4, 4))
+
     export_checkpoint(
         model,
         out_dir=tmp_path,
@@ -54,6 +64,14 @@ def test_weights_round_trip(tmp_path: Path) -> None:
     )
     restored = PolicyValueNet(PRESETS["smoke"])
     restored.load_state_dict(load_file(tmp_path / "weights.safetensors"))
+
+    # Explicit buffer check: the restored model must pick up the diverged
+    # BatchNorm running stats, not just matching parameters.
+    assert not torch.allclose(
+        model.stem[1].running_mean, torch.zeros_like(model.stem[1].running_mean)
+    )
+    assert torch.allclose(model.stem[1].running_mean, restored.stem[1].running_mean)
+
     x = torch.rand(2, 9, 4, 4)
     model.eval()
     restored.eval()
