@@ -41,7 +41,7 @@ Contract constraints (from quantik-core-contracts
 ## Package layout
 
 All under `src/quantik_models/`; torch and safetensors live behind an
-optional `[train]` extra so the base install stays NumPy-only.
+optional `[torch]` extra so the base install stays NumPy-only.
 
 ### `data/dataset.py`
 
@@ -182,13 +182,13 @@ arXiv-preprint-shaped Markdown:
   steps on committed-or-generated tiny `.npz`, assert train loss
   decreases and manifest validates through the quantik-core-py reader.
 - Existing test suite stays green; torch-dependent tests skip cleanly
-  when the `[train]` extra is absent.
+  when the `[torch]` extra is absent.
 
 ## CI
 
 - New workflow `train-smoke.yml` (separate from `e2e-data-pipeline.yml`
   to keep that job fast): checks out the four repos, installs the
-  `[train]` extra (CPU torch), reuses the tiny pipeline to produce
+  `[torch]` extra (CPU torch), reuses the tiny pipeline to produce
   `.npz`, runs `quantik-models-train --preset smoke`, runs
   `examples/inspect_checkpoint.py` against the result, uploads the
   checkpoint as an artifact.
