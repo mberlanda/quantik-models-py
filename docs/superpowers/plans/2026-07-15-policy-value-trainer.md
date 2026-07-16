@@ -1332,11 +1332,12 @@ the model is the data.
 
 | Preset | Channels | Blocks | Parameters | float32 safetensors | Intended use |
 | --- | --- | --- | --- | --- | --- |
-| `smoke` | 16 | 2 | ~24k | ~0.1 MB | CI, examples, plumbing checks |
-| `small` | 64 | 4 | ~330k | ~1.3 MB | Laptop baselines, ablations |
-| `target` | 256 | 13 | ~15.4M | ~61 MB | The 50-100 MB contract model |
+| `smoke` | 16 | 2 | 13,991 | ~0.05 MB | CI, examples, plumbing checks |
+| `small` | 64 | 4 | 304,711 | ~1.2 MB | Laptop baselines, ablations |
+| `target` | 256 | 13 | 15,374,023 | ~58.6 MiB | The 50-100 MB contract model |
 
-(Exact parameter counts are asserted by `tests/test_policy_value_net.py`;
+(These are the measured counts from `docs/scaling-guide.md`, asserted by
+`tests/test_policy_value_net.py`;
 the `target` preset must land inside the 50-100 MB envelope from
 quantik-core-contracts `docs/policy-value-model-project.md`.)
 
