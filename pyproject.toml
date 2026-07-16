@@ -30,6 +30,7 @@ all = [
 
 [project.scripts]
 quantik-models-materialize = "quantik_models.data.materialize:main"
+quantik-models-train = "quantik_models.train.trainer:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
