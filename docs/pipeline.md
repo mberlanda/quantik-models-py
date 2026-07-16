@@ -42,12 +42,26 @@ The script runs:
 Large runs should override counts with environment variables such as
 `OPENING_POSITIONS`, `MCTS_ITERATIONS`, `SELFPLAY_GAMES`, and `OUT`.
 
+The chain does not stop at materialization: `examples/train_smoke.sh` wraps
+`scripts/run_smoke_pipeline.sh` with two more stages —
+
+8. training the `smoke` preset with `quantik-models-train` against the
+   materialized `.npz` views,
+9. checkpoint export to `weights.safetensors`, `training-report.json`, and a
+   `model-checkpoint.v1` `manifest.json`.
+
+See `docs/scaling-guide.md` for scaling that same trainer invocation from
+`smoke` to `small` and `target`.
 
 ## GitHub Actions proof run
 
-The `E2E Data Pipeline` workflow runs a tiny proof version of this pipeline on
-pushes, pull requests, and manual dispatch. The workflow intentionally uses
-small counts and debug Rust builds:
+The `E2E Data Pipeline` workflow runs a tiny proof version of steps 1-7 on
+pushes, pull requests, and manual dispatch. The `train-smoke` workflow extends
+the same tiny-pipeline configuration through steps 8-9: it runs the smoke
+pipeline, trains the `smoke` preset with `quantik-models-train`, inspects the
+resulting checkpoint with `examples/inspect_checkpoint.py`, and uploads the
+checkpoint as a build artifact. Both workflows intentionally use small counts
+and debug Rust builds:
 
 - opening book depth: `1` by default,
 - positions: one per phase, with `POSITIONS_USE_BOOK=1` so the searched
@@ -58,6 +72,8 @@ small counts and debug Rust builds:
 - MCTS iterations: `8`.
 
 The goal is not model strength; it is to prove that contracts validation, Rust
-data generation, row export, Python materialization, and artifact verification
-all still connect end to end. The workflow uploads the generated smoke corpus as
-`quantik-e2e-data-pipeline`.
+data generation, row export, Python materialization, training, checkpoint
+export, and artifact verification all still connect end to end. The E2E Data
+Pipeline workflow uploads the generated smoke corpus as
+`quantik-e2e-data-pipeline`; the train-smoke workflow uploads the trained
+checkpoint as `smoke-checkpoint`.

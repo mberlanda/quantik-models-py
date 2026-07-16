@@ -83,6 +83,25 @@ quantik-models-materialize \
   --output-npz /path/to/training-view-selfplay.npz
 ```
 
+## Training and checkpoint export
+
+Install the training extra and train the smoke preset on materialized
+views:
+
+    pip install -e .[dev,torch]
+    quantik-models-train \
+      --npz outputs/smoke/training-view-observations.npz \
+      --npz outputs/smoke/training-view-selfplay.npz \
+      --preset smoke --epochs 5 --out-dir outputs/checkpoint
+
+This exports `weights.safetensors`, `training-report.json`, and a
+`model-checkpoint.v1` `manifest.json` (validated against
+quantik-core-py in tests). See `examples/train_smoke.sh` for the full
+end-to-end demo, `examples/inspect_checkpoint.py` to poke at a
+checkpoint, and `docs/scaling-guide.md` for the smoke -> small ->
+target path. The design/tradeoff discussion lives in
+`docs/policy-value-training-paper.md`.
+
 See `docs/model-report.md`, `docs/pipeline.md`, `docs/tensor-structure.md`,
 `docs/labeling-strategy.md`, `docs/autoplay-training.md`, and
 `docs/frontend-play.md`.
