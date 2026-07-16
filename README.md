@@ -88,7 +88,7 @@ quantik-models-materialize \
 Install the training extra and train the smoke preset on materialized
 views:
 
-    pip install -e .[dev,torch]
+    pip install -e ".[dev,torch]"
     quantik-models-train \
       --npz outputs/smoke/training-view-observations.npz \
       --npz outputs/smoke/training-view-selfplay.npz \

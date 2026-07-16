@@ -10,15 +10,17 @@
 
 ## Global Constraints
 
-- Repo: `/Users/mauroberlanda/Code/quantik-ns/quantik-models-py`, branch `policy-value-trainer` (exists).
+- `QUANTIK_NS` is the sibling-checkout namespace root per README (e.g. `export QUANTIK_NS="$HOME/Code/quantik-ns"`); repos live at `$QUANTIK_NS/quantik-models-py` and `$QUANTIK_NS/quantik-core-py`.
+- `$VENV` is any Python >=3.12 virtualenv with `pip install -e ".[dev,torch]"`.
+- Repo: `$QUANTIK_NS/quantik-models-py`, branch `policy-value-trainer` (exists).
 - Base install stays numpy-only: torch/safetensors imports ONLY inside `[torch]`-extra modules; torch-dependent tests `pytest.importorskip("torch")`.
 - Commit messages: NO Co-Authored-By trailer, no tool prefixes.
 - Action index is always `shape * 16 + position` (0..63).
 - Input tensor `(9, 4, 4)` float32; policy 64 logits; value tanh scalar.
 - Presets: smoke=(16 ch, 2 blocks), small=(64, 4), target=(256, 13) — target safetensors must land in [50MB, 100MB].
 - Determinism: sharding by content hash (below); training seeded.
-- Run tests with: `cd /Users/mauroberlanda/Code/quantik-ns/quantik-models-py && python -m pytest tests/<file> -q` (use the venv at `/private/tmp/claude-501/-Users-mauroberlanda-Code-quantik-ns/082b3003-0c95-46f7-b753-87960b8f4d74/scratchpad/venv`; `pip install -e .[dev,torch]` plus `pip install safetensors` there first if not present).
-- `quantik_core` (sibling checkout `/Users/mauroberlanda/Code/quantik-ns/quantik-core-py/src` on PYTHONPATH) is used by export-validation tests; skip cleanly when unavailable.
+- Run tests with: `cd $QUANTIK_NS/quantik-models-py && python -m pytest tests/<file> -q` (use `$VENV`; `pip install -e ".[dev,torch]"` plus `pip install safetensors` there first if not present).
+- `quantik_core` (sibling checkout `$QUANTIK_NS/quantik-core-py/src` on PYTHONPATH) is used by export-validation tests; skip cleanly when unavailable.
 
 ---
 
@@ -439,7 +441,7 @@ class PolicyValueNet(nn.Module):
 
 
 def masked_log_softmax(logits: Tensor, legal_mask: Tensor) -> Tensor:
-    """Log-softmax with illegal logits forced to -inf (prob 0)."""
+    """Log-softmax with illegal logits filled with the dtype's most negative finite value (near-zero probability)."""
     masked = logits.masked_fill(~legal_mask, torch.finfo(logits.dtype).min)
     return torch.log_softmax(masked, dim=-1)
 
@@ -561,7 +563,7 @@ def test_manifest_validates_through_core_py(tmp_path: Path) -> None:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `PYTHONPATH=/Users/mauroberlanda/Code/quantik-ns/quantik-core-py/src python -m pytest tests/test_export_checkpoint.py -q`
+Run: `PYTHONPATH=$QUANTIK_NS/quantik-core-py/src python -m pytest tests/test_export_checkpoint.py -q`
 Expected: ERROR `ModuleNotFoundError: No module named 'quantik_models.export'`
 
 - [ ] **Step 3: Implement `src/quantik_models/export/checkpoint.py`**
@@ -642,7 +644,7 @@ def export_checkpoint(
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `PYTHONPATH=/Users/mauroberlanda/Code/quantik-ns/quantik-core-py/src python -m pytest tests/test_export_checkpoint.py -q`
+Run: `PYTHONPATH=$QUANTIK_NS/quantik-core-py/src python -m pytest tests/test_export_checkpoint.py -q`
 Expected: 3 passed
 
 - [ ] **Step 5: Full suite + mypy, commit**
@@ -1098,7 +1100,7 @@ git commit -m "Add policy/value trainer with quantik-models-train CLI"
 #
 # Prereqs:
 #   - sibling checkouts per README (quantik-core-contracts/-rust/-py)
-#   - pip install -e .[dev,torch]
+#   - pip install -e ".[dev,torch]"
 #
 # Usage:
 #   examples/train_smoke.sh                 # generates tiny data first
@@ -1290,8 +1292,8 @@ python "$MODELS/examples/inspect_checkpoint.py" "$CKPT" \
 Run (venv with torch+safetensors active, sibling repos present):
 ```bash
 chmod +x examples/train_smoke.sh examples/train_small_local.sh
-PYTHONPATH=/Users/mauroberlanda/Code/quantik-ns/quantik-core-py/src:src \
-OUT=/private/tmp/claude-501/-Users-mauroberlanda-Code-quantik-ns/082b3003-0c95-46f7-b753-87960b8f4d74/scratchpad/e2e-book \
+PYTHONPATH=$QUANTIK_NS/quantik-core-py/src:src \
+OUT="${TMPDIR:-/tmp}/quantik-e2e-book" \
   bash examples/train_smoke.sh
 ```
 Expected: trains 5 epochs, prints checkpoint summary including top-5 actions and `illegal mass after masking: ~e-08` or smaller, exits 0. (Uses the existing generated data at that OUT; regenerates if absent.)
@@ -1403,7 +1405,7 @@ Add after the materializer section (adapt heading level to the file):
 Install the training extra and train the smoke preset on materialized
 views:
 
-    pip install -e .[dev,torch]
+    pip install -e ".[dev,torch]"
     quantik-models-train \
       --npz outputs/smoke/training-view-observations.npz \
       --npz outputs/smoke/training-view-selfplay.npz \
