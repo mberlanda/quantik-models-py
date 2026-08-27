@@ -114,18 +114,32 @@ oracle breaks the circularity.**
 
 ---
 
-## 6. In flight / next actions
+## 6. Data assets
 
-1. **[running]** `scripts/build_oracle_corpus.py` — plies 12→3.
-   Done: 12, 11, 10, 9, 8, 7, 6. Running: 5. Remaining: 4, 3. ~1.8 h left.
-   Log: `runs/oracle/corpus-build.log`. Safe to kill and restart; finished
-   `ply*.jsonl` files are reused.
-2. Rebuild `runs/oracle/corpus/exact.npz` from all plies once solving finishes.
-3. Train `c64b4` and `c128b6` on the **full** corpus (40+ epochs) and probe both.
-4. AlphaZero fine-tune from the supervised checkpoint (`--init-from`) to sharpen
-   the opening, which is the only region that decides the match.
-5. Final arena: net vs all four baselines, reporting measured ms/move.
-6. Publish the write-up as an artifact.
+| file | contents |
+|---|---|
+| `runs/oracle/probe.jsonl` | **held out.** 640 exactly-solved positions, plies 4-12. Never train on this. |
+| `runs/oracle/corpus/exact-sampled.npz` | 3,087,356 unique positions (plies 6-13), 250,000 with exact policy. Sampled, full-oracle. |
+| `runs/oracle/opening5/opening-exact.npz` | complete exact solution, plies 0-5 values + plies 0-4 policies. |
+| `runs/oracle/opening/opening-exact.npz` | **[in flight]** complete exact solution, plies 0-6 values + plies 0-5 policies. |
+| `runs/oracle/opening*/level*.npy` | enumerated canonical live positions per ply (reusable cache). |
+
+## 7. In flight / next actions
+
+1. **[running, ~3 h]** `scripts/solve_opening.py --frontier 6` — root-only solve
+   of all 901,916 canonical ply-6 positions. Log `runs/oracle/opening-solve.log`.
+   **Warning:** the Rust oracle buffers all results and writes at the end, so
+   killing it loses the whole run. Needs a quiet machine; it was running at 11
+   of 18 cores while training competed.
+2. `--frontier 5` variant runs in `runs/oracle/opening5/` as a fast hedge.
+3. Combine corpora with `ExactCorpus.concat([opening, sampled])` — pass the
+   opening first, it is the more authoritative source.
+4. Train on the combined corpus with `--balance-plies` (default on): the corpus
+   is 75% plies 7-13 but the match is decided at plies 4-7.
+5. AlphaZero fine-tune from the supervised checkpoint (`--init-from`).
+6. `scripts/final_evaluation.py` on an **otherwise idle machine** — under load
+   minimax measured 772 ms/move against its clean 196 ms.
+7. Publish the write-up as an artifact.
 
 ## 7. Gotchas already hit (do not re-learn these)
 
