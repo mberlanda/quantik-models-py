@@ -169,3 +169,74 @@ slowest possible shape on an accelerator (1,580 fwd/s vs 630k pos/s at batch
 512). `selfplay/duel.py` plays all gate games in lockstep instead: at each ply
 the live games are split by whose turn it is and each side's positions go
 through its own network in one batched search.
+
+### Build 5 — an exact oracle, and the finding that reframed the quest
+
+Python cannot solve Quantik at useful speed, but Rust can. Added
+`crates/quantik-core/examples/exact_oracle.rs` to `quantik-core-rust`
+(branch `exact-oracle`): read QFENs on stdin, emit per line the root's exact
+score, every legal move's exact value, and the **outcome-optimal** move set
+(moves that preserve the best achievable result — the fair bar, since a
+win/loss-valued engine cannot rank mate distance).
+
+Measured cost per position (full root + all children, rayon over 18 cores):
+
+| ply | 4 | 5 | 6 | 7 | 8+ |
+|---|---|---|---|---|---|
+| seconds | 1.5 | 0.32 | 0.055 | 0.010 | ~0.003 |
+
+Solved a 640-position probe set spanning plies 4-12 and scored the incumbents
+on **outcome accuracy** — over positions the mover provably wins, how often the
+agent picks a move that keeps the win:
+
+| agent | ply 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | overall |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `minimax@100ms` | 84.8% | 90.9% | 92.2% | 97.1% | 100% | 100% | 100% | 100% | 100% | **97.2%** |
+| `beam@100ms` | 42.4% | 48.5% | 64.1% | 92.8% | 98.4% | 98.6% | 100% | 100% | 100% | 87.6% |
+| `mcts@100ms` | 24.2% | 24.2% | 56.2% | 89.9% | 93.8% | 84.9% | 81.2% | 90.8% | 98.6% | 77.7% |
+| `random` | 18.2% | 33.3% | 18.8% | 23.2% | 34.4% | 43.8% | 54.7% | 72.3% | 81.2% | 44.4% |
+
+**This reframes the whole problem.** Minimax at 100 ms is *perfect from ply 8
+onward* — it simply solves the endgame. It is beatable only in the opening,
+where it scores 84.8% at ply 4 and 90.9% at ply 5.
+
+So the network's requirement is precise: **match minimax in the endgame
+(~100% from ply 8) and beat it at plies 4-7**. Any effort spent making the net
+better at ply 10 is wasted; all of the headroom is in the opening.
+
+Two more facts from the probe worth keeping: 534/640 positions (83%) are wins
+for the side to move, so Quantik strongly favours the mover; and a won
+position has on average 3.6 outcome-optimal moves out of 12.1 legal ones,
+which is why random still scores 44%.
+
+### Run 1 — pure AlphaZero from scratch (`az-small-v1`)
+
+60 iterations, `small` preset (304,711 params), 512 games/iteration at 96
+simulations, 400 train steps of batch 512, 4x symmetry augmentation, replay
+buffer of 10 generations. ~12 s/iteration, ~12 minutes total on MPS.
+
+Policy loss 3.40 -> 2.11, policy top-1 17.8% -> 46.0%, mean game length
+7.9 -> 9.3 plies (both sides learning to avoid quick losses).
+
+Probe result — outcome accuracy against exact truth:
+
+| agent | ply 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | overall | value MAE |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `az-v1-policy` (no search) | 72.7% | 60.6% | 50.0% | 63.8% | 67.2% | 72.6% | 71.9% | 84.6% | 87.0% | 70.6% | 0.727 |
+| `az-v1-mcts128` | 78.8% | 84.8% | 79.7% | 85.5% | 100% | 100% | 98.4% | 100% | 100% | 93.3% | 0.727 |
+| `az-v1-mcts800` | 84.8% | 87.9% | 92.2% | 98.6% | 100% | 100% | 100% | 100% | 100% | **97.2%** | 0.727 |
+| `minimax@100ms` | 84.8% | 90.9% | 92.2% | 97.1% | 100% | 100% | 100% | 100% | 100% | **97.2%** | — |
+
+From-scratch AlphaZero **draws level with minimax** at 800 simulations — same
+97.2% overall, better at ply 7, worse at ply 5. Level is not the goal.
+
+**The value head is the bottleneck, and the probe says so precisely: value MAE
+0.727 against a ±1 truth.** Always predicting +1 would score 0.34, so the value
+head is outputting near-zero — it does not know who is winning. That is what
+caps MCTS: with a flat value the search does almost all the work, which is why
+128 sims scores 93.3% while 800 scores 97.2%.
+
+The cause is structural, not a bug: the value target was
+`0.5 * game_result + 0.5 * search_root_value`, and both terms are weak early —
+the result is a single bit at the end of an ~8-ply game, and the root value
+comes from the same undertrained net. Exact labels break that circularity.
