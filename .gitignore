@@ -11,3 +11,5 @@ build/
 outputs/
 artifacts/
 .coverage
+runs/
+experiments/**/artifacts/
