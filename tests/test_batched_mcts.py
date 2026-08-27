@@ -209,3 +209,18 @@ def test_simulation_count_still_caps_a_generous_budget():
         rng,
     ).search(boards, add_noise=False)
     assert np.all(visits.sum(axis=1) == 64)
+
+
+def test_arena_is_capped_and_the_search_still_returns_a_valid_move():
+    """A high simulation ceiling must not allocate for a node count the
+    search will never reach, and hitting the cap must degrade gracefully."""
+    boards = _live_positions(6, plies=5, seed=61)
+    rng = np.random.default_rng(9)
+    visits, values = BatchedMCTS(
+        UniformEvaluator(),
+        MCTSParams(simulations=1_000_000, leaf_batch=8, max_nodes=4_000),
+        rng,
+    ).search(boards, add_noise=False)
+    assert np.all(visits.sum(axis=1) > 0)
+    assert np.all(visits[~fb.legal_masks(boards)] == 0.0)
+    assert np.all(np.isfinite(values))

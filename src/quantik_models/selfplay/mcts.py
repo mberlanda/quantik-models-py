@@ -52,6 +52,11 @@ class MCTSParams:
     # then acts as the ceiling. Set this to compare against a time-limited
     # classical engine on its own terms rather than at an arbitrary node count.
     time_limit_s: float | None = None
+    # Hard cap on arena size. The arena is sized for `simulations` up front, so
+    # a time-budgeted search with a high simulation ceiling would otherwise
+    # allocate for a node count it will never reach — at `games * simulations`
+    # nodes and ~1 KiB each, that is gigabytes for a search meant to run 200 ms.
+    max_nodes: int = 1_000_000
 
 
 class BatchedMCTS:
@@ -78,7 +83,7 @@ class BatchedMCTS:
                 np.zeros(0, dtype=np.float32),
             )
         sims = self.params.simulations
-        capacity = g * (sims + 2)
+        capacity = min(g * (sims + 2), max(self.params.max_nodes, g * 2))
 
         # --- arena -------------------------------------------------------
         node_bb = np.zeros((capacity, 8), dtype=np.uint16)
@@ -114,6 +119,8 @@ class BatchedMCTS:
             if deadline is not None and completed and time.perf_counter() >= deadline:
                 break
             width = min(leaf_batch, sims - completed)
+            if used + width * g > capacity:
+                break  # arena full; stop rather than overrun it
             batch: list[tuple] = []
             for _ in range(width):
                 path_node, path_action, depth, leaf_parent, leaf_action = self._descend(
