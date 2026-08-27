@@ -445,3 +445,48 @@ available for less compute. Fine-tuning would replace a perfect teacher with an
 imperfect one. AlphaZero-from-scratch remains in the results as the documented
 baseline it is — it tied minimax at 97.2%, and diagnosing *why it stalled there*
 is what produced the oracle in the first place.
+
+## RESULT — the network beats minimax
+
+`sup-sampled-c128b6` (16 epochs, final val top-1 96.3%, value MAE 0.084)
+driving the batched MCTS on a wall clock, CPU-only, one thread — the same
+hardware the classical engines get.
+
+**Exact-truth accuracy** (640 held-out solved positions):
+
+| agent | ply 4 | 5 | 6 | 7 | 8-12 | overall |
+|---|---|---|---|---|---|---|
+| **`qnet@200ms`** | **97.0%** | **97.0%** | **100%** | **100%** | 100% | **99.6%** |
+| `alphazero@200ms` | 84.8% | 90.9% | 93.8% | 97.1% | 100% | 97.4% |
+| `minimax@100ms` | 84.8% | 90.9% | 92.2% | 97.1% | 100% | 97.2% |
+| `qnet-policy` (one forward pass) | 87.9% | 90.9% | 89.1% | 89.9% | 94-100% | 94.9% |
+| `beam@100ms` | 42.4% | 48.5% | 64.1% | 92.8% | 98-100% | 87.6% |
+| `mcts@100ms` | 24.2% | 24.2% | 56.2% | 89.9% | 81-99% | 77.7% |
+| `random` | 18.2% | 33.3% | 18.8% | 23.2% | 34-81% | 44.4% |
+
+**Head-to-head**, 1,200 side-balanced games from 600 symmetry-distinct
+openings at plies 3-5:
+
+| match | win rate | 95% CI | ms/move (net vs minimax) |
+|---|---|---|---|
+| `qnet@200ms` vs `minimax@100ms` | **60.5%** | 57.7-63.2% | 211 vs 194 |
+| `qnet@50ms` vs `minimax@100ms` | **55.8%** | 52.9-58.5% | **63 vs 203** |
+
+The second row is the one that settles it: the network beats the incumbent
+champion **while spending 3.2x less time per move**, on the same single CPU
+thread. Both intervals sit entirely above 50%.
+
+Note how well the two measurements agree with the theory. Predicted score from
+conversion rates alone was
+`½·[P(net converts) + P(minimax errs)·P(net punishes)]` ≈ 0.5·[0.99 + 0.15·0.95]
+≈ 57% at ply 4, rising for earlier starts — and the measured 60.5% from plies
+3-5 lands right there. The arena's ~50% pull is real; the network clears it
+because its opening error rate is genuinely near zero.
+
+### Where the win comes from
+
+Exactly where the probe predicted at the very start: **the opening**. Minimax
+is perfect from ply 8; so is the network. The entire margin is plies 4-7,
+where the network scores 97-100% against minimax's 84.8-97.1%. The network is
+not out-searching the solver — it is out-*knowing* it, carrying distilled exact
+values into positions minimax cannot reach in 100 ms.
