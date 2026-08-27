@@ -1,0 +1,359 @@
+<title>The Ply-Four Gap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --hair: #e1e0d9;
+  --rule: #c3c2b7;
+  --accent: #2a78d6;
+  --accent-soft: rgba(42, 120, 214, 0.10);
+  --rival: #eb6834;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --good: #006300;
+  --loss: #e34948;
+  --ring: rgba(11, 11, 11, 0.10);
+  --shadow: 0 1px 2px rgba(11,11,11,.04), 0 8px 24px rgba(11,11,11,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --hair: #2c2c2a;
+    --rule: #383835;
+    --accent: #3987e5;
+    --accent-soft: rgba(57, 135, 229, 0.14);
+    --rival: #d95926;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --good: #0ca30c;
+    --loss: #e66767;
+    --ring: rgba(255, 255, 255, 0.10);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --hair: #2c2c2a;
+  --rule: #383835;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.14);
+  --rival: #d95926;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --good: #0ca30c;
+  --loss: #e66767;
+  --ring: rgba(255, 255, 255, 0.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  --measure: 34rem;
+  --wide: 54rem;
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(1.25rem, 1fr)
+    [wide-start] minmax(0, calc((var(--wide) - var(--measure)) / 2))
+    [text-start] minmax(0, var(--measure)) [text-end]
+    minmax(0, calc((var(--wide) - var(--measure)) / 2)) [wide-end]
+    minmax(1.25rem, 1fr) [full-end];
+  row-gap: 0;
+  padding-block: 0 5rem;
+}
+.page > * { grid-column: text; }
+.page > .wide { grid-column: wide; }
+.page > .full { grid-column: full; }
+
+/* ---- type ---- */
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 400; }
+h1 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(2.9rem, 8vw, 4.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+}
+h2 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+h3 {
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 1.0rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+p { margin: 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+strong { font-weight: 600; }
+em { font-style: italic; }
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace; }
+code {
+  font-size: 0.85em;
+  background: var(--accent-soft);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- header ---- */
+header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding-block: 4.5rem 2.5rem;
+}
+.dek {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 32rem;
+}
+.byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  color: var(--muted);
+  border-top: 1px solid var(--hair);
+  padding-top: 1rem;
+}
+
+/* ---- stat tiles ---- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1px;
+  background: var(--hair);
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-block: 2rem 3.5rem;
+}
+.page > .stats { grid-column: wide; }
+.stat {
+  background: var(--surface);
+  padding: 1.4rem 1.4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.stat .value {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 2.9rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.stat .label { font-size: 0.9rem; color: var(--ink-2); line-height: 1.4; }
+.stat .foot {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+/* ---- sections ---- */
+section { display: flex; flex-direction: column; gap: 1.15rem; padding-block: 2.75rem; }
+section > .head { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.35rem; }
+
+/* board glyph: a 4x4 Quantik board with the section's index of cells filled,
+   so the marker counts sections in the game's own geometry */
+.marker { display: flex; align-items: center; gap: 0.7rem; }
+.board-glyph { display: block; flex: none; }
+.board-glyph rect { fill: none; stroke: var(--rule); stroke-width: 1; }
+.board-glyph .on { fill: var(--accent); stroke: none; }
+.board-glyph .zone { stroke: var(--hair); }
+
+.lede { font-size: 1.06rem; color: var(--ink-2); }
+
+/* ---- figures ---- */
+figure {
+  margin: 0.75rem 0 0;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 1.5rem 1.4rem 1.25rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+figcaption {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  border-top: 1px solid var(--hair);
+  padding-top: 0.85rem;
+}
+.fig-title { display: flex; flex-direction: column; gap: 0.2rem; }
+.fig-title .t { font-weight: 600; font-size: 0.98rem; }
+.fig-title .s { font-size: 0.84rem; color: var(--muted); }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  color: var(--ink-2);
+}
+.legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+
+.scroll { overflow-x: auto; }
+svg.chart { display: block; width: 100%; min-width: 34rem; height: auto; }
+svg.chart text { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+.axis { fill: var(--muted); font-size: 11px; }
+.gridline { stroke: var(--hair); stroke-width: 1; }
+.baseline { stroke: var(--rule); stroke-width: 1; }
+.serieslabel { font-size: 11.5px; font-weight: 500; }
+
+/* ---- tables ---- */
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+caption { text-align: left; font-size: 0.84rem; color: var(--muted); padding-bottom: 0.6rem; }
+th, td { padding: 0.5rem 0.65rem; text-align: right; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--rule);
+}
+tbody td { font-variant-numeric: tabular-nums; }
+tbody tr.hero td { background: var(--accent-soft); font-weight: 600; }
+tbody tr.hero td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+td.name { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; }
+.perfect { color: var(--muted); }
+
+/* ---- board diagram ---- */
+.boardfig { display: flex; flex-wrap: wrap; gap: 1.75rem; align-items: center; }
+.boardfig svg { flex: none; }
+.boardfig .note { flex: 1 1 15rem; font-size: 0.88rem; color: var(--ink-2); line-height: 1.55; }
+
+/* ---- steps ---- */
+ol.steps { list-style: none; counter-reset: step; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 1.1rem; }
+ol.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: 0.9rem;
+  align-items: start;
+}
+ol.steps li::before {
+  content: counter(step);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  color: var(--accent);
+  border: 1px solid var(--ring);
+  border-radius: 4px;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+}
+ol.steps .what { font-weight: 600; }
+ol.steps .how { color: var(--ink-2); font-size: 0.95rem; }
+
+ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; color: var(--ink-2); }
+ul.plain li { padding-left: 0.15rem; }
+ul.plain strong { color: var(--ink); }
+
+.callout {
+  border-left: 2px solid var(--accent);
+  padding: 0.15rem 0 0.15rem 1.1rem;
+  color: var(--ink-2);
+  font-size: 0.98rem;
+}
+
+details {
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 0.85rem 1.1rem;
+}
+details[open] { padding-bottom: 1.1rem; }
+summary { cursor: pointer; font-weight: 600; font-size: 0.93rem; }
+details pre {
+  margin: 0.9rem 0 0;
+  overflow-x: auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  line-height: 1.75;
+  color: var(--ink-2);
+  background: var(--plane);
+  border: 1px solid var(--hair);
+  border-radius: 5px;
+  padding: 0.85rem 1rem;
+}
+
+footer {
+  border-top: 1px solid var(--hair);
+  padding-top: 1.5rem;
+  margin-top: 3rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal { animation: rise .6s cubic-bezier(.2,.7,.3,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+</style>
+
+<div class="page">
