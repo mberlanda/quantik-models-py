@@ -339,3 +339,34 @@ be the same result.
 Note for whoever runs it: the machine must be otherwise idle. Under load from
 the corpus solve, minimax measured 772 ms/move against its clean 196 ms — the
 timings are only meaningful on a quiet machine.
+
+### Incident — the ply-6 solve, and what it taught
+
+The user noticed `exact_oracle` eating 1800% CPU. Three real defects behind that:
+
+1. **No thread bound.** The default rayon pool takes every core. Fine for a
+   dedicated batch run, wrong when anything else needs the machine — and I had
+   briefly run *two* copies (a frontier-5 hedge alongside frontier-6), driving
+   load average to 145 and slowing both.
+2. **No streaming.** `par_iter().collect()` buffered all 901,916 results until
+   the end, so an interrupt lost the entire multi-hour run.
+3. **No resume.** Restarting meant redoing everything.
+
+Then I made it concrete: `pkill -f "roots-only"` was over-broad and killed the
+main solve along with the hedge, losing ~1 hour — exactly the failure the
+buffering made unrecoverable.
+
+Fixes: `--threads N` sizes the pool (now 12 of 18); positions solve in chunks
+of 2,000 with each chunk flushed; `--append-to` skips QFENs already in the
+output so a killed run resumes. Verified by running the same 3,000 positions
+twice — the second run reported "resuming: 3000 of 3000 already solved" and
+did no work.
+
+Separately, the shared `quantik-core-rust` checkout was switched to `main` by
+other work mid-run, which made the oracle source vanish from under the build.
+The oracle now builds from a dedicated git worktree (`.oracle-worktree` on
+branch `exact-oracle`) instead of competing for the branch.
+
+**Lesson worth keeping:** a job measured in hours needs to be interruptible by
+construction. Buffer-then-write is fine at 200 positions and indefensible at a
+million.
