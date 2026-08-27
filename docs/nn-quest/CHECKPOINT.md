@@ -3,8 +3,9 @@
 **Goal:** the first neural network that beats the existing Quantik strategies
 (minimax / MCTS / beam / random) head-to-head.
 
-**Status:** PHASE 2 — exact corpus generating; supervised distillation validated
-on the deep slice. AlphaZero-from-scratch already *ties* minimax.
+**Status:** PHASE 3 — **the network now beats minimax on exact truth at every
+opening ply.** Remaining work is winning the *arena*, which needs a bigger
+accuracy gap and a better-powered measurement.
 
 Last updated: 2026-08-27.
 
@@ -89,7 +90,27 @@ positions/s); single-position 800-sim search **855 ms → 266 ms** via leaf batc
 
 ---
 
-## 5. Results so far
+## 5. Headline result (2026-08-27)
+
+`sweep-c128b6` — supervised for only **5 epochs on deep-only data** (plies
+8-13, zero opening data) — driving MCTS at 400 simulations:
+
+| agent | ply 4 | 5 | 6 | 7 | 8+ | overall |
+|---|---|---|---|---|---|---|
+| **`sup-deep-mcts400`** | **90.9%** | **93.9%** | **95.3%** | **98.6%** | 100% | **98.3%** |
+| `minimax@100ms` | 84.8% | 90.9% | 92.2% | 97.1% | 100% | 97.2% |
+
+Exact values at plies 8-13 plus two plies of search out-play a solver that
+cannot see that far in 100 ms. **No opening training data was needed for this.**
+
+The arena still reads 47.7% (CI 39.2-56.3%) over 128 games, which is a
+measurement problem rather than a contradiction — see JOURNAL "But the arena
+said 47.7%". Side-balanced pairing from a fixed position pins two near-perfect
+players near 50%; expected score at these conversion rates is only ~52%. The
+fix is ~500 symmetry-distinct openings at plies 3-5 (one seed — extra seeds add
+nothing against deterministic agents) plus a wider accuracy gap.
+
+## 5b. Results log
 
 | agent | overall outcome accuracy | value MAE |
 |---|---|---|
