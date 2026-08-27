@@ -490,3 +490,37 @@ is perfect from ply 8; so is the network. The entire margin is plies 4-7,
 where the network scores 97-100% against minimax's 84.8-97.1%. The network is
 not out-searching the solver — it is out-*knowing* it, carrying distilled exact
 values into positions minimax cannot reach in 100 ms.
+
+### Final leaderboard
+
+Full round-robin, 300 side-balanced games per pairing from 150
+symmetry-distinct openings at plies 3-5 (1,800 games per agent), every agent
+on one CPU thread:
+
+| agent | win rate | ms/move | outcome accuracy |
+|---|---|---|---|
+| **`qnet@200ms`** | **80.6%** | 213 | **99.6%** |
+| `minimax@100ms` | 72.6% | 218 | 97.2% |
+| `alphazero@200ms` | 67.2% | 206 | 97.2% |
+| `qnet-policy` (one forward pass) | 58.4% | **1** | 94.9% |
+| `beam@100ms` | 45.2% | 451 | 87.8% |
+| `mcts@100ms` | 23.2% | 111 | 77.5% |
+| `random` | 2.8% | 0 | 44.4% |
+
+**The network tops the table**, and the direct match is `qnet@200ms` 60.3% vs
+`minimax@100ms` (39.7% for minimax) at near-identical think time.
+
+Three things in this table are worth more than the headline:
+
+1. **`qnet-policy` places fourth at 1 ms/move** — a single forward pass, no
+   search at all, beating `beam@100ms` (451 ms/move) and `mcts@100ms`. Most of
+   the classical engines' compute is buying knowledge the network simply has.
+2. **`alphazero@200ms` ties minimax on accuracy (97.2% each) but loses the
+   match 42% vs 58%.** Equal average accuracy is not equal strength: the two
+   make their mistakes in different places, and minimax's are concentrated
+   where the network from scratch also happens to be weak, so it fails to
+   punish them.
+3. **`beam@100ms` spends 451 ms/move** — 4.5x its nominal budget, because it
+   only checks its clock between beam levels — and still places fifth. Nominal
+   budgets would have made this table meaningless; every number here is
+   measured.
