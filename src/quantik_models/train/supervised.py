@@ -56,6 +56,11 @@ class SupervisedConfig:
     value_loss_weight: float = 1.0
     val_fraction: float = 0.05
     augment: bool = True
+    # Draw training rows so every ply gets equal attention instead of
+    # attention proportional to how many positions that ply happens to
+    # contribute. The corpus is ~75% plies 7-13, but the match is decided at
+    # plies 4-7 — the only region where the incumbent minimax is beatable.
+    balance_plies: bool = True
     device: str = "auto"
     seed: int = 20260827
     init_from: str | None = None
@@ -94,6 +99,14 @@ def split_by_key(boards: np.ndarray, val_fraction: float) -> np.ndarray:
     keys = fb.canonical_keys(boards)
     bucket = (keys * np.uint64(0x9E3779B97F4A7C15)) >> np.uint64(40)  # 24-bit spread
     return (bucket / float(1 << 24)) < val_fraction
+
+
+def ply_sampling_weights(plies: np.ndarray) -> np.ndarray:
+    """Per-row probabilities that make the ply distribution uniform."""
+    values, counts = np.unique(plies, return_counts=True)
+    per_ply = dict(zip(values.tolist(), counts.tolist()))
+    weights = np.array([1.0 / per_ply[int(p)] for p in plies], dtype=np.float64)
+    return weights / weights.sum()
 
 
 def _forward_losses(model, boards, policy, policy_weight, value, device, value_loss_weight):
@@ -175,6 +188,9 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=config.lr, weight_decay=config.weight_decay
     )
+    sampling = (
+        ply_sampling_weights(corpus["plies"][train_idx]) if config.balance_plies else None
+    )
     steps_per_epoch = max(1, len(train_idx) // config.batch_size)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=config.epochs * steps_per_epoch, eta_min=config.min_lr
@@ -198,7 +214,12 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     for epoch in range(config.epochs):
         started = time.perf_counter()
         model.train()
-        order = rng.permutation(train_idx)
+        if sampling is None:
+            order = rng.permutation(train_idx)
+        else:
+            order = rng.choice(
+                train_idx, size=steps_per_epoch * config.batch_size, p=sampling
+            )
         stats = []
         for step in range(steps_per_epoch):
             idx = order[step * config.batch_size : (step + 1) * config.batch_size]
@@ -216,6 +237,7 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
         model.eval()
         with torch.no_grad():
             val_stats = []
+            per_ply: dict[int, list[dict[str, tuple[float, float]]]] = {}
             for start in range(0, len(val_idx), 8192):
                 idx = val_idx[start : start + 8192]
                 _, metrics = _forward_losses(
@@ -223,6 +245,17 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
                 )
                 val_stats.append(metrics)
             val_metrics = _merge(val_stats)
+            # Where the net is wrong matters more than how often: the arena is
+            # decided in the opening, so track accuracy per ply.
+            for ply in np.unique(corpus["plies"][val_idx]):
+                rows = val_idx[corpus["plies"][val_idx] == ply]
+                policy_rows = rows[corpus["policy_weight"][rows] > 0][:8192]
+                if policy_rows.size == 0:
+                    continue
+                _, metrics = _forward_losses(
+                    model, *batch_arrays(policy_rows, False), device, config.value_loss_weight
+                )
+                per_ply[int(ply)] = [metrics]
 
         record = {
             "epoch": epoch,
@@ -235,6 +268,12 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
             "val_top1": val_metrics["top1"],
             "val_value_mae": val_metrics["value_mae"],
             "val_value_sign": val_metrics["value_sign"],
+            "top1_by_ply": {
+                str(ply): _merge(chunks)["top1"] for ply, chunks in sorted(per_ply.items())
+            },
+            "value_mae_by_ply": {
+                str(ply): _merge(chunks)["value_mae"] for ply, chunks in sorted(per_ply.items())
+            },
             "seconds": time.perf_counter() - started,
         }
         with metrics_path.open("a") as fh:
@@ -247,6 +286,13 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
             f"sign={record['val_value_sign']:.1%} ({record['seconds']:.0f}s)",
             flush=True,
         )
+        opening = {p: v for p, v in record["top1_by_ply"].items() if int(p) <= 7}
+        if opening:
+            print(
+                "        opening top1: "
+                + "  ".join(f"ply{p}={v:.1%}" for p, v in sorted(opening.items(), key=lambda kv: int(kv[0]))),
+                flush=True,
+            )
 
         combined = record["val_policy_loss"] + record["val_value_loss"]
         if combined < best_val:

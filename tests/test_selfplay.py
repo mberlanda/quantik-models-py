@@ -184,3 +184,14 @@ def test_corpus_concat_prefers_policy_rows_and_dedups():
     merged = ExactCorpus.concat([with_policy, value_only])
     assert len(merged) == 50
     assert merged.policy_rows == 50
+
+
+def test_ply_sampling_weights_flatten_the_ply_distribution():
+    from quantik_models.train.supervised import ply_sampling_weights
+
+    plies = np.array([4] * 10 + [8] * 1000 + [12] * 100)
+    weights = ply_sampling_weights(plies)
+    assert weights.sum() == pytest.approx(1.0)
+    mass = {p: weights[plies == p].sum() for p in (4, 8, 12)}
+    assert mass[4] == pytest.approx(mass[8])
+    assert mass[8] == pytest.approx(mass[12])
