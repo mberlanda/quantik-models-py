@@ -178,3 +178,21 @@ The same coverage comes far cheaper:
 
 10,000 ply-6 values from the abandoned frontier-6 run survive in
 `runs/oracle/opening/frontier.jsonl` — the streaming fix's first dividend.
+
+## 8. The report
+
+`docs/nn-quest/report.html` — a self-contained page (open it directly in a
+browser; no server, no assets). Also published at
+<https://claude.ai/code/artifact/75b8b0de-a91e-49ba-8ae1-4c01062c46ee>.
+
+It is **generated, not hand-written**:
+
+```bash
+.venv/bin/python scripts/build_report.py
+```
+
+reads `runs/arena/final.json`, `runs/arena/showdown.json` and
+`runs/arena/handicap.json` and rebuilds every number, chart coordinate and
+table cell. `docs/nn-quest/report.head.html` holds the styling; edit that for
+design changes and the generator for content. Rerun the evaluation and the
+report updates itself — no number in it is ever transcribed by hand.

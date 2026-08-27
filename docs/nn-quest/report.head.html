@@ -179,6 +179,7 @@ header {
   overflow: hidden;
   margin-block: 2rem 3.5rem;
 }
+.page > .stats { grid-column: wide; }
 .stat {
   background: var(--surface);
   padding: 1.4rem 1.4rem 1.5rem;
@@ -250,7 +251,7 @@ figcaption {
 .swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; }
 
 .scroll { overflow-x: auto; }
-svg.chart { display: block; width: 100%; height: auto; }
+svg.chart { display: block; width: 100%; min-width: 34rem; height: auto; }
 svg.chart text { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
 .axis { fill: var(--muted); font-size: 11px; }
 .gridline { stroke: var(--hair); stroke-width: 1; }

@@ -203,7 +203,7 @@ body = f"""
   </div>
 </header>
 
-<div class="stats reveal">
+<div class="stats reveal wide">
   <div class="stat"><span class="value">{net_lb['rate']:.1%}</span>
     <span class="label">Network win rate across the full round-robin</span>
     <span class="foot">minimax: {mm_lb['rate']:.1%}</span></div>
