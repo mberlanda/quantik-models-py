@@ -370,3 +370,50 @@ branch `exact-oracle`) instead of competing for the branch.
 **Lesson worth keeping:** a job measured in hours needs to be interruptible by
 construction. Buffer-then-write is fine at 200 positions and indefensible at a
 million.
+
+### Result — the hypothesis holds: deep exact values generalize upward
+
+Probed `sweep-c128b6` — a net trained for only **5 epochs on the deep-only
+slice** (plies 8-13, no opening data at all) — driving MCTS at 400 simulations:
+
+| agent | ply 4 | 5 | 6 | 7 | 8 | 9-12 | overall |
+|---|---|---|---|---|---|---|---|
+| `sup-deep-mcts400` | **90.9%** | **93.9%** | **95.3%** | **98.6%** | 100% | 100% | **98.3%** |
+| `minimax@100ms` | 84.8% | 90.9% | 92.2% | 97.1% | 100% | 100% | 97.2% |
+| `sup-deep-policy` (no search) | 63.6% | 60.6% | 67.2% | 81.2% | 85.9% | 86-96% | 83.1% |
+
+**The network beats minimax at every opening ply**, with no opening training
+data whatsoever. Exact values at plies 8-13 plus two plies of search is enough
+to out-play a solver that cannot see that far in 100 ms. This is the first
+configuration to pass minimax on the exact-truth measure.
+
+### But the arena said 47.7% — and that is a measurement problem, not a fluke
+
+Clean paired match (background jobs SIGSTOPped, resumed after), 128
+side-balanced games from 32 ply-4 openings:
+
+| | win rate | 95% CI | ms/move |
+|---|---|---|---|
+| `net-mcts400` | 47.7% | 39.2%-56.3% | 228 |
+| `minimax@100ms` | 52.3% | — | 198 |
+
+Two structural reasons the arena under-discriminates, both worth fixing before
+the final run:
+
+1. **Side-balanced pairing pins the ceiling near 50%.** From a fixed position,
+   two near-perfect players each win the game where they hold the winning side.
+   With conversion rates of 91% vs 85%, the expected score is only ~52% — well
+   inside a 128-game confidence interval. The arena needs **many more start
+   positions**, not more seeds.
+2. **Seeds add nothing here.** Both agents are deterministic (`add_noise=False`
+   for the net; minimax's seed only tweaks move ordering), so replaying a
+   position under a second seed replays the same game. Diversity has to come
+   from distinct openings.
+
+Also: games from ply-4 starts last only ~4.9 more plies, so most of the game
+happens in the zone where both players are already exact. Starting earlier
+puts more decisions in the contested region.
+
+**Final evaluation design, revised:** ~500 distinct openings at plies 3-5, one
+seed, giving ~1,000 games and a ~±3% interval — and a network with a genuinely
+larger opening edge, which is what the exact opening corpus is for.
