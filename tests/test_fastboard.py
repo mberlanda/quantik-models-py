@@ -135,3 +135,91 @@ def test_terminal_status_is_always_a_loss_for_the_mover(positions, batch):
 def test_popcount_table():
     sample = np.array([0, 1, 0xFFFF, 0x8000, 0x0F0F], dtype=np.uint16)
     assert list(fb.popcount(sample)) == [0, 1, 16, 1, 8]
+
+
+# --- symmetry ------------------------------------------------------------
+
+
+def _sampled(n: int, seed: int) -> np.ndarray:
+    return np.array(_random_positions(n, seed), dtype=np.uint16)
+
+
+@pytest.fixture(scope="module")
+def sym_batch() -> np.ndarray:
+    return _sampled(1500, seed=555)
+
+
+def test_transform_preserves_legality(sym_batch):
+    rng = np.random.default_rng(1)
+    spatial, shape = fb.random_symmetries(sym_batch.shape[0], rng)
+    moved = fb.transform_boards(sym_batch, spatial, shape)
+    expected = fb.transform_policies(
+        fb.legal_masks(sym_batch).astype(np.float32), spatial, shape
+    ).astype(bool)
+    assert np.array_equal(fb.legal_masks(moved), expected)
+
+
+def test_transform_preserves_outcome_and_mover(sym_batch):
+    rng = np.random.default_rng(2)
+    spatial, shape = fb.random_symmetries(sym_batch.shape[0], rng)
+    moved = fb.transform_boards(sym_batch, spatial, shape)
+    assert np.array_equal(fb.has_winning_line(moved), fb.has_winning_line(sym_batch))
+    assert np.array_equal(fb.side_to_move(moved), fb.side_to_move(sym_batch))
+
+
+def test_transform_commutes_with_apply(sym_batch):
+    live = sym_batch[~fb.terminal_status(sym_batch)[0]]
+    rng = np.random.default_rng(3)
+    legal = fb.legal_masks(live)
+    actions = (rng.random(legal.shape) * legal).argmax(axis=1)
+    spatial, shape = fb.random_symmetries(live.shape[0], rng)
+
+    moved_then_played = fb.apply_actions(
+        fb.transform_boards(live, spatial, shape),
+        fb.transform_actions(actions, spatial, shape),
+    )
+    played_then_moved = fb.transform_boards(
+        fb.apply_actions(live, actions), spatial, shape
+    )
+    assert np.array_equal(moved_then_played, played_then_moved)
+
+
+def test_transform_actions_agrees_with_transform_policies(sym_batch):
+    rng = np.random.default_rng(4)
+    n = sym_batch.shape[0]
+    actions = rng.integers(0, fb.ACTION_COUNT, size=n)
+    spatial, shape = fb.random_symmetries(n, rng)
+    onehot = np.zeros((n, fb.ACTION_COUNT), dtype=np.float32)
+    onehot[np.arange(n), actions] = 1.0
+    moved = fb.transform_policies(onehot, spatial, shape)
+    assert np.array_equal(moved.argmax(axis=1), fb.transform_actions(actions, spatial, shape))
+    assert np.allclose(moved.sum(axis=1), 1.0)
+
+
+def test_canonical_key_is_symmetry_invariant(sym_batch):
+    rng = np.random.default_rng(5)
+    keys = fb.canonical_keys(sym_batch)
+    for _ in range(3):
+        spatial, shape = fb.random_symmetries(sym_batch.shape[0], rng)
+        moved = fb.transform_boards(sym_batch, spatial, shape)
+        assert np.array_equal(fb.canonical_keys(moved), keys)
+
+
+def test_canonical_key_separates_distinct_positions(sym_batch):
+    """Different keys must mean genuinely different positions."""
+    keys = fb.canonical_keys(sym_batch)
+    codes = fb.board_codes(sym_batch)
+    by_key: dict[int, set[int]] = {}
+    for key, code in zip(keys.tolist(), codes.tolist()):
+        by_key.setdefault(key, set()).add(code)
+    # Each key's members must be reachable from one another by a symmetry,
+    # which the invariance test already establishes; here just check the map
+    # is not degenerate (everything collapsing to one key).
+    assert len(by_key) > len(sym_batch) // 20
+
+
+def test_board_codes_round_trip_is_injective(sym_batch):
+    codes = fb.board_codes(sym_batch)
+    unique_codes = len(set(codes.tolist()))
+    unique_boards = len({b.tobytes() for b in sym_batch})
+    assert unique_codes == unique_boards

@@ -248,3 +248,144 @@ class BatchBoard:
 
     def select(self, index: npt.NDArray[np.int64]) -> "BatchBoard":
         return BatchBoard(self.bb[index])
+
+
+# --- symmetry ------------------------------------------------------------
+#
+# Quantik's rules are invariant under 8 spatial symmetries of the 4x4 board
+# *composed with* the 24 permutations of the shape labels — 192 in all, the
+# same group `quantik_core.symmetry` canonicalizes over. A position and its
+# image are the same game, so a self-play row can be replayed under any of
+# them: 192x augmentation for free.
+#
+# Not every D4 element preserves the 2x2 zone partition on its own, but all
+# eight do here: the zone grid is symmetric under the full dihedral group of
+# the square, and rows/columns map to rows/columns.
+
+_IDENTITY = np.arange(SQUARES, dtype=np.int64)
+
+
+def _spatial_permutations() -> npt.NDArray[np.int64]:
+    """`(8, 16)` — `perm[d, src] = dst` for each dihedral element."""
+    grid = _IDENTITY.reshape(BOARD_SIZE, BOARD_SIZE)
+    variants = []
+    for flip in (False, True):
+        base = np.fliplr(grid) if flip else grid
+        for turns in range(4):
+            variants.append(np.rot90(base, turns))
+    perms = np.zeros((8, SQUARES), dtype=np.int64)
+    for d, variant in enumerate(variants):
+        # variant[dst] names the source square that lands on dst.
+        perms[d, variant.reshape(-1)] = _IDENTITY
+    return perms
+
+
+SPATIAL_PERMS = _spatial_permutations()
+
+# One 8 x 65536 uint16 table (1 MiB) maps a whole board word through a
+# dihedral element in a single fancy-index, which beats per-bit shuffling by
+# orders of magnitude in the self-play hot path.
+_SPATIAL_WORD_TABLE = np.zeros((8, 1 << 16), dtype=np.uint16)
+for _d in range(8):
+    _bit_images = (np.uint16(1) << SPATIAL_PERMS[_d].astype(np.uint16)).astype(np.uint16)
+    for _w in range(1 << 16):
+        _acc = 0
+        _rest = _w
+        while _rest:
+            _low = _rest & -_rest
+            _acc |= int(_bit_images[_low.bit_length() - 1])
+            _rest ^= _low
+        _SPATIAL_WORD_TABLE[_d, _w] = _acc
+
+from itertools import permutations as _permutations  # noqa: E402
+
+SHAPE_PERMS = np.array(list(_permutations(range(SHAPES))), dtype=np.int64)  # (24, 4)
+SYMMETRY_COUNT = 8 * len(SHAPE_PERMS)
+
+
+def transform_boards(
+    bb: npt.NDArray[np.uint16],
+    spatial: npt.NDArray[np.int64],
+    shape: npt.NDArray[np.int64],
+) -> npt.NDArray[np.uint16]:
+    """Apply a per-board `(spatial, shape)` symmetry to a batch.
+
+    `spatial[i]` indexes `SPATIAL_PERMS`, `shape[i]` indexes `SHAPE_PERMS`.
+    Colors are never swapped, so the side to move is preserved.
+    """
+    moved = _SPATIAL_WORD_TABLE[spatial[:, None], bb]  # (n, 8)
+    order = SHAPE_PERMS[shape]  # (n, 4) — order[i, new_shape] = old_shape
+    both = np.concatenate([order, order + SHAPES], axis=1)  # (n, 8)
+    rows = np.arange(bb.shape[0])[:, None]
+    return moved[rows, both]
+
+
+def transform_actions(
+    actions: npt.NDArray[np.int64],
+    spatial: npt.NDArray[np.int64],
+    shape: npt.NDArray[np.int64],
+) -> npt.NDArray[np.int64]:
+    """Map action indices through the same symmetry as `transform_boards`."""
+    inverse_shape = np.argsort(SHAPE_PERMS[shape], axis=1)  # old_shape -> new_shape
+    rows = np.arange(actions.shape[0])
+    old_shape, old_pos = np.divmod(actions, SQUARES)
+    new_shape = inverse_shape[rows, old_shape]
+    new_pos = SPATIAL_PERMS[spatial, old_pos]
+    return new_shape * SQUARES + new_pos
+
+
+def transform_policies(
+    policies: npt.NDArray[np.float32],
+    spatial: npt.NDArray[np.int64],
+    shape: npt.NDArray[np.int64],
+) -> npt.NDArray[np.float32]:
+    """Permute `(n, 64)` action distributions through a symmetry."""
+    n = policies.shape[0]
+    inverse_shape = np.argsort(SHAPE_PERMS[shape], axis=1)  # (n, 4)
+    # destination index for every (shape, position) slot
+    dst_shape = np.repeat(inverse_shape, SQUARES, axis=1)  # (n, 64)
+    dst_pos = np.tile(SPATIAL_PERMS[spatial], (1, SHAPES))  # (n, 64)
+    dst = dst_shape * SQUARES + dst_pos
+    out = np.zeros_like(policies)
+    np.put_along_axis(out, dst, policies, axis=1)
+    return out
+
+
+def random_symmetries(
+    n: int, rng: np.random.Generator
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
+    """Draw `n` independent `(spatial, shape)` symmetry indices."""
+    return rng.integers(0, 8, size=n), rng.integers(0, len(SHAPE_PERMS), size=n)
+
+
+# Every square holds at most one of 8 piece kinds, so a whole board packs
+# into 16 nibbles — one uint64 — which is what makes "min over 192
+# symmetries" a plain vectorized reduction.
+_NIBBLES = (np.uint64(1) << (np.uint64(4) * np.arange(SQUARES, dtype=np.uint64))).astype(np.uint64)
+
+
+def board_codes(bb: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint64]:
+    """Pack each board into one uint64: nibble `pos` = channel + 1, 0 = empty."""
+    code = np.zeros(bb.shape[0], dtype=np.uint64)
+    for channel in range(8):
+        occupied = (bb[:, channel][:, None] & SQUARE_BITS[None, :]) != 0
+        code += (occupied * np.uint64(channel + 1) * _NIBBLES[None, :]).sum(
+            axis=1, dtype=np.uint64
+        )
+    return code
+
+
+def canonical_keys(bb: npt.NDArray[np.uint16]) -> npt.NDArray[np.uint64]:
+    """Smallest packed code over all 192 symmetries — one key per position.
+
+    Two positions share a key exactly when they are the same game up to
+    symmetry, which is what dedup and replay-buffer keying want. Colors are
+    never permuted, so the side to move is part of the identity.
+    """
+    best = np.full(bb.shape[0], np.iinfo(np.uint64).max, dtype=np.uint64)
+    for d in range(8):
+        moved = _SPATIAL_WORD_TABLE[d, bb]
+        for perm in SHAPE_PERMS:
+            both = np.concatenate([perm, perm + SHAPES])
+            best = np.minimum(best, board_codes(moved[:, both]))
+    return best

@@ -126,3 +126,46 @@ iterations (196 ms/move actual) and beam only between beam levels (465-623
 ms/move actual). Both overshoot by design, documented in their sources. The
 arena therefore reports measured ms/move alongside every result, and the
 network will be judged on measured time, not nominal budget.
+
+### Build 4 — symmetry, self-play, and the training loop
+
+**Symmetry (`fastboard`).** Quantik is invariant under 8 dihedral board
+symmetries composed with 24 shape relabelings — 192 in all. Implemented as a
+single `8 x 65536` uint16 lookup table (1 MiB) that maps a whole board word
+through a dihedral element in one fancy-index, plus channel reordering for the
+shape permutation. `canonical_keys` packs a board into one uint64 (16 nibbles,
+one per square) and minimizes over all 192 images, so dedup is a plain
+vectorized reduction. Seven more tests assert the transforms preserve
+legality, outcome and mover, commute with `apply_actions`, and that
+`transform_actions` and `transform_policies` agree. 16/16 pass.
+
+This is 192x free data augmentation, and it stops the net memorizing board
+orientation.
+
+**Self-play (`selfplay/generate.py`).** All games advance in lockstep, so every
+live game's root search is one `BatchedMCTS.search` call and the network sees
+the whole batch's leaves at once. A game is at most 16 plies, so any batch
+finishes in at most 16 rounds. Measured with the `small` net on MPS:
+
+| batch | simulations | wall | throughput |
+|---|---|---|---|
+| 256 games | 96 | 5.5 s | 46.6 games/s |
+| 512 games | 96 | 7.3 s | 70.1 games/s |
+
+Rows keep **both** value signals — the game result `z` and the search's backed-up
+root value `q`. Quantik games average ~8 plies, which makes `z` a very coarse
+label for an opening position, so the trainer blends them rather than picking.
+
+**Training (`train/alphazero.py`).** Self-play, learn, gate, repeat. A new
+generation only becomes the self-play actor if it beats the incumbent
+head-to-head at >= 55%, so a bad iteration cannot poison the replay buffer.
+Every iteration writes `latest.pt`, a `model-checkpoint.v1` export of the
+current best, and a `metrics.jsonl` line; `state.json` makes the run
+resumable.
+
+**Gating had to be batched.** The first version played gate games one at a
+time through the arena, putting the search on batch-1 network calls — the
+slowest possible shape on an accelerator (1,580 fwd/s vs 630k pos/s at batch
+512). `selfplay/duel.py` plays all gate games in lockstep instead: at each ply
+the live games are split by whose turn it is and each side's positions go
+through its own network in one batched search.
