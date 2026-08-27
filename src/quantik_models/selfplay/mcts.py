@@ -40,6 +40,13 @@ class MCTSParams:
     # minus this, so a node whose explored children all lose still prefers a
     # fresh sibling. 0.0 reproduces plain AlphaZero (unvisited Q = 0).
     fpu_reduction: float = 0.2
+    # Leaves gathered before each network call. Self-play already batches
+    # across games, but a single-position search (the arena) would otherwise
+    # make one batch-1 call per simulation — the slowest shape there is.
+    # Descents within a round are separated by virtual loss so they do not
+    # all walk the same path.
+    leaf_batch: int = 1
+    virtual_loss: float = 1.0
 
 
 class BatchedMCTS:
@@ -89,14 +96,31 @@ class BatchedMCTS:
         if add_noise and self.params.dirichlet_weight > 0.0:
             edge_p[roots] = self._noisy(edge_p[roots], node_legal[roots])
 
-        for _ in range(sims):
-            path_node, path_action, depth, leaf_parent, leaf_action, live = self._descend(
-                roots, child, node_legal, node_terminal, edge_n, edge_w, edge_p, node_value
-            )
-            leaf_value, used = self._expand(
-                leaf_parent,
-                leaf_action,
-                live,
+        leaf_batch = max(1, self.params.leaf_batch)
+        completed = 0
+        while completed < sims:
+            width = min(leaf_batch, sims - completed)
+            batch: list[tuple] = []
+            for _ in range(width):
+                path_node, path_action, depth, leaf_parent, leaf_action = self._descend(
+                    roots, child, node_legal, node_terminal, edge_n, edge_w, edge_p
+                )
+                # Virtual loss keeps the next descent in this round off the
+                # path just taken; it is removed before the real backup.
+                self._virtual_loss(
+                    path_node, path_action, depth, edge_n, edge_w, self.params.virtual_loss
+                )
+                batch.append((path_node, path_action, depth, leaf_parent, leaf_action))
+            for path_node, path_action, depth, _, _ in batch:
+                self._virtual_loss(
+                    path_node, path_action, depth, edge_n, edge_w, -self.params.virtual_loss
+                )
+
+            parents = np.concatenate([item[3] for item in batch])
+            actions = np.concatenate([item[4] for item in batch])
+            leaf_values, used = self._expand(
+                parents,
+                actions,
                 node_bb,
                 node_legal,
                 node_terminal,
@@ -105,7 +129,16 @@ class BatchedMCTS:
                 edge_p,
                 used,
             )
-            self._backup(path_node, path_action, depth, leaf_value, live, edge_n, edge_w)
+            for k, (path_node, path_action, depth, _, _) in enumerate(batch):
+                self._backup(
+                    path_node,
+                    path_action,
+                    depth,
+                    leaf_values[k * g : (k + 1) * g],
+                    edge_n,
+                    edge_w,
+                )
+            completed += width
 
         visits = edge_n[roots].copy()
         total = visits.sum(axis=1)
@@ -130,9 +163,7 @@ class BatchedMCTS:
             out[i, idx] = (1.0 - weight) * priors[i, idx] + weight * noise
         return out
 
-    def _descend(
-        self, roots, child, node_legal, node_terminal, edge_n, edge_w, edge_p, node_value
-    ):
+    def _descend(self, roots, child, node_legal, node_terminal, edge_n, edge_w, edge_p):
         """Walk every game from its root to a leaf edge, one level at a time.
 
         Returns the visited `(node, action)` path per game, its length, the
@@ -193,13 +224,12 @@ class BatchedMCTS:
             if not live.any():
                 break
 
-        return path_node, path_action, depth, leaf_parent, leaf_action, np.ones(g, dtype=np.bool_)
+        return path_node, path_action, depth, leaf_parent, leaf_action
 
     def _expand(
         self,
         leaf_parent,
         leaf_action,
-        live,
         node_bb,
         node_legal,
         node_terminal,
@@ -208,29 +238,38 @@ class BatchedMCTS:
         edge_p,
         used,
     ):
-        """Create or look up each game's leaf node; return its value."""
-        g = leaf_parent.shape[0]
-        rows = np.arange(g)
+        """Materialize every leaf edge in the round; return each leaf's value.
+
+        Several descents in one round can land on the same unexpanded edge, so
+        duplicates are collapsed before allocation — otherwise the same
+        position would get two nodes and the second would orphan the first.
+        """
+        total = leaf_parent.shape[0]
         existing = child[leaf_parent, leaf_action]
         fresh = existing == _UNEXPANDED
 
-        leaf_value = np.zeros(g, dtype=np.float32)
-        # Already-materialized leaves are terminal by construction of _descend.
+        leaf_value = np.zeros(total, dtype=np.float32)
         old = np.flatnonzero(~fresh)
         if old.size:
+            # Already-materialized leaves are terminal by construction of
+            # `_descend`, so their value is stored, not predicted.
             leaf_value[old] = node_value[existing[old]]
 
         new = np.flatnonzero(fresh)
         if new.size:
-            ids = np.arange(used, used + new.size, dtype=np.int32)
-            used += new.size
-            boards = fb.apply_actions(node_bb[leaf_parent[new]], leaf_action[new])
+            edge_key = leaf_parent[new].astype(np.int64) * fb.ACTION_COUNT + leaf_action[new]
+            unique_keys, inverse = np.unique(edge_key, return_inverse=True)
+            first = new[np.unique(inverse, return_index=True)[1]]
+
+            ids = np.arange(used, used + unique_keys.size, dtype=np.int32)
+            used += unique_keys.size
+            boards = fb.apply_actions(node_bb[leaf_parent[first]], leaf_action[first])
             node_bb[ids] = boards
             legal = fb.legal_masks(boards)
             node_legal[ids] = legal
             done = fb.has_winning_line(boards) | ~legal.any(axis=1)
             node_terminal[ids] = done
-            child[leaf_parent[new], leaf_action[new]] = ids
+            child[leaf_parent[first], leaf_action[first]] = ids
 
             node_value[ids[done]] = -1.0
             open_ = np.flatnonzero(~done)
@@ -239,12 +278,21 @@ class BatchedMCTS:
                 priors, values = self.evaluator(boards[open_], legal[open_])
                 edge_p[open_ids] = priors
                 node_value[open_ids] = values
-            leaf_value[new] = node_value[ids]
-        del rows, live
+            leaf_value[new] = node_value[ids[inverse]]
         return leaf_value, used
 
     @staticmethod
-    def _backup(path_node, path_action, depth, leaf_value, live, edge_n, edge_w):
+    def _virtual_loss(path_node, path_action, depth, edge_n, edge_w, sign):
+        """Add (or remove) a pending-visit penalty along each descent path."""
+        for level in range(int(depth.max()) if depth.size else 0):
+            idx = np.flatnonzero(depth > level)
+            if idx.size == 0:
+                continue
+            np.add.at(edge_n, (path_node[level, idx], path_action[level, idx]), sign)
+            np.add.at(edge_w, (path_node[level, idx], path_action[level, idx]), -sign)
+
+    @staticmethod
+    def _backup(path_node, path_action, depth, leaf_value, edge_n, edge_w):
         """Add the leaf value back along each path, flipping sign per ply."""
         g = depth.shape[0]
         max_depth = int(depth.max()) if g else 0
@@ -259,4 +307,3 @@ class BatchedMCTS:
             sign = np.where((depth[idx] - level) % 2 == 0, 1.0, -1.0).astype(np.float32)
             np.add.at(edge_n, (nodes, actions), 1.0)
             np.add.at(edge_w, (nodes, actions), leaf_value[idx] * sign)
-        del live
