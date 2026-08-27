@@ -175,13 +175,23 @@ class PolicyAgent:
 
 
 class NetMCTSAgent:
-    """The network inside `BatchedMCTS` — the full AlphaZero-style player."""
+    """The network inside `BatchedMCTS` — the full AlphaZero-style player.
+
+    Configure `params.time_limit_s` to play on the same clock as a
+    time-limited classical engine; otherwise `params.simulations` is the
+    budget.
+    """
 
     def __init__(self, evaluator, simulations: int = 128, params: MCTSParams | None = None,
                  name: str | None = None):
         self.evaluator = evaluator
         self.params = params or MCTSParams(simulations=simulations)
-        self.name = name or f"net-mcts-{self.params.simulations}"
+        if name:
+            self.name = name
+        elif self.params.time_limit_s:
+            self.name = f"net-mcts@{self.params.time_limit_s * 1000:.0f}ms"
+        else:
+            self.name = f"net-mcts-{self.params.simulations}"
 
     def select(self, board: Board, seed: int) -> int:
         search = BatchedMCTS(self.evaluator, self.params, np.random.default_rng(seed))
@@ -189,4 +199,9 @@ class NetMCTSAgent:
         return int(visits[0].argmax())
 
     def config_label(self) -> str:
-        return f"net-mcts(sims={self.params.simulations},c_puct={self.params.c_puct})"
+        budget = (
+            f"time={self.params.time_limit_s}"
+            if self.params.time_limit_s
+            else f"sims={self.params.simulations}"
+        )
+        return f"net-mcts({budget},c_puct={self.params.c_puct},leaf_batch={self.params.leaf_batch})"

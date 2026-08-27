@@ -18,6 +18,7 @@ for the side to move.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -47,6 +48,10 @@ class MCTSParams:
     # all walk the same path.
     leaf_batch: int = 1
     virtual_loss: float = 1.0
+    # Optional wall-clock budget, checked between simulation rounds. `simulations`
+    # then acts as the ceiling. Set this to compare against a time-limited
+    # classical engine on its own terms rather than at an arbitrary node count.
+    time_limit_s: float | None = None
 
 
 class BatchedMCTS:
@@ -97,8 +102,17 @@ class BatchedMCTS:
             edge_p[roots] = self._noisy(edge_p[roots], node_legal[roots])
 
         leaf_batch = max(1, self.params.leaf_batch)
+        deadline = (
+            time.perf_counter() + self.params.time_limit_s
+            if self.params.time_limit_s
+            else None
+        )
         completed = 0
         while completed < sims:
+            # Checked between rounds, so a round always finishes: the budget is
+            # a floor on work done, not a hard cap. Reported ms/move is measured.
+            if deadline is not None and completed and time.perf_counter() >= deadline:
+                break
             width = min(leaf_batch, sims - completed)
             batch: list[tuple] = []
             for _ in range(width):

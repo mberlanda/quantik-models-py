@@ -181,3 +181,31 @@ def test_leaf_batching_does_not_degrade_play():
         checked += 1
         assert int(visits[i].argmax()) in optimal
     assert checked
+
+
+def test_time_budget_bounds_the_search():
+    """With a wall-clock budget the search must stop early but stay valid."""
+    import time
+
+    boards = _live_positions(4, plies=5, seed=51)
+    rng = np.random.default_rng(7)
+    params = MCTSParams(simulations=100_000, leaf_batch=8, time_limit_s=0.25)
+    started = time.perf_counter()
+    visits, _ = BatchedMCTS(UniformEvaluator(), params, rng).search(boards, add_noise=False)
+    elapsed = time.perf_counter() - started
+    assert elapsed < 5.0, "the budget did not stop the search"
+    assert visits.sum(axis=1).min() > 0
+    assert np.all(visits[~fb.legal_masks(boards)] == 0.0)
+    # Every root must agree on how much work was done — games run in lockstep.
+    assert len(set(visits.sum(axis=1).tolist())) == 1
+
+
+def test_simulation_count_still_caps_a_generous_budget():
+    boards = _live_positions(4, plies=6, seed=52)
+    rng = np.random.default_rng(8)
+    visits, _ = BatchedMCTS(
+        UniformEvaluator(),
+        MCTSParams(simulations=64, leaf_batch=8, time_limit_s=60.0),
+        rng,
+    ).search(boards, add_noise=False)
+    assert np.all(visits.sum(axis=1) == 64)
