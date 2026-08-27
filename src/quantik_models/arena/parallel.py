@@ -19,6 +19,30 @@ from .registry import build_agent
 _WORKER_AGENTS: dict[str, Any] = {}
 
 
+def _init_worker() -> None:
+    """One compute thread per worker, for every agent alike.
+
+    The classical engines are single-threaded Python. Torch defaults to one
+    thread per core, so a network agent in each of 16 workers would quietly
+    claim many times the CPU its opponent gets — and the reported ms/move
+    would be measuring that, not the agent. Pinning makes the head-to-head
+    timing an apples-to-apples number.
+    """
+    import os
+
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    try:
+        import torch
+
+        torch.set_num_threads(1)
+        torch.set_num_interop_threads(1)
+    except (ImportError, RuntimeError):
+        # torch is optional, and set_num_interop_threads raises if the pool
+        # has already started — neither is worth failing a match over.
+        pass
+
+
 def _agent_for(spec: dict[str, Any]):
     key = repr(sorted(spec.items(), key=lambda kv: kv[0]))
     if key not in _WORKER_AGENTS:
@@ -56,7 +80,7 @@ def play_match_parallel(
     ]
     result = MatchResult(agent_a=name_a, agent_b=name_b)
     workers = workers or min(os.cpu_count() or 4, 16)
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    with ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as pool:
         for done, (a_won, plies, sec_a, sec_b, mv_a, mv_b) in enumerate(
             pool.map(_play_one, jobs, chunksize=1), start=1
         ):
