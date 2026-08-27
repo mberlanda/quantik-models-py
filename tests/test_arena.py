@@ -130,7 +130,8 @@ def test_checkpoint_round_trips_through_the_agent_registry(tmp_path):
     `architecture` string, so a checkpoint whose shape cannot be recovered
     would fail only at load time, in a worker, mid-match.
     """
-    import torch
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("safetensors")
 
     from quantik_models.arena.registry import build_agent, load_evaluator
     from quantik_models.export.checkpoint import export_checkpoint

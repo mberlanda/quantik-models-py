@@ -96,7 +96,7 @@ def test_duel_is_side_balanced_and_conserves_games():
 
 
 def test_supervised_split_keeps_symmetric_copies_together():
-    from quantik_models.train.supervised import split_by_key
+    from quantik_models.data.exact_corpus import split_by_key
 
     rng = np.random.default_rng(8)
     boards = fb.empty_boards(600)
@@ -109,7 +109,7 @@ def test_supervised_split_keeps_symmetric_copies_together():
 
 
 def test_supervised_split_hits_roughly_the_requested_fraction():
-    from quantik_models.train.supervised import split_by_key
+    from quantik_models.data.exact_corpus import split_by_key
 
     rng = np.random.default_rng(9)
     boards = fb.empty_boards(20000)
@@ -123,7 +123,7 @@ def test_supervised_split_hits_roughly_the_requested_fraction():
 def test_metric_merge_is_weighted_not_a_plain_mean():
     """Chunks carry very different policy-row counts, so equal-weight
     averaging under-reports policy metrics by the chunk count."""
-    from quantik_models.train.supervised import _merge
+    from quantik_models.train.metrics import merge_weighted as _merge
 
     chunks = [
         {"top1": (0.9, 1000.0)},  # one chunk holds nearly all policy rows
@@ -134,7 +134,7 @@ def test_metric_merge_is_weighted_not_a_plain_mean():
 
 
 def test_metric_merge_handles_an_all_empty_metric():
-    from quantik_models.train.supervised import _merge
+    from quantik_models.train.metrics import merge_weighted as _merge
 
     assert _merge([{"top1": (0.0, 0.0)}])["top1"] == 0.0
 
@@ -187,7 +187,7 @@ def test_corpus_concat_prefers_policy_rows_and_dedups():
 
 
 def test_ply_sampling_weights_flatten_the_ply_distribution():
-    from quantik_models.train.supervised import ply_sampling_weights
+    from quantik_models.data.exact_corpus import ply_sampling_weights
 
     plies = np.array([4] * 10 + [8] * 1000 + [12] * 100)
     weights = ply_sampling_weights(plies)
