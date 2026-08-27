@@ -118,3 +118,22 @@ def test_supervised_split_hits_roughly_the_requested_fraction():
         boards = fb.apply_actions(boards, (rng.random(legal.shape) * legal).argmax(axis=1))
     fraction = split_by_key(boards, 0.1).mean()
     assert 0.05 < fraction < 0.16
+
+
+def test_metric_merge_is_weighted_not_a_plain_mean():
+    """Chunks carry very different policy-row counts, so equal-weight
+    averaging under-reports policy metrics by the chunk count."""
+    from quantik_models.train.supervised import _merge
+
+    chunks = [
+        {"top1": (0.9, 1000.0)},  # one chunk holds nearly all policy rows
+        {"top1": (0.0, 0.0)},
+        {"top1": (0.0, 0.0)},
+    ]
+    assert _merge(chunks)["top1"] == pytest.approx(0.9)
+
+
+def test_metric_merge_handles_an_all_empty_metric():
+    from quantik_models.train.supervised import _merge
+
+    assert _merge([{"top1": (0.0, 0.0)}])["top1"] == 0.0

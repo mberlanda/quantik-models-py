@@ -83,6 +83,8 @@ def split_by_key(boards: np.ndarray, val_fraction: float) -> np.ndarray:
 
 
 def _forward_losses(model, boards, policy, policy_weight, value, device, value_loss_weight):
+    """Loss plus per-batch metrics, each paired with the weight it averages
+    over so callers can aggregate exactly (see `_evaluate`)."""
     x = torch.from_numpy(fb.encode_tensors(boards)).to(device)
     mask = torch.from_numpy(fb.legal_masks(boards)).to(device)
     target_p = torch.from_numpy(policy).to(device)
@@ -104,7 +106,30 @@ def _forward_losses(model, boards, policy, policy_weight, value, device, value_l
         top1 = ((hit.float() * weight_p).sum() / weight_p.sum().clamp_min(1.0)).item()
         value_mae = (predicted - target_v).abs().mean().item()
         sign = (torch.sign(predicted) == torch.sign(target_v)).float().mean().item()
-    return total, policy_loss.item(), value_loss.item(), top1, value_mae, sign
+    return total, {
+        "policy_loss": (policy_loss.item(), float(weight_p.sum())),
+        "value_loss": (value_loss.item(), float(target_v.numel())),
+        "top1": (top1, float(weight_p.sum())),
+        "value_mae": (value_mae, float(target_v.numel())),
+        "value_sign": (sign, float(target_v.numel())),
+    }
+
+
+def _merge(chunks: list[dict[str, tuple[float, float]]]) -> dict[str, float]:
+    """Weighted mean per metric.
+
+    A plain mean over chunks is wrong here: the corpus stores every
+    policy-labelled row before every value-only row, so a sorted validation
+    index puts nearly all policy rows in one chunk and none in the rest.
+    Averaging those chunks equally divided the policy metrics by the chunk
+    count — 89% top-1 was being reported as 11%.
+    """
+    out: dict[str, float] = {}
+    for key in chunks[0]:
+        total = sum(value * weight for value, weight in (c[key] for c in chunks))
+        denominator = sum(weight for _, weight in (c[key] for c in chunks))
+        out[key] = total / denominator if denominator else 0.0
+    return out
 
 
 def train(config: SupervisedConfig, out_root: Path) -> Path:
@@ -163,7 +188,7 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
         stats = []
         for step in range(steps_per_epoch):
             idx = order[step * config.batch_size : (step + 1) * config.batch_size]
-            loss, *metrics = _forward_losses(
+            loss, metrics = _forward_losses(
                 model, *batch_arrays(idx, config.augment), device, config.value_loss_weight
             )
             optimizer.zero_grad(set_to_none=True)
@@ -172,30 +197,30 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
             optimizer.step()
             scheduler.step()
             stats.append(metrics)
-        train_metrics = np.mean(stats, axis=0)
+        train_metrics = _merge(stats)
 
         model.eval()
         with torch.no_grad():
             val_stats = []
             for start in range(0, len(val_idx), 8192):
                 idx = val_idx[start : start + 8192]
-                _, *metrics = _forward_losses(
+                _, metrics = _forward_losses(
                     model, *batch_arrays(idx, False), device, config.value_loss_weight
                 )
                 val_stats.append(metrics)
-            val_metrics = np.mean(val_stats, axis=0)
+            val_metrics = _merge(val_stats)
 
         record = {
             "epoch": epoch,
             "lr": scheduler.get_last_lr()[0],
-            "train_policy_loss": float(train_metrics[0]),
-            "train_value_loss": float(train_metrics[1]),
-            "train_top1": float(train_metrics[2]),
-            "val_policy_loss": float(val_metrics[0]),
-            "val_value_loss": float(val_metrics[1]),
-            "val_top1": float(val_metrics[2]),
-            "val_value_mae": float(val_metrics[3]),
-            "val_value_sign": float(val_metrics[4]),
+            "train_policy_loss": train_metrics["policy_loss"],
+            "train_value_loss": train_metrics["value_loss"],
+            "train_top1": train_metrics["top1"],
+            "val_policy_loss": val_metrics["policy_loss"],
+            "val_value_loss": val_metrics["value_loss"],
+            "val_top1": val_metrics["top1"],
+            "val_value_mae": val_metrics["value_mae"],
+            "val_value_sign": val_metrics["value_sign"],
             "seconds": time.perf_counter() - started,
         }
         with metrics_path.open("a") as fh:

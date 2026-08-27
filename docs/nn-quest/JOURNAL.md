@@ -240,3 +240,46 @@ The cause is structural, not a bug: the value target was
 `0.5 * game_result + 0.5 * search_root_value`, and both terms are weak early —
 the result is a single bit at the end of an ~8-ply game, and the root value
 comes from the same undertrained net. Exact labels break that circularity.
+
+### Build 6 — supervised training on exact labels
+
+`train/supervised.py`. Two things make it cheap:
+
+* **Free child labels.** Solving a position solves all its children, so the
+  corpus carries ~10 value-labelled rows per policy-labelled one. Rows with no
+  policy target contribute to the value loss only, via `policy_weight`.
+* **On-the-fly symmetry.** Every batch is transformed by a fresh draw from the
+  192-element group, so the net effectively never sees the same board twice
+  without paying for the storage.
+
+The train/val split hashes the **canonical** key, so a rotated copy of a
+training board cannot leak into validation.
+
+**Bug found and fixed: validation metrics were being under-reported ~8x.**
+`rows_from_oracle` writes every policy-labelled row before every value-only
+row, so a sorted validation index put 7,520 of 7,520 policy rows in the first
+8,192-row chunk and none in the other seven. Averaging chunks equally then
+divided the policy metrics by the chunk count: a real 89% top-1 was printing
+as 11%, and 1.40 policy loss as 0.175. Fixed by pairing every metric with the
+weight it averages over and merging with a weighted mean (`_merge`), with a
+regression test. Worth recording because the wrong numbers looked *plausible*
+— a low loss next to a low accuracy — and would have sent the next few hours
+chasing the policy head instead of finishing the corpus.
+
+**Ground truth is cross-validated.** `tests/test_oracle_corpus.py` re-solves
+sampled oracle rows with `quantik_core`'s Python solver — a different language
+and a different codebase — and asserts agreement on who wins, on the
+outcome-optimal move set, and on legal-action coverage. 4/4 pass.
+
+First supervised result, on the deep-only slice of the corpus (plies 8-13,
+1.26M positions, 150k with policy labels, 3 epochs, `small` preset):
+val top-1 **88.2%**, value MAE **0.387** — versus 0.727 for the AlphaZero net.
+The value head starts working the moment it is given real labels.
+
+### Build 7 — leaf-batched MCTS
+
+The arena plays one position at a time, which made every simulation a batch-1
+network call. Descents within a round are now separated by virtual loss and
+their leaves evaluated together; duplicate leaf edges in a round are collapsed
+so a position never gets two nodes. 800 simulations on a single position:
+**855 ms -> 266 ms** at `leaf_batch=64`.
