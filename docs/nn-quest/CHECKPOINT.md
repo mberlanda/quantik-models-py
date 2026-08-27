@@ -3,21 +3,25 @@
 **Goal:** the first neural network that beats the existing Quantik strategies
 (minimax / MCTS / beam / random) head-to-head.
 
-**Status:** PHASE 3 — **the network now beats minimax on exact truth at every
-opening ply.** Remaining work is winning the *arena*, which needs a bigger
-accuracy gap and a better-powered measurement.
+**Status: DONE.** The network tops the leaderboard at 80.6% against minimax's
+72.6%, wins the direct match 60.5%, and beats it 55.8% while spending 3.2x
+less time per move. Verified against exact truth on 8,440 held-out solved
+positions with a paired exact test at p = 8e-49.
+
+Merged: `quantik-models-py` #4 and #5, `quantik-core-rust` #38.
 
 Last updated: 2026-08-27.
 
----
-
 ## 1. How to resume
+
 
 ```bash
 export NNQ=/Users/mauroberlanda/Code/quantik-ns/quantik-models-py
-cd "$NNQ" && git checkout nn-beats-baselines
-.venv/bin/python -m pytest -q            # 40 tests, all should pass
+cd "$NNQ" && git checkout main   # everything is merged
+.venv/bin/python -m pytest -q            # 91 tests, all should pass
 cat docs/nn-quest/JOURNAL.md             # full narrative, findings and dead ends
+cat docs/nn-quest/COVERAGE.md            # how much of the game it saw, and the power analysis
+open docs/nn-quest/report.html           # the published write-up
 ```
 
 Environment: venv at `$NNQ/.venv` (python 3.13.14 via pyenv), editable
@@ -90,25 +94,31 @@ positions/s); single-position 800-sim search **855 ms → 266 ms** via leaf batc
 
 ---
 
-## 5. Headline result (2026-08-27)
+## 5. Headline result
 
-`sweep-c128b6` — supervised for only **5 epochs on deep-only data** (plies
-8-13, zero opening data) — driving MCTS at 400 simulations:
+Round-robin, 1,800 side-balanced games per agent, one CPU thread each;
+accuracy on 8,440 exactly-solved held-out positions (7,030 provably won):
 
-| agent | ply 4 | 5 | 6 | 7 | 8+ | overall |
-|---|---|---|---|---|---|---|
-| **`sup-deep-mcts400`** | **90.9%** | **93.9%** | **95.3%** | **98.6%** | 100% | **98.3%** |
-| `minimax@100ms` | 84.8% | 90.9% | 92.2% | 97.1% | 100% | 97.2% |
+| agent | arena win rate | ms/move | exact-truth accuracy |
+|---|---|---|---|
+| **`qnet@200ms`** | **80.6%** | 213 | **98.98%** |
+| `minimax@100ms` | 72.6% | 218 | 95.86% |
+| `alphazero@200ms` | 67.2% | 206 | 93.27% |
+| `qnet-policy` (one forward pass) | 58.4% | **1** | 93.76% |
+| `beam@100ms` | 45.2% | 451 | 80.84% |
+| `mcts@100ms` | 23.2% | 111 | 66.05% |
+| `random` | 2.8% | 0 | 34.79% |
 
-Exact values at plies 8-13 plus two plies of search out-play a solver that
-cannot see that far in 100 ms. **No opening training data was needed for this.**
+Direct matches: 60.5% over 1,200 games (CI 57.7-63.2%); 55.8% at a 50 ms budget
+while spending 63 ms/move against minimax's 203.
 
-The arena still reads 47.7% (CI 39.2-56.3%) over 128 games, which is a
-measurement problem rather than a contradiction — see JOURNAL "But the arena
-said 47.7%". Side-balanced pairing from a fixed position pins two near-perfect
-players near 50%; expected score at these conversion rates is only ~52%. The
-fix is ~500 symmetry-distinct openings at plies 3-5 (one seed — extra seeds add
-nothing against deterministic agents) plus a wider accuracy gap.
+Paired exact test on accuracy: **p = 8e-49** (239 positions only the
+network gets right, 20 only minimax). Every disagreement is at plies 4-7;
+across 2,880 won positions from ply 8 on, neither engine errs.
+
+Coverage: the model trained on 5.02% of the 61,495,314 canonical positions
+through ply 9 — and **none at plies 0-5**, where it beats minimax by the widest
+margin. See `COVERAGE.md`.
 
 ## 5b. Results log
 
@@ -145,7 +155,37 @@ oracle breaks the circularity.**
 | `runs/oracle/opening/opening-exact.npz` | **[in flight]** complete exact solution, plies 0-6 values + plies 0-5 policies. |
 | `runs/oracle/opening*/level*.npy` | enumerated canonical live positions per ply (reusable cache). |
 
-## 7. In flight / next actions
+## 7. Optional follow-up (not required — the goal is met)
+
+**[running]** `scripts/solve_opening.py --frontier 5 --threads 10 --out runs/oracle/opening5`
+— root-only exact solve of all 105,632 canonical ply-5 positions. Streams to
+`runs/oracle/opening5/frontier.jsonl` and **resumes**, so it is safe to kill at
+any point; re-running picks up from what is banked.
+
+Why it exists: the coverage analysis showed the model trained on **zero**
+positions at plies 4-5, and those are exactly where its remaining error lives
+(96.4% at ply 4, 97.8% at ply 5, 100% from ply 8). Completing this solve yields
+100% exact move coverage at ply 4 and 100% exact values at ply 5 — the material
+to test whether filling that gap moves ply-4 accuracy.
+
+To run the experiment once it finishes:
+
+```bash
+# induction completes automatically and writes opening-exact.npz
+.venv/bin/python -c "
+from quantik_models.data.exact_corpus import ExactCorpus
+merged = ExactCorpus.concat([
+    ExactCorpus.load('runs/oracle/opening5/opening-exact.npz'),
+    ExactCorpus.load('runs/oracle/corpus/sampled.npz')])
+merged.save('runs/oracle/corpus/combined.npz')"
+.venv/bin/python -m quantik_models.train.supervised --name qnet-v2 \
+  --corpus runs/oracle/corpus/combined.npz --channels 128 --blocks 6 --epochs 16
+.venv/bin/python scripts/coverage_report.py --agents runs/oracle/coverage-agents.json
+```
+
+To stop it instead: `kill $(pgrep -f solve_opening)` — nothing else depends on it.
+
+## 8. Superseded (kept so the history reads correctly)
 
 1. **[running]** `scripts/solve_opening.py --frontier 5 --threads 12 --out runs/oracle/opening5`
    — root-only solve of all 105,632 canonical ply-5 positions (~1.7 h).
