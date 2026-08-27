@@ -126,34 +126,34 @@ oracle breaks the circularity.**
 
 ## 7. In flight / next actions
 
-1. **[running, ~3 h]** `scripts/solve_opening.py --frontier 6` — root-only solve
-   of all 901,916 canonical ply-6 positions. Log `runs/oracle/opening-solve.log`.
-   **Warning:** the Rust oracle buffers all results and writes at the end, so
-   killing it loses the whole run. Needs a quiet machine; it was running at 11
-   of 18 cores while training competed.
-2. `--frontier 5` variant runs in `runs/oracle/opening5/` as a fast hedge.
-3. Combine corpora with `ExactCorpus.concat([opening, sampled])` — pass the
-   opening first, it is the more authoritative source.
-4. Train on the combined corpus with `--balance-plies` (default on): the corpus
-   is 75% plies 7-13 but the match is decided at plies 4-7.
-5. AlphaZero fine-tune from the supervised checkpoint (`--init-from`).
-6. `scripts/final_evaluation.py` on an **otherwise idle machine** — under load
-   minimax measured 772 ms/move against its clean 196 ms.
+1. **[running]** `scripts/solve_opening.py --frontier 5 --threads 12 --out runs/oracle/opening5`
+   — root-only solve of all 105,632 canonical ply-5 positions (~1.7 h).
+   Yields complete exact values for plies 0-5 and complete exact policies for
+   plies 0-4. **Resumable**: streams to `runs/oracle/opening5/frontier.jsonl`
+   and skips what is already there.
+2. **[queued]** sampled full oracle on 15,000 ply-5 positions
+   (`runs/oracle/corpus/ply05.qfen`, 14.2% coverage, probe positions excluded)
+   → ply-5 policy labels plus ply-6 values.
+3. **[running]** `sup-sampled-c128b6` — supervised on the sampled corpus alone.
+   Evaluate it on the probe as soon as it finishes; it may already beat minimax
+   without any opening data.
+4. Combine: `ExactCorpus.concat([opening, ply5_sampled, sampled])`, opening first.
+5. Train the final net with `--balance-plies`, probe it, then AlphaZero
+   fine-tune from it (`--init-from`).
+6. `scripts/final_evaluation.py` on an **idle machine**.
 7. Publish the write-up as an artifact.
 
-## 7. Gotchas already hit (do not re-learn these)
+### Why frontier 5, not 6
 
-- `quantik_core`'s nominal time limits overshoot: minimax checks its clock
-  between deepening iterations (196 ms actual for a 100 ms budget), beam only
-  between beam levels (465-623 ms). **Always report measured ms/move.**
-- `BeamSearchResult` has no `best_move`; use `ranked_root_moves(top_k=1)`.
-- Validation metrics must merge **weighted** — the corpus stores all
-  policy-labelled rows before all value-only rows, so equal-weight chunk
-  averaging under-reported policy metrics 8x.
-- Requiring the search to match the solver's single best move is the wrong
-  test: in a lost position every move loses and the solver ranks by mate
-  distance, which a win/loss-valued search cannot express. Use
-  **outcome-optimality** on **won** positions.
-- The 640-position probe (`runs/oracle/probe.jsonl`) is held out — the corpus
-  builder excludes its canonical keys. Keep it that way or accuracy numbers
-  become training scores.
+Frontier 6 (901,916 root solves) was measured at ~7.5 h and was abandoned.
+The same coverage comes far cheaper:
+
+| need | source | cost |
+|---|---|---|
+| exact policy, plies 0-4 | frontier-5 solve (105,632 roots) | ~1.7 h |
+| exact policy, ply 5 | sampled full oracle, 15,000 positions | ~1.2 h |
+| exact policy, plies 6-7 | already have (40k + 60k full-oracle rows) | done |
+| exact values, plies 8-13 | already have (3.09M rows) | done |
+
+10,000 ply-6 values from the abandoned frontier-6 run survive in
+`runs/oracle/opening/frontier.jsonl` — the streaming fix's first dividend.
