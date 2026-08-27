@@ -283,3 +283,33 @@ network call. Descents within a round are now separated by virtual loss and
 their leaves evaluated together; duplicate leaf edges in a round are collapsed
 so a position never gets two nodes. 800 simulations on a single position:
 **855 ms -> 266 ms** at `leaf_batch=64`.
+
+### Build 8 — solving the opening outright
+
+The probe said all the headroom is at plies 4-7. Rather than sample that
+region, solve it completely.
+
+The trick is that **solving one level makes every shallower level free**. A
+position's value is the best of its children's negated values, and its optimal
+moves are exactly those leading to a child the opponent loses. So instead of
+paying the full oracle (one solve per legal move) at every level, pay a
+*root-only* solve — 25x cheaper, added as `--roots-only` — at one deep level
+and back-induce everything above.
+
+First, enumerate the canonical tree with `fastboard`. The counts came out:
+
+| ply | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| canonical live positions | 3 | 51 | 726 | 10,946 | 105,632 | 901,916 |
+
+These match `quantik-core-py/GAME_TREE_ANALYSIS.md` **exactly** at every level —
+an independent validation of the vectorized rules and the 192-symmetry
+canonical key against a table computed by entirely different code.
+
+`scripts/solve_opening.py --frontier 6` therefore yields exact values for every
+canonical position at plies 0-6 and exact optimal-move sets for plies 0-5: the
+complete solution of the region where minimax is beatable.
+
+Killed the sampled-corpus job after ply 6, since the complete solve subsumes
+plies 0-6. Kept its plies 6-12 output: **3,087,356** unique exactly-labelled
+positions, **250,000** with exact policy targets.
