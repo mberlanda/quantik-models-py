@@ -157,10 +157,16 @@ oracle breaks the circularity.**
 
 ## 7. Optional follow-up (not required — the goal is met)
 
-**[running]** `scripts/solve_opening.py --frontier 5 --threads 10 --out runs/oracle/opening5`
-— root-only exact solve of all 105,632 canonical ply-5 positions. Streams to
-`runs/oracle/opening5/frontier.jsonl` and **resumes**, so it is safe to kill at
-any point; re-running picks up from what is banked.
+**[stopped 2026-08-27, 64,000 of 105,632 banked — 61%]**
+`scripts/solve_opening.py --frontier 5 --threads 10 --out runs/oracle/opening5`
+— root-only exact solve of all 105,632 canonical ply-5 positions. Stopped
+because it was taking ~10 CPU cores for an optional experiment after the goal
+was already met.
+
+It **resumes**: results stream to `runs/oracle/opening5/frontier.jsonl` and a
+re-run skips what is already there, so restarting picks up at 61% done. Use
+`--threads N` to bound it; at 10 threads the remaining 67,632 positions were
+running at roughly 4,000 per 13 minutes; 41,632 remain.
 
 Why it exists: the coverage analysis showed the model trained on **zero**
 positions at plies 4-5, and those are exactly where its remaining error lives
