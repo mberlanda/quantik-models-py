@@ -121,3 +121,50 @@ def test_parallel_and_serial_matches_agree():
     )
     parallel = play_match_parallel(spec_a, spec_b, positions, seeds=(0,), workers=2)
     assert (serial.wins_a, serial.wins_b) == (parallel.wins_a, parallel.wins_b)
+
+
+def test_checkpoint_round_trips_through_the_agent_registry(tmp_path):
+    """A published checkpoint must rebuild into an identical evaluator.
+
+    The registry reconstructs the architecture by parsing the manifest's
+    `architecture` string, so a checkpoint whose shape cannot be recovered
+    would fail only at load time, in a worker, mid-match.
+    """
+    import torch
+
+    from quantik_models.arena.registry import build_agent, load_evaluator
+    from quantik_models.export.checkpoint import export_checkpoint
+    from quantik_models.model.policy_value_net import PolicyValueNet, PolicyValueNetConfig
+
+    torch.manual_seed(0)
+    model = PolicyValueNet(PolicyValueNetConfig(channels=24, blocks=3)).eval()
+    export_checkpoint(
+        model, out_dir=tmp_path / "ckpt", model_id="test", training_report={"run": "test"}
+    )
+
+    evaluator = load_evaluator(tmp_path / "ckpt", "cpu")
+    boards = sample_start_positions(8, plies=5, seed=1)
+    legal = fb.legal_masks(boards)
+    priors, values = evaluator(boards, legal)
+
+    with torch.no_grad():
+        logits, expected_values = model(torch.from_numpy(fb.encode_tensors(boards)))
+        logits = logits.masked_fill(~torch.from_numpy(legal), torch.finfo(logits.dtype).min)
+        expected_priors = torch.softmax(logits, dim=-1).numpy()
+    assert np.allclose(priors, expected_priors, atol=1e-6)
+    assert np.allclose(values, expected_values.numpy(), atol=1e-6)
+
+    assert np.all(priors[~legal] == 0.0)
+    assert np.allclose(priors.sum(axis=1), 1.0, atol=1e-5)
+
+    agent = build_agent(
+        {
+            "kind": "net-mcts",
+            "checkpoint": str(tmp_path / "ckpt"),
+            "device": "cpu",
+            "params": {"simulations": 16, "dirichlet_weight": 0.0},
+            "name": "round-trip",
+        }
+    )
+    action = agent.select(boards[0], seed=0)
+    assert legal[0][action]
