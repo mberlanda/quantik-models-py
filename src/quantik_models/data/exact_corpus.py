@@ -131,3 +131,23 @@ class ExactCorpus:
             value_target=merged.value_target[keep],
             plies=merged.plies[keep],
         )
+
+
+def split_by_key(boards: np.ndarray, val_fraction: float) -> np.ndarray:
+    """Deterministic train/val mask keyed on the *canonical* position.
+
+    Hashing the canonical key rather than the row keeps a position and its
+    symmetric images on the same side of the split, so validation cannot be
+    contaminated by a rotated copy of a training board.
+    """
+    keys = fb.canonical_keys(boards)
+    bucket = (keys * np.uint64(0x9E3779B97F4A7C15)) >> np.uint64(40)  # 24-bit spread
+    return (bucket / float(1 << 24)) < val_fraction
+
+
+def ply_sampling_weights(plies: np.ndarray) -> np.ndarray:
+    """Per-row probabilities that make the ply distribution uniform."""
+    values, counts = np.unique(plies, return_counts=True)
+    per_ply = dict(zip(values.tolist(), counts.tolist()))
+    weights = np.array([1.0 / per_ply[int(p)] for p in plies], dtype=np.float64)
+    return weights / weights.sum()

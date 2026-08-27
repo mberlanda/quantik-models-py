@@ -28,7 +28,14 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from ..data.exact_corpus import ExactCorpus, policy_weight, unpack
+from ..data.exact_corpus import (
+    ExactCorpus,
+    policy_weight,
+    ply_sampling_weights,
+    split_by_key,
+    unpack,
+)
+from .metrics import merge_weighted as _merge
 from ..env import fastboard as fb
 from ..export.checkpoint import export_checkpoint
 from ..model.policy_value_net import (
@@ -89,26 +96,6 @@ def load_corpus(path: str | Path) -> dict[str, np.ndarray]:
     }
 
 
-def split_by_key(boards: np.ndarray, val_fraction: float) -> np.ndarray:
-    """Deterministic train/val mask keyed on the *canonical* position.
-
-    Hashing the canonical key rather than the row keeps a position and its
-    symmetric images on the same side of the split, so validation cannot be
-    contaminated by a rotated copy of a training board.
-    """
-    keys = fb.canonical_keys(boards)
-    bucket = (keys * np.uint64(0x9E3779B97F4A7C15)) >> np.uint64(40)  # 24-bit spread
-    return (bucket / float(1 << 24)) < val_fraction
-
-
-def ply_sampling_weights(plies: np.ndarray) -> np.ndarray:
-    """Per-row probabilities that make the ply distribution uniform."""
-    values, counts = np.unique(plies, return_counts=True)
-    per_ply = dict(zip(values.tolist(), counts.tolist()))
-    weights = np.array([1.0 / per_ply[int(p)] for p in plies], dtype=np.float64)
-    return weights / weights.sum()
-
-
 def _forward_losses(model, boards, policy, policy_weight, value, device, value_loss_weight):
     """Loss plus per-batch metrics, each paired with the weight it averages
     over so callers can aggregate exactly (see `_evaluate`)."""
@@ -140,23 +127,6 @@ def _forward_losses(model, boards, policy, policy_weight, value, device, value_l
         "value_mae": (value_mae, float(target_v.numel())),
         "value_sign": (sign, float(target_v.numel())),
     }
-
-
-def _merge(chunks: list[dict[str, tuple[float, float]]]) -> dict[str, float]:
-    """Weighted mean per metric.
-
-    A plain mean over chunks is wrong here: the corpus stores every
-    policy-labelled row before every value-only row, so a sorted validation
-    index puts nearly all policy rows in one chunk and none in the rest.
-    Averaging those chunks equally divided the policy metrics by the chunk
-    count — 89% top-1 was being reported as 11%.
-    """
-    out: dict[str, float] = {}
-    for key in chunks[0]:
-        total = sum(value * weight for value, weight in (c[key] for c in chunks))
-        denominator = sum(weight for _, weight in (c[key] for c in chunks))
-        out[key] = total / denominator if denominator else 0.0
-    return out
 
 
 def train(config: SupervisedConfig, out_root: Path) -> Path:
