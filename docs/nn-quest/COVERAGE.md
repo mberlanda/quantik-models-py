@@ -115,6 +115,26 @@ positions at plies 8-12, both play perfectly — not one error either way. The
 two columns of the table are identical because there is nothing to add past
 ply 7.
 
+### All agents on the larger probe
+
+Re-measured on the same 8,440 positions, so the whole table is one instrument:
+
+| agent | outcome accuracy |
+|---|---|
+| `qnet@200ms` | 98.98% |
+| `minimax@100ms` | 95.86% |
+| `qnet-policy` | 93.76% |
+| `alphazero@200ms` | 93.27% |
+| `beam@100ms` | 80.84% |
+| `mcts@100ms` | 66.05% |
+| `random` | 34.79% |
+
+Two orderings changed against the 640-position probe, and both are informative.
+`qnet-policy` — a single forward pass, 0.36 ms per position — now **outscores
+`alphazero@200ms`**, which spends 200 ms searching. And `alphazero@200ms` drops
+from 97.2% to 93.3%: its apparent parity with minimax on the old probe was an
+artifact of that probe's ply distribution, not real strength.
+
 ### Was the original 640 wrong?
 
 No — underpowered, not wrong. Minimax measured 84.8% at ply 4 on 33 positions
