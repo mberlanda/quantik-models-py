@@ -98,6 +98,14 @@ class ExactCorpus:
                 plies=data["plies"],
             )
 
+    def canonical_keys(self) -> npt.NDArray[np.uint64]:
+        """Symmetry-invariant identity of every position in the corpus.
+
+        Held-out sets are built by excluding these, so a rotated or
+        shape-relabelled copy of a training board can never be evaluated on.
+        """
+        return fb.canonical_keys(self.boards)
+
     @classmethod
     def concat(cls, parts: list["ExactCorpus"]) -> "ExactCorpus":
         """Merge corpora, keeping one row per canonical position.

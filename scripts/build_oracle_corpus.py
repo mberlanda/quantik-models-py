@@ -84,8 +84,15 @@ def run_oracle(oracle_bin: Path, qfen_path: Path, out_path: Path) -> None:
         )
 
 
-def rows_from_oracle(paths: list[Path]) -> ExactCorpus:
-    """Turn oracle JSONL into a deduplicated `ExactCorpus`."""
+def rows_from_oracle(paths: list[Path], exclude: set[int] | None = None) -> ExactCorpus:
+    """Turn oracle JSONL into a deduplicated `ExactCorpus`.
+
+    `exclude` drops canonical keys from the **whole** result, not just from
+    the sampled parents. Child rows are derived rather than sampled, so a
+    held-out position can arrive as somebody's child even though it was never
+    picked — which is how 16 probe positions ended up in the first corpus as
+    value-only rows. Filtering here is the only place that catches it.
+    """
     policy_boards: list[np.ndarray] = []
     policy_targets: list[list[int]] = []
     policy_values: list[float] = []
@@ -121,6 +128,11 @@ def rows_from_oracle(paths: list[Path]) -> ExactCorpus:
     order = np.argsort(masks == 0, kind="stable")
     _, first = np.unique(keys[order], return_index=True)
     keep = np.sort(order[first])
+    if exclude:
+        held_out = np.array([k in exclude for k in keys[keep].tolist()])
+        if held_out.any():
+            print(f"dropped {int(held_out.sum()):,} held-out positions reached as children")
+            keep = keep[~held_out]
     return ExactCorpus(
         boards=boards[keep],
         optimal_mask=masks[keep],
@@ -187,7 +199,7 @@ def main(argv=None) -> int:
                 flush=True,
             )
 
-    corpus = rows_from_oracle([p for p in jsonl_paths if p.exists()])
+    corpus = rows_from_oracle([p for p in jsonl_paths if p.exists()], exclude=exclude)
     npz_path = corpus.save(args.out / "exact.npz")
     print(
         f"wrote {npz_path}: {len(corpus):,} unique positions "

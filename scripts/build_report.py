@@ -9,8 +9,18 @@ OUT = Path("docs/nn-quest/report.html")
 final = json.load(open("runs/arena/final.json"))
 showdown = json.load(open("runs/arena/showdown.json"))
 handicap = json.load(open("runs/arena/handicap.json"))
+# Accuracy comes from the 8,440-position probe, not the 640-position one the
+# first draft used: that probe held only 33 won positions each at plies 4-5,
+# the two plies that carry the whole margin.
+cov = json.load(open("runs/coverage.json"))
 
-probe = {x["agent"]: x for x in final["probe"]}
+probe = {
+    x["agent"]: {
+        "outcome_accuracy": x["outcome_accuracy"],
+        "accuracy_by_ply": {k: v for k, v in x["by_ply"].items()},
+    }
+    for x in cov["agents"]
+}
 arena = final["arena"]
 
 def ms(agent):
@@ -26,6 +36,8 @@ def board(rows):
 
 LB = board(arena)
 PLIES = list(range(4, 13))
+COVERAGE = cov["coverage"]
+COMPARE = cov["comparisons"]
 
 # --- series for the per-ply chart: the four engines that actually compete ---
 SERIES = [
@@ -132,6 +144,62 @@ def bar_chart():
     s.append("</svg>")
     return "\n".join(s)
 
+CW, CH = 720, 300
+CL, CR, CT = 44, 132, 18
+CPW = CW - CL - CR
+_ROW = 26
+
+
+def cx(count):
+    """Log position; 0 maps to the axis origin."""
+    import math
+
+    if count <= 0:
+        return CL
+    return CL + min(1.0, math.log10(count) / 8.0) * CPW
+
+
+def coverage_chart():
+    """Per ply: every canonical position, and the slice the model trained on.
+
+    A log axis makes the segment between the two dots *be* the coverage
+    ratio, so the eye reads the fraction and the absolute scale at once —
+    which matters when the plies span 1 position and 38 million.
+    """
+    rows = [r for r in COVERAGE if r["canonical_live"] and r["ply"] <= 9]
+    height = CT + len(rows) * _ROW + 34
+    s = [f'<svg class="chart" viewBox="0 0 {CW} {height}" role="img" '
+         f'aria-label="Canonical positions per ply against the number trained on. '
+         f'Plies 4 and 5 have no training data at all; deeper plies reach a few percent.">']
+    for power in range(0, 9):
+        x = CL + power / 8.0 * CPW
+        s.append(f'<line class="gridline" x1="{x:.1f}" y1="{CT - 6}" x2="{x:.1f}" '
+                 f'y2="{CT + len(rows) * _ROW}"/>')
+        label = "1" if power == 0 else ("10" if power == 1 else f"10^{power}")
+        s.append(f'<text class="axis" x="{x:.1f}" y="{CT + len(rows) * _ROW + 18}" '
+                 f'text-anchor="middle">{label}</text>')
+    s.append(f'<text class="axis" x="{CL + CPW / 2:.0f}" y="{height - 2}" '
+             f'text-anchor="middle">canonical positions (log scale)</text>')
+    for i, row in enumerate(rows):
+        y = CT + i * _ROW + _ROW / 2
+        total, trained = row["canonical_live"], row["trained_total"]
+        s.append(f'<text class="axis" x="{CL - 10}" y="{y + 4:.1f}" text-anchor="end" '
+                 f'fill="var(--ink-2)">ply {row["ply"]}</text>')
+        if trained > 0:
+            s.append(f'<line x1="{cx(trained):.1f}" y1="{y:.1f}" x2="{cx(total):.1f}" '
+                     f'y2="{y:.1f}" stroke="var(--rule)" stroke-width="2"/>')
+            s.append(f'<circle cx="{cx(trained):.1f}" cy="{y:.1f}" r="5" fill="var(--s1)" '
+                     f'stroke="var(--surface)" stroke-width="2"/>')
+        s.append(f'<circle cx="{cx(total):.1f}" cy="{y:.1f}" r="5" fill="var(--muted)" '
+                 f'stroke="var(--surface)" stroke-width="2"/>')
+        note = f"{row['coverage']:.2%}" if trained else "no training data"
+        colour = "var(--ink)" if trained else "var(--loss)"
+        s.append(f'<text class="axis" x="{CL + CPW + 12}" y="{y + 4:.1f}" fill="{colour}" '
+                 f'style="font-size:11.5px;font-weight:500">{note}</text>')
+    s.append("</svg>")
+    return "\n".join(s)
+
+
 def glyph(n):
     """A 4x4 Quantik board with n cells filled — section index in the game's own geometry."""
     cells = []
@@ -147,6 +215,49 @@ def head(n, eyebrow, title):
             f'<h2>{title}</h2></div>')
 
 # --- leaderboard table ---
+def coverage_table():
+    rows = []
+    for row in COVERAGE:
+        if row["ply"] > 13:
+            continue
+        total = f"{row['canonical_live']:,}" if row["canonical_live"] else "not enumerated"
+        probe_count = sum(v for k, v in row.items() if k.startswith("probe_"))
+        if row["canonical_live"] and row["trained_total"] == 0:
+            cover = '<td style="color:var(--loss);font-weight:600">none</td>'
+        elif row["canonical_live"]:
+            cover = f"<td>{row['coverage']:.2%}</td>"
+        else:
+            cover = "<td>—</td>"
+        hero = ' class="hero"' if row["ply"] in (4, 5) else ""
+        rows.append(
+            f'<tr{hero}><td>{row["ply"]}</td><td>{total}</td>'
+            f'<td>{row["trained_total"]:,}</td><td>{row["trained_policy"]:,}</td>'
+            f'{cover}<td>{probe_count:,}</td></tr>')
+    return ('<table><caption>Positions counted up to symmetry — a position and its 191 '
+            'images are one game. Terminal positions are excluded; they need no decision.'
+            '</caption><thead><tr><th>ply</th><th>canonical positions</th><th>trained on</th>'
+            '<th>with move label</th><th>coverage</th><th>held-out probe</th></tr></thead>'
+            '<tbody>' + "".join(rows) + "</tbody></table>")
+
+
+def significance_table():
+    rows = []
+    for block in COMPARE:
+        m, ci = block["mcnemar"], block["difference"]
+        rows.append(
+            f'<tr><td>{block["scope"]}</td><td>{m["positions"]:,}</td>'
+            f'<td>{m["accuracy_a"]:.2%}</td><td>{m["accuracy_b"]:.2%}</td>'
+            f'<td>{m["a_right_b_wrong"]}</td><td>{m["b_right_a_wrong"]}</td>'
+            f'<td>{ci["point"]:+.2%}</td>'
+            f'<td>{ci["low"]:+.2%} to {ci["high"]:+.2%}</td>'
+            f'<td><strong>{m["p_value"]:.1g}</strong></td></tr>')
+    return ('<table><caption>Paired comparison of `qnet@200ms` against `minimax@100ms` on '
+            'positions the mover provably wins.</caption><thead><tr><th>scope</th>'
+            '<th>positions</th><th>network</th><th>minimax</th><th>only network right</th>'
+            '<th>only minimax right</th><th>difference</th><th>95% CI</th><th>p</th>'
+            '</tr></thead><tbody>' + "".join(rows) + "</tbody></table>")
+
+
 def leaderboard_table():
     rows = []
     for r in LB:
@@ -185,6 +296,14 @@ def ply_table():
             f'<thead><tr><th>agent</th>{heads}<th>all</th></tr></thead><tbody>'
             + "".join(rows) + "</tbody></table>")
 
+deep_positions = sum(
+    v["total"] for k, v in probe["qnet@200ms"]["accuracy_by_ply"].items() if int(k) >= 8
+)
+# Positions where both engines are already exact — the region that carries no
+# information about which is stronger.
+deep_positions = sum(
+    v["total"] for k, v in probe["qnet@200ms"]["accuracy_by_ply"].items() if int(k) >= 8
+)
 sd = showdown["arena"][0]
 hc = handicap["arena"][0]
 net_lb = next(r for r in LB if r["agent"] == "qnet@200ms")
@@ -199,7 +318,7 @@ body = f"""
   the whole reason a neural network can beat it &mdash; and it does, on less time per move.</p>
   <div class="byline">
     <span>27 August 2026</span><span>quantik-models-py</span>
-    <span>1,800 games per agent</span><span>640 exactly-solved held-out positions</span>
+    <span>1,800 games per agent</span><span>8,440 exactly-solved held-out positions</span>
   </div>
 </header>
 
@@ -208,8 +327,9 @@ body = f"""
     <span class="label">Network win rate across the full round-robin</span>
     <span class="foot">minimax: {mm_lb['rate']:.1%}</span></div>
   <div class="stat"><span class="value">{probe['qnet@200ms']['outcome_accuracy']:.1%}</span>
-    <span class="label">Moves that preserve a won position, against exact truth</span>
-    <span class="foot">minimax: {probe['minimax@100ms']['outcome_accuracy']:.1%}</span></div>
+    <span class="label">Moves that preserve a won position, over {sum(v['total'] for v in probe['qnet@200ms']['accuracy_by_ply'].values()):,} solved positions</span>
+    <span class="label" style="font-size:.82rem">minimax: {probe['minimax@100ms']['outcome_accuracy']:.1%} &middot; paired test p = {COMPARE[0]['mcnemar']['p_value']:.1g}</span>
+    <span class="foot">held out, and disjoint from training up to symmetry</span></div>
   <div class="stat"><span class="value">{hc['ms_per_move_b']/hc['ms_per_move_a']:.1f}&times;</span>
     <span class="label">Less thinking time, still winning {hc['score_a']:.1%} of games</span>
     <span class="foot">{hc['ms_per_move_a']:.0f} ms/move vs {hc['ms_per_move_b']:.0f} ms/move</span></div>
@@ -362,8 +482,56 @@ body = f"""
   <div class="scroll">{ply_table()}</div>
 </section>
 
+<section class="wide">
+  {head(6, "coverage", "It saw 5% of the game, and none of where it wins")}
+  <p class="lede" style="max-width:34rem">Quantik has <strong>61,495,314</strong> canonical
+  positions through ply 9 &mdash; counting a position and its 191 symmetric images as one.
+  The network trained on 3,087,356 of them: <strong>5.02%</strong>. And at plies 4 and 5,
+  where it beats minimax by the widest margin, it trained on <strong>none</strong>.</p>
+  <figure>
+    <div class="fig-title"><span class="t">Positions that exist, and positions it saw</span>
+      <span class="s">Grey: every canonical position at that ply. Blue: the training slice.
+      On a log axis the gap between the dots is the coverage ratio.</span></div>
+    <div class="scroll">{coverage_chart()}</div>
+    <figcaption>The opening is tiny &mdash; 10,946 positions at ply 4, fewer than a single
+    training batch &mdash; and the network was shown none of it. Its accuracy there comes
+    from exact values learned two to four plies deeper, carried up by search. That is what
+    makes this a generalization result rather than a lookup table.</figcaption>
+  </figure>
+  <div class="scroll">{coverage_table()}</div>
+  <p style="max-width:34rem">The enumeration reproduces the counts published in the
+  project&rsquo;s own game-tree analysis exactly for plies 1&ndash;7. The one apparent
+  discrepancy at ply 8 &mdash; 17,894,928 against a published 17,900,160 &mdash; resolves
+  cleanly: the difference is exactly the 5,232 positions where the mover has no legal reply
+  but no line is complete. That is a loss, so it is counted here as terminal and there as
+  ongoing. Ply 9, at 37,922,646, is past where the published analysis stopped.</p>
+</section>
+
+<section class="wide">
+  {head(7, "power", "Is the evaluation big enough?")}
+  <p class="lede" style="max-width:34rem">The first draft of this report leaned on 640
+  solved positions. That was too few where it counted: only 33 provably-won positions at
+  each of plies 4 and 5. The probe is now <strong>8,440</strong> positions, with 1,240 at
+  each of those plies.</p>
+  <div class="scroll">{significance_table()}</div>
+  <p style="max-width:34rem">Both agents see identical positions, so the comparison is
+  <em>paired</em> &mdash; an unpaired interval would throw away most of the evidence. On the
+  {COMPARE[0]['mcnemar']['positions']:,} won positions the two disagree
+  {COMPARE[0]['mcnemar']['a_right_b_wrong'] + COMPARE[0]['mcnemar']['b_right_a_wrong']} times, and
+  {COMPARE[0]['mcnemar']['a_right_b_wrong']} of those go the network&rsquo;s way. An exact paired test
+  puts that at <strong>p&nbsp;=&nbsp;{COMPARE[0]['mcnemar']['p_value']:.1g}</strong>.</p>
+  <p class="callout">Every disagreement between them is in the opening. Across
+  <strong>{deep_positions:,}</strong> won positions at plies 8&ndash;12, neither engine makes
+  a single mistake.</p>
+  <p style="max-width:34rem">The original 640 was underpowered, not wrong. Minimax measured
+  84.8% at ply 4 on 33 positions and 84.4% on 951; the network 97.0% and 96.4%. The point
+  estimates held; the intervals were simply too wide to lean on. Headline accuracies moved
+  (network 99.6%&nbsp;&rarr;&nbsp;{probe['qnet@200ms']['outcome_accuracy']:.1%}) because the new probe
+  deliberately weights the opening far more heavily &mdash; not because any agent changed.</p>
+</section>
+
 <section>
-  {head(6, "the honest part", "What this is not")}
+  {head(8, "the honest part", "What this is not")}
   <ul class="plain">
     <li><strong>The network did not learn Quantik from nothing.</strong> It was taught by
     an exact solver. The from-scratch AlphaZero run is in the table precisely so the
@@ -376,6 +544,12 @@ body = f"""
     results and wrote them at the end; an over-broad process kill destroyed the lot. It
     now streams and resumes &mdash; which immediately saved the next interrupted run. A
     job measured in hours has to be interruptible by construction.</li>
+    <li><strong>Sixteen probe positions leaked into training.</strong> The corpus builder
+    filtered the positions it <em>sampled</em> but not the child rows derived from them, so
+    16 of the original 640 arrived as value-only rows at plies 7-9 &mdash; none with a move
+    label, none at plies 4-6. Worst case it moves the network 99.63%&nbsp;&rarr;&nbsp;99.61%
+    and minimax 97.19%&nbsp;&rarr;&nbsp;97.11%. Immaterial, but the filter now sits where it
+    cannot be bypassed, and the 7,800-position probe excludes the corpus up to symmetry.</li>
     <li><strong>One reported metric was wrong for an afternoon.</strong> Validation
     averaged unequally-weighted chunks, printing a real 89&thinsp;% top-1 accuracy as
     11&thinsp;%. It looked plausible &mdash; a low loss beside a low accuracy &mdash; which is
@@ -384,7 +558,7 @@ body = f"""
 </section>
 
 <section>
-  {head(7, "reproduce", "Every number above")}
+  {head(9, "reproduce", "Every number above")}
   <details>
     <summary>Commands</summary>
     <pre>cd quantik-models-py &amp;&amp; git checkout nn-beats-baselines
