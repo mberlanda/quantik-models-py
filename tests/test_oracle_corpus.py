@@ -119,3 +119,26 @@ def test_corpus_child_value_labels_are_consistent():
             assert lookup[key] == expected
             checked += 1
     assert checked, "no child rows were found in the corpus"
+
+
+def test_corpus_builder_excludes_held_out_positions_reached_as_children():
+    """A held-out position can arrive as somebody's child even though it was
+    never sampled; the exclusion must catch that, not just the parents."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from scripts.build_oracle_corpus import rows_from_oracle
+
+    paths = [p for p in DEEP_PLIES if (CORPUS / p).exists() and (CORPUS / p).stat().st_size]
+    if not paths:
+        pytest.skip("oracle corpus not generated")
+    path = CORPUS / paths[0]
+    everything = rows_from_oracle([path])
+    keys = everything.canonical_keys()
+    # Hold out a slice that includes value-only child rows.
+    held = set(keys[everything.optimal_mask == 0][:50].tolist())
+    if not held:
+        pytest.skip("no value-only rows in this slice")
+    filtered = rows_from_oracle([path], exclude=held)
+    assert not (set(filtered.canonical_keys().tolist()) & held)
+    assert len(filtered) == len(everything) - len(held)
