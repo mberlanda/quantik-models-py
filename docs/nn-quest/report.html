@@ -1,0 +1,729 @@
+<title>The Ply-Four Gap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --hair: #e1e0d9;
+  --rule: #c3c2b7;
+  --accent: #2a78d6;
+  --accent-soft: rgba(42, 120, 214, 0.10);
+  --rival: #eb6834;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --good: #006300;
+  --loss: #e34948;
+  --ring: rgba(11, 11, 11, 0.10);
+  --shadow: 0 1px 2px rgba(11,11,11,.04), 0 8px 24px rgba(11,11,11,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --hair: #2c2c2a;
+    --rule: #383835;
+    --accent: #3987e5;
+    --accent-soft: rgba(57, 135, 229, 0.14);
+    --rival: #d95926;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --good: #0ca30c;
+    --loss: #e66767;
+    --ring: rgba(255, 255, 255, 0.10);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --plane: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --hair: #2c2c2a;
+  --rule: #383835;
+  --accent: #3987e5;
+  --accent-soft: rgba(57, 135, 229, 0.14);
+  --rival: #d95926;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --good: #0ca30c;
+  --loss: #e66767;
+  --ring: rgba(255, 255, 255, 0.10);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  --measure: 34rem;
+  --wide: 54rem;
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(1.25rem, 1fr)
+    [wide-start] minmax(0, calc((var(--wide) - var(--measure)) / 2))
+    [text-start] minmax(0, var(--measure)) [text-end]
+    minmax(0, calc((var(--wide) - var(--measure)) / 2)) [wide-end]
+    minmax(1.25rem, 1fr) [full-end];
+  row-gap: 0;
+  padding-block: 0 5rem;
+}
+.page > * { grid-column: text; }
+.page > .wide { grid-column: wide; }
+.page > .full { grid-column: full; }
+
+/* ---- type ---- */
+h1, h2, h3 { text-wrap: balance; margin: 0; font-weight: 400; }
+h1 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(2.9rem, 8vw, 4.6rem);
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+}
+h2 {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+h3 {
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 1.0rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+p { margin: 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+strong { font-weight: 600; }
+em { font-style: italic; }
+code, .mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace; }
+code {
+  font-size: 0.85em;
+  background: var(--accent-soft);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+.eyebrow {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---- header ---- */
+header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding-block: 4.5rem 2.5rem;
+}
+.dek {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 32rem;
+}
+.byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  color: var(--muted);
+  border-top: 1px solid var(--hair);
+  padding-top: 1rem;
+}
+
+/* ---- stat tiles ---- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1px;
+  background: var(--hair);
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-block: 2rem 3.5rem;
+}
+.stat {
+  background: var(--surface);
+  padding: 1.4rem 1.4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.stat .value {
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 2.9rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.stat .label { font-size: 0.9rem; color: var(--ink-2); line-height: 1.4; }
+.stat .foot {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+/* ---- sections ---- */
+section { display: flex; flex-direction: column; gap: 1.15rem; padding-block: 2.75rem; }
+section > .head { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.35rem; }
+
+/* board glyph: a 4x4 Quantik board with the section's index of cells filled,
+   so the marker counts sections in the game's own geometry */
+.marker { display: flex; align-items: center; gap: 0.7rem; }
+.board-glyph { display: block; flex: none; }
+.board-glyph rect { fill: none; stroke: var(--rule); stroke-width: 1; }
+.board-glyph .on { fill: var(--accent); stroke: none; }
+.board-glyph .zone { stroke: var(--hair); }
+
+.lede { font-size: 1.06rem; color: var(--ink-2); }
+
+/* ---- figures ---- */
+figure {
+  margin: 0.75rem 0 0;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 8px;
+  padding: 1.5rem 1.4rem 1.25rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+figcaption {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  border-top: 1px solid var(--hair);
+  padding-top: 0.85rem;
+}
+.fig-title { display: flex; flex-direction: column; gap: 0.2rem; }
+.fig-title .t { font-weight: 600; font-size: 0.98rem; }
+.fig-title .s { font-size: 0.84rem; color: var(--muted); }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  color: var(--ink-2);
+}
+.legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.swatch { width: 11px; height: 11px; border-radius: 2px; flex: none; }
+
+.scroll { overflow-x: auto; }
+svg.chart { display: block; width: 100%; height: auto; }
+svg.chart text { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+.axis { fill: var(--muted); font-size: 11px; }
+.gridline { stroke: var(--hair); stroke-width: 1; }
+.baseline { stroke: var(--rule); stroke-width: 1; }
+.serieslabel { font-size: 11.5px; font-weight: 500; }
+
+/* ---- tables ---- */
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+caption { text-align: left; font-size: 0.84rem; color: var(--muted); padding-bottom: 0.6rem; }
+th, td { padding: 0.5rem 0.65rem; text-align: right; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--rule);
+}
+tbody td { font-variant-numeric: tabular-nums; }
+tbody tr.hero td { background: var(--accent-soft); font-weight: 600; }
+tbody tr.hero td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+td.name { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; }
+.perfect { color: var(--muted); }
+
+/* ---- board diagram ---- */
+.boardfig { display: flex; flex-wrap: wrap; gap: 1.75rem; align-items: center; }
+.boardfig svg { flex: none; }
+.boardfig .note { flex: 1 1 15rem; font-size: 0.88rem; color: var(--ink-2); line-height: 1.55; }
+
+/* ---- steps ---- */
+ol.steps { list-style: none; counter-reset: step; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 1.1rem; }
+ol.steps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: 0.9rem;
+  align-items: start;
+}
+ol.steps li::before {
+  content: counter(step);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  color: var(--accent);
+  border: 1px solid var(--ring);
+  border-radius: 4px;
+  height: 1.7rem;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+}
+ol.steps .what { font-weight: 600; }
+ol.steps .how { color: var(--ink-2); font-size: 0.95rem; }
+
+ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; color: var(--ink-2); }
+ul.plain li { padding-left: 0.15rem; }
+ul.plain strong { color: var(--ink); }
+
+.callout {
+  border-left: 2px solid var(--accent);
+  padding: 0.15rem 0 0.15rem 1.1rem;
+  color: var(--ink-2);
+  font-size: 0.98rem;
+}
+
+details {
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 0.85rem 1.1rem;
+}
+details[open] { padding-bottom: 1.1rem; }
+summary { cursor: pointer; font-weight: 600; font-size: 0.93rem; }
+details pre {
+  margin: 0.9rem 0 0;
+  overflow-x: auto;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  line-height: 1.75;
+  color: var(--ink-2);
+  background: var(--plane);
+  border: 1px solid var(--hair);
+  border-radius: 5px;
+  padding: 0.85rem 1rem;
+}
+
+footer {
+  border-top: 1px solid var(--hair);
+  padding-top: 1.5rem;
+  margin-top: 3rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal { animation: rise .6s cubic-bezier(.2,.7,.3,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
+</style>
+
+<div class="page">
+
+<header class="reveal">
+  <span class="eyebrow">Quantik &middot; measured against a perfect solver</span>
+  <h1>The ply-four gap</h1>
+  <p class="dek">Quantik is small enough to solve exactly, so a search engine plays
+  the endgame perfectly. It plays the <em>opening</em> at 84.8&thinsp;%. That gap is
+  the whole reason a neural network can beat it &mdash; and it does, on less time per move.</p>
+  <div class="byline">
+    <span>27 August 2026</span><span>quantik-models-py</span>
+    <span>1,800 games per agent</span><span>640 exactly-solved held-out positions</span>
+  </div>
+</header>
+
+<div class="stats reveal">
+  <div class="stat"><span class="value">80.6%</span>
+    <span class="label">Network win rate across the full round-robin</span>
+    <span class="foot">minimax: 72.6%</span></div>
+  <div class="stat"><span class="value">99.6%</span>
+    <span class="label">Moves that preserve a won position, against exact truth</span>
+    <span class="foot">minimax: 97.2%</span></div>
+  <div class="stat"><span class="value">3.2&times;</span>
+    <span class="label">Less thinking time, still winning 55.8% of games</span>
+    <span class="foot">63 ms/move vs 203 ms/move</span></div>
+</div>
+
+<section>
+  <div class="head"><div class="marker"><svg class="board-glyph" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect class="on" x="1" y="1" width="4" height="4" rx="1"/><rect class="" x="7" y="1" width="4" height="4" rx="1"/><rect class="" x="13" y="1" width="4" height="4" rx="1"/><rect class="" x="19" y="1" width="4" height="4" rx="1"/><rect class="" x="1" y="7" width="4" height="4" rx="1"/><rect class="" x="7" y="7" width="4" height="4" rx="1"/><rect class="" x="13" y="7" width="4" height="4" rx="1"/><rect class="" x="19" y="7" width="4" height="4" rx="1"/><rect class="" x="1" y="13" width="4" height="4" rx="1"/><rect class="" x="7" y="13" width="4" height="4" rx="1"/><rect class="" x="13" y="13" width="4" height="4" rx="1"/><rect class="" x="19" y="13" width="4" height="4" rx="1"/><rect class="" x="1" y="19" width="4" height="4" rx="1"/><rect class="" x="7" y="19" width="4" height="4" rx="1"/><rect class="" x="13" y="19" width="4" height="4" rx="1"/><rect class="" x="19" y="19" width="4" height="4" rx="1"/></svg><span class="eyebrow">the game</span></div><h2>Sixteen squares, four shapes</h2></div>
+  <p class="lede">Quantik is played on a 4&times;4 board with four piece shapes in two
+  colours. You win by completing any row, column, or 2&times;2 zone containing all four
+  <em>different</em> shapes &mdash; colour is irrelevant, so you can win with your
+  opponent&rsquo;s pieces. The catch: you may not place a shape where the opponent already
+  has that same shape in the row, column, or zone. A player with no legal move loses.</p>
+  <figure class="boardfig">
+    <svg width="188" height="188" viewBox="0 0 188 188" role="img"
+         aria-label="A 4 by 4 Quantik board. The top row holds all four shapes in mixed colours and is highlighted as a win.">
+      <rect x="1" y="1" width="186" height="186" rx="8" fill="none" stroke="var(--rule)"/>
+      <g stroke="var(--hair)" stroke-width="1">
+        <line x1="47" y1="6" x2="47" y2="182"/><line x1="141" y1="6" x2="141" y2="182"/>
+        <line x1="6" y1="47" x2="182" y2="47"/><line x1="6" y1="141" x2="182" y2="141"/>
+      </g>
+      <line x1="94" y1="6" x2="94" y2="182" stroke="var(--rule)" stroke-width="1.5"/>
+      <line x1="6" y1="94" x2="182" y2="94" stroke="var(--rule)" stroke-width="1.5"/>
+      <rect x="7" y="7" width="174" height="40" rx="5" fill="var(--accent-soft)"/>
+      <g fill="var(--ink)">
+        <circle cx="24" cy="27" r="11"/>
+        <rect x="60" y="16" width="21" height="21" rx="2" fill="none" stroke="var(--ink)" stroke-width="2.5"/>
+        <path d="M118 38 L129 16 L140 38 Z" fill="none" stroke="var(--ink)" stroke-width="2.5"/>
+        <path d="M164 16 L175 27 L164 38 L153 27 Z"/>
+      </g>
+      <g fill="var(--muted)" opacity=".55">
+        <circle cx="118" cy="74" r="11"/>
+        <rect x="13" y="112" width="21" height="21" rx="2" fill="none" stroke="var(--muted)" stroke-width="2.5"/>
+        <path d="M60 168 L71 146 L82 168 Z" fill="none" stroke="var(--muted)" stroke-width="2.5"/>
+      </g>
+    </svg>
+    <p class="note">The highlighted row holds all four shapes &mdash; two dark, two light
+    &mdash; so whoever placed the last one wins. Twelve lines can win: four rows, four
+    columns, four zones. A whole game lasts at most sixteen plies, which is why the
+    game can be solved outright, and why the interesting question is not
+    <em>whether</em> a machine can play it perfectly but <em>how fast</em>.</p>
+  </figure>
+</section>
+
+<section>
+  <div class="head"><div class="marker"><svg class="board-glyph" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect class="on" x="1" y="1" width="4" height="4" rx="1"/><rect class="on" x="7" y="1" width="4" height="4" rx="1"/><rect class="" x="13" y="1" width="4" height="4" rx="1"/><rect class="" x="19" y="1" width="4" height="4" rx="1"/><rect class="" x="1" y="7" width="4" height="4" rx="1"/><rect class="" x="7" y="7" width="4" height="4" rx="1"/><rect class="" x="13" y="7" width="4" height="4" rx="1"/><rect class="" x="19" y="7" width="4" height="4" rx="1"/><rect class="" x="1" y="13" width="4" height="4" rx="1"/><rect class="" x="7" y="13" width="4" height="4" rx="1"/><rect class="" x="13" y="13" width="4" height="4" rx="1"/><rect class="" x="19" y="13" width="4" height="4" rx="1"/><rect class="" x="1" y="19" width="4" height="4" rx="1"/><rect class="" x="7" y="19" width="4" height="4" rx="1"/><rect class="" x="13" y="19" width="4" height="4" rx="1"/><rect class="" x="19" y="19" width="4" height="4" rx="1"/></svg><span class="eyebrow">the problem</span></div><h2>You cannot out-search a solved game</h2></div>
+  <p>The existing engine, <code>MinimaxEngine</code>, runs alpha-beta to depth 16 with a
+  transposition table. No Quantik game exceeds 16 plies, so given enough time it does not
+  approximate anything &mdash; it <em>solves</em>. Beating it outright is impossible; the
+  only meaningful contest is at a fixed budget.</p>
+  <p>So the first thing built here was not a network. It was a
+  <strong>ruler</strong>: 640 positions solved to game-theoretic truth by an exact
+  oracle, held out from all training, scoring each engine on a single question
+  &mdash; <em>given a position you can provably win, do you play a move that keeps
+  the win?</em></p>
+  <p class="callout">Accuracy tells you <em>where</em> an engine is wrong. A win rate only
+  tells you that it lost.</p>
+  <p>The ruler said something that redirected the entire project.</p>
+</section>
+
+<section class="wide">
+  <div class="head"><div class="marker"><svg class="board-glyph" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect class="on" x="1" y="1" width="4" height="4" rx="1"/><rect class="on" x="7" y="1" width="4" height="4" rx="1"/><rect class="on" x="13" y="1" width="4" height="4" rx="1"/><rect class="" x="19" y="1" width="4" height="4" rx="1"/><rect class="" x="1" y="7" width="4" height="4" rx="1"/><rect class="" x="7" y="7" width="4" height="4" rx="1"/><rect class="" x="13" y="7" width="4" height="4" rx="1"/><rect class="" x="19" y="7" width="4" height="4" rx="1"/><rect class="" x="1" y="13" width="4" height="4" rx="1"/><rect class="" x="7" y="13" width="4" height="4" rx="1"/><rect class="" x="13" y="13" width="4" height="4" rx="1"/><rect class="" x="19" y="13" width="4" height="4" rx="1"/><rect class="" x="1" y="19" width="4" height="4" rx="1"/><rect class="" x="7" y="19" width="4" height="4" rx="1"/><rect class="" x="13" y="19" width="4" height="4" rx="1"/><rect class="" x="19" y="19" width="4" height="4" rx="1"/></svg><span class="eyebrow">the finding</span></div><h2>Minimax is perfect &mdash; from ply 8 onward</h2></div>
+  <p style="max-width:34rem">Past the halfway mark, minimax at 100&thinsp;ms plays every
+  won position correctly. It never errs again. But at ply 4, with twelve squares still
+  empty, it converts only 84.8&thinsp;% of wins. The search cannot reach the end of the
+  game in the time it has.</p>
+  <figure>
+    <div class="fig-title"><span class="t">Outcome accuracy by ply</span>
+      <span class="s">Shaded band: the network&rsquo;s margin over minimax. It closes to
+      zero by ply 8, where both are exact.</span></div>
+    <div class="scroll"><svg class="chart" viewBox="0 0 720 340" role="img" aria-label="Outcome accuracy by ply for four engines. The network holds 97 to 100 percent across every ply; minimax falls to 84.8 percent at ply 4.">
+<line class="gridline" x1="40" y1="306.0" x2="624" y2="306.0"/>
+<text class="axis" x="32" y="310.0" text-anchor="end">0%</text>
+<line class="gridline" x1="40" y1="233.5" x2="624" y2="233.5"/>
+<text class="axis" x="32" y="237.5" text-anchor="end">25%</text>
+<line class="gridline" x1="40" y1="161.0" x2="624" y2="161.0"/>
+<text class="axis" x="32" y="165.0" text-anchor="end">50%</text>
+<line class="gridline" x1="40" y1="88.5" x2="624" y2="88.5"/>
+<text class="axis" x="32" y="92.5" text-anchor="end">75%</text>
+<line class="gridline" x1="40" y1="16.0" x2="624" y2="16.0"/>
+<text class="axis" x="32" y="20.0" text-anchor="end">100%</text>
+<polygon points="40.0,24.8 113.0,24.8 186.0,16.0 259.0,16.0 332.0,16.0 405.0,16.0 478.0,16.0 551.0,16.0 624.0,16.0 624.0,16.0 551.0,16.0 478.0,16.0 405.0,16.0 332.0,16.0 259.0,24.4 186.0,38.7 113.0,42.4 40.0,59.9" fill="var(--accent-soft)"/>
+<text class="axis" x="40.0" y="326" text-anchor="middle">4</text>
+<text class="axis" x="113.0" y="326" text-anchor="middle">5</text>
+<text class="axis" x="186.0" y="326" text-anchor="middle">6</text>
+<text class="axis" x="259.0" y="326" text-anchor="middle">7</text>
+<text class="axis" x="332.0" y="326" text-anchor="middle">8</text>
+<text class="axis" x="405.0" y="326" text-anchor="middle">9</text>
+<text class="axis" x="478.0" y="326" text-anchor="middle">10</text>
+<text class="axis" x="551.0" y="326" text-anchor="middle">11</text>
+<text class="axis" x="624.0" y="326" text-anchor="middle">12</text>
+<text class="axis" x="332" y="337" text-anchor="middle">ply — pieces already on the board</text>
+<line class="baseline" x1="40" y1="306" x2="624" y2="306"/>
+<polyline points="40.0,24.8 113.0,24.8 186.0,16.0 259.0,16.0 332.0,16.0 405.0,16.0 478.0,16.0 551.0,16.0 624.0,16.0" fill="none" stroke="var(--s1)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="40.0" cy="24.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="113.0" cy="24.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="186.0" cy="16.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="259.0" cy="16.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="332.0" cy="16.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="405.0" cy="16.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="478.0" cy="16.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="551.0" cy="16.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="624.0" cy="16.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>
+<text class="serieslabel" x="634" y="20.0" fill="var(--s1)">network</text>
+<polyline points="40.0,59.9 113.0,42.4 186.0,38.7 259.0,24.4 332.0,16.0 405.0,16.0 478.0,16.0 551.0,16.0 624.0,16.0" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="40.0" cy="59.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="113.0" cy="42.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="186.0" cy="38.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="259.0" cy="24.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="332.0" cy="16.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="405.0" cy="16.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="478.0" cy="16.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="551.0" cy="16.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="624.0" cy="16.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>
+<text class="serieslabel" x="634" y="20.0" fill="var(--s2)">minimax</text>
+<polyline points="40.0,183.0 113.0,165.4 186.0,120.2 259.0,32.8 332.0,20.5 405.0,20.0 478.0,16.0 551.0,16.0 624.0,16.0" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="40.0" cy="183.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="113.0" cy="165.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="186.0" cy="120.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="259.0" cy="32.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="332.0" cy="20.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="405.0" cy="20.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="478.0" cy="16.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="551.0" cy="16.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="624.0" cy="16.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/>
+<text class="serieslabel" x="634" y="20.0" fill="var(--s3)">beam</text>
+<polyline points="40.0,235.7 113.0,235.7 186.0,147.4 259.0,45.4 332.0,34.1 405.0,59.7 478.0,70.4 551.0,42.8 624.0,20.2" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="40.0" cy="235.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="113.0" cy="235.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="186.0" cy="147.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="259.0" cy="45.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="332.0" cy="34.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="405.0" cy="59.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="478.0" cy="70.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="551.0" cy="42.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<circle cx="624.0" cy="20.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"/>
+<text class="serieslabel" x="634" y="24.2" fill="var(--s4)">MCTS</text>
+<g id="crosshair" style="display:none"><line class="baseline" y1="16" y2="306" stroke-dasharray="3 3"/></g>
+<rect class="hit" data-ply="4" x="3.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="5" x="76.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="6" x="149.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="7" x="222.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="8" x="295.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="9" x="368.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="10" x="441.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="11" x="514.5" y="16" width="73.0" height="290" fill="transparent"/>
+<rect class="hit" data-ply="12" x="587.5" y="16" width="73.0" height="290" fill="transparent"/>
+</svg></div>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--s1)"></i>network @ 200&thinsp;ms</span>
+      <span><i class="swatch" style="background:var(--s2)"></i>minimax @ 100&thinsp;ms</span>
+      <span><i class="swatch" style="background:var(--s3)"></i>beam @ 100&thinsp;ms</span>
+      <span><i class="swatch" style="background:var(--s4)"></i>MCTS @ 100&thinsp;ms</span>
+    </div>
+    <figcaption>Every engine converges to perfection in the endgame &mdash; the game is
+    simply small there. All of the daylight between them is in the opening, and that is
+    the only place a network can win anything.</figcaption>
+  </figure>
+  <p style="max-width:34rem">This made the goal precise: <strong>match minimax in the
+  endgame, beat it at plies 4&ndash;7.</strong> Work spent making the network stronger at
+  ply 10 would have been wasted.</p>
+</section>
+
+<section>
+  <div class="head"><div class="marker"><svg class="board-glyph" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect class="on" x="1" y="1" width="4" height="4" rx="1"/><rect class="on" x="7" y="1" width="4" height="4" rx="1"/><rect class="on" x="13" y="1" width="4" height="4" rx="1"/><rect class="on" x="19" y="1" width="4" height="4" rx="1"/><rect class="" x="1" y="7" width="4" height="4" rx="1"/><rect class="" x="7" y="7" width="4" height="4" rx="1"/><rect class="" x="13" y="7" width="4" height="4" rx="1"/><rect class="" x="19" y="7" width="4" height="4" rx="1"/><rect class="" x="1" y="13" width="4" height="4" rx="1"/><rect class="" x="7" y="13" width="4" height="4" rx="1"/><rect class="" x="13" y="13" width="4" height="4" rx="1"/><rect class="" x="19" y="13" width="4" height="4" rx="1"/><rect class="" x="1" y="19" width="4" height="4" rx="1"/><rect class="" x="7" y="19" width="4" height="4" rx="1"/><rect class="" x="13" y="19" width="4" height="4" rx="1"/><rect class="" x="19" y="19" width="4" height="4" rx="1"/></svg><span class="eyebrow">the method</span></div><h2>Distil the solver, don&rsquo;t imitate the player</h2></div>
+  <p class="lede">A from-scratch AlphaZero run was the first attempt. It reached
+  97.2&thinsp;% accuracy &mdash; exactly level with minimax &mdash; and stopped
+  improving. The probe explained why: its <strong>value head had a mean error of
+  0.727 against a &plusmn;1 truth</strong>. It was outputting nearly zero. It did not
+  know who was winning.</p>
+  <p>That failure is structural, not a bug. The value target was a blend of the final
+  game result &mdash; one bit at the end of an eight-ply game &mdash; and the search&rsquo;s
+  own backed-up estimate, produced by the same untrained network. The signal was
+  circular. Breaking that circle meant getting labels from outside.</p>
+  <ol class="steps">
+    <li><span><span class="what">Make the rules fast enough to matter.</span>
+      <span class="how">The reference engine generated 21.6k positions/s while the network
+      could evaluate 630k/s &mdash; self-play was 97&thinsp;% rule-bound. Re-expressed as
+      array operations over batches of bitboards: 8.1M/s, a 377&times; speedup, cross-checked
+      against the reference on 3,000 positions.</span></span></li>
+    <li><span><span class="what">Solve positions exactly, in bulk.</span>
+      <span class="how">A Rust exporter turns the depth-16 solver into a labelling tool.
+      Solving one position also solves all its children, so each solve yields an optimal-move
+      set plus a dozen free exact values.</span></span></li>
+    <li><span><span class="what">Train on truth, not on itself.</span>
+      <span class="how">3.09M exactly-labelled positions, 250k with exact optimal-move sets.
+      Quantik is invariant under 192 symmetries, so every batch is replayed under a fresh
+      random one. Training draws are balanced across plies, because the corpus is 75&thinsp;%
+      endgame and the match is decided in the opening.</span></span></li>
+    <li><span><span class="what">Search on the same clock.</span>
+      <span class="how">The network drives a batched MCTS with a wall-clock budget, on one
+      CPU thread &mdash; the same hardware the classical engines get. Every time in this
+      report is measured, never nominal.</span></span></li>
+  </ol>
+  <p class="callout">Value-head error against exact truth: <strong>0.727 &rarr; 0.084</strong>.
+  Everything else followed from that one number.</p>
+</section>
+
+<section class="wide">
+  <div class="head"><div class="marker"><svg class="board-glyph" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect class="on" x="1" y="1" width="4" height="4" rx="1"/><rect class="on" x="7" y="1" width="4" height="4" rx="1"/><rect class="on" x="13" y="1" width="4" height="4" rx="1"/><rect class="on" x="19" y="1" width="4" height="4" rx="1"/><rect class="on" x="1" y="7" width="4" height="4" rx="1"/><rect class="" x="7" y="7" width="4" height="4" rx="1"/><rect class="" x="13" y="7" width="4" height="4" rx="1"/><rect class="" x="19" y="7" width="4" height="4" rx="1"/><rect class="" x="1" y="13" width="4" height="4" rx="1"/><rect class="" x="7" y="13" width="4" height="4" rx="1"/><rect class="" x="13" y="13" width="4" height="4" rx="1"/><rect class="" x="19" y="13" width="4" height="4" rx="1"/><rect class="" x="1" y="19" width="4" height="4" rx="1"/><rect class="" x="7" y="19" width="4" height="4" rx="1"/><rect class="" x="13" y="19" width="4" height="4" rx="1"/><rect class="" x="19" y="19" width="4" height="4" rx="1"/></svg><span class="eyebrow">the result</span></div><h2>It wins, and it wins on less time</h2></div>
+  <figure>
+    <div class="fig-title"><span class="t">Win rate against minimax @ 100&thinsp;ms</span>
+      <span class="s">Side-balanced paired games; bars run from even. Whiskers are 95&thinsp;% Wilson intervals.</span></div>
+    <div class="scroll"><svg class="chart" viewBox="0 0 720 200" role="img" aria-label="Win rate against minimax at 100 milliseconds, with 95 percent confidence intervals. The distilled network wins at both time budgets; AlphaZero from scratch loses.">
+<line class="gridline" x1="168.0" y1="22" x2="168.0" y2="150"/>
+<text class="axis" x="168.0" y="168" text-anchor="middle">0%</text>
+<line class="gridline" x1="299.5" y1="22" x2="299.5" y2="150"/>
+<text class="axis" x="299.5" y="168" text-anchor="middle">25%</text>
+<line class="gridline" x1="431.0" y1="22" x2="431.0" y2="150"/>
+<text class="axis" x="431.0" y="168" text-anchor="middle">50%</text>
+<line class="gridline" x1="562.5" y1="22" x2="562.5" y2="150"/>
+<text class="axis" x="562.5" y="168" text-anchor="middle">75%</text>
+<line class="gridline" x1="694.0" y1="22" x2="694.0" y2="150"/>
+<text class="axis" x="694.0" y="168" text-anchor="middle">100%</text>
+<line x1="431.0" y1="14" x2="431.0" y2="150" stroke="var(--rule)" stroke-width="1.5"/>
+<text class="axis" x="431.0" y="10" text-anchor="middle" fill="var(--muted)">even</text>
+<text class="axis" x="156" y="40" text-anchor="end" fill="var(--ink)" style="font-size:12px">qnet @ 200 ms</text>
+<rect x="431.0" y="27.0" width="55.2" height="18" rx="4" fill="var(--s1)"/>
+<line x1="471.5" y1="36.0" x2="500.6" y2="36.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<line x1="471.5" y1="31.0" x2="471.5" y2="41.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<line x1="500.6" y1="31.0" x2="500.6" y2="41.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<text class="axis" x="508.6" y="40.0" fill="var(--ink)" text-anchor="start" style="font-size:12.5px;font-weight:500">60.5%</text>
+<text class="axis" x="156" y="80" text-anchor="end" fill="var(--ink)" style="font-size:12px">qnet @ 50 ms</text>
+<rect x="431.0" y="67.0" width="30.2" height="18" rx="4" fill="var(--s1)"/>
+<line x1="446.4" y1="76.0" x2="475.9" y2="76.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<line x1="446.4" y1="71.0" x2="446.4" y2="81.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<line x1="475.9" y1="71.0" x2="475.9" y2="81.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<text class="axis" x="483.9" y="80.0" fill="var(--ink)" text-anchor="start" style="font-size:12.5px;font-weight:500">55.8%</text>
+<text class="axis" x="156" y="120" text-anchor="end" fill="var(--ink)" style="font-size:12px">AlphaZero from scratch</text>
+<rect x="388.9" y="107.0" width="42.1" height="18" rx="4" fill="var(--loss)"/>
+<line x1="360.3" y1="116.0" x2="418.6" y2="116.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<line x1="360.3" y1="111.0" x2="360.3" y2="121.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<line x1="418.6" y1="111.0" x2="418.6" y2="121.0" stroke="var(--ink)" stroke-width="1.5" opacity=".55"/>
+<text class="axis" x="352.3" y="120.0" fill="var(--ink)" text-anchor="end" style="font-size:12.5px;font-weight:500">42.0%</text>
+</svg></div>
+    <figcaption>Both distilled configurations sit entirely above even. The bottom bar is
+    the same architecture trained by self-play alone &mdash; equal average accuracy to
+    minimax, and still a losing record, because equal accuracy is not equal strength when
+    the mistakes fall in different places.</figcaption>
+  </figure>
+  <p style="max-width:34rem">The second bar is the one that settles it. At a
+  63&thinsp;ms budget against minimax&rsquo;s
+  203&thinsp;ms &mdash; <strong>3.2&times;
+  less thinking time on the same single thread</strong> &mdash; the network still wins
+  55.8% of 1,200 games. It is not out-searching the solver. It is
+  out-<em>knowing</em> it.</p>
+  <div class="scroll"><table><caption>1,800 games per agent — every pairing, both sides, one CPU thread each.</caption><thead><tr><th>agent</th><th>win rate</th><th>wins / 1800</th><th>ms per move</th><th>exact accuracy</th></tr></thead><tbody><tr class="hero"><td class="name">qnet@200ms</td><td>80.6%</td><td>1451</td><td>213</td><td>99.6%</td></tr><tr><td class="name">minimax@100ms</td><td>72.6%</td><td>1307</td><td>218</td><td>97.2%</td></tr><tr><td class="name">alphazero@200ms</td><td>67.2%</td><td>1210</td><td>206</td><td>97.2%</td></tr><tr><td class="name">qnet-policy</td><td>58.4%</td><td>1051</td><td>1</td><td>94.9%</td></tr><tr><td class="name">beam@100ms</td><td>45.2%</td><td>813</td><td>451</td><td>87.8%</td></tr><tr><td class="name">mcts@100ms</td><td>23.2%</td><td>418</td><td>111</td><td>77.5%</td></tr><tr><td class="name">random</td><td>2.8%</td><td>50</td><td>0</td><td>44.4%</td></tr></tbody></table></div>
+  <p style="max-width:34rem">Three things in that table are worth more than the headline.</p>
+  <ul class="plain" style="max-width:34rem">
+    <li><strong>The policy head alone places fourth, at 1&thinsp;ms per move.</strong> One
+    forward pass, no search whatsoever, beating a beam search that spends 451&thinsp;ms.
+    Most of what the classical engines buy with compute, the network simply has.</li>
+    <li><strong>Beam spends 4.5&times; its stated budget.</strong> It only checks its clock
+    between beam levels; minimax overshoots 2&times; for the same kind of reason. Had this
+    report used nominal budgets, it would have been fiction.</li>
+    <li><strong>Equal accuracy is not equal strength.</strong> The self-play network and
+    minimax both score 97.2&thinsp;%, and one beats the other 58&ndash;42.</li>
+  </ul>
+  <div class="scroll"><table><caption>Share of provably won positions where the agent plays a move that keeps the win. 640 held-out solved positions.</caption><thead><tr><th>agent</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>all</th></tr></thead><tbody><tr class="hero"><td class="name">qnet@200ms</td><td>97%</td><td>97%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td><strong>99.6%</strong></td></tr><tr><td class="name">minimax@100ms</td><td>85%</td><td>91%</td><td>92%</td><td>97%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td><strong>97.2%</strong></td></tr><tr><td class="name">alphazero@200ms</td><td>85%</td><td>91%</td><td>94%</td><td>96%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td><strong>97.2%</strong></td></tr><tr><td class="name">qnet-policy</td><td>88%</td><td>91%</td><td>89%</td><td>90%</td><td>94%</td><td>99%</td><td>98%</td><td class="perfect">100%</td><td class="perfect">100%</td><td><strong>94.9%</strong></td></tr><tr><td class="name">beam@100ms</td><td>42%</td><td>48%</td><td>64%</td><td>94%</td><td>98%</td><td>99%</td><td class="perfect">100%</td><td class="perfect">100%</td><td class="perfect">100%</td><td><strong>87.8%</strong></td></tr><tr><td class="name">mcts@100ms</td><td>24%</td><td>24%</td><td>55%</td><td>90%</td><td>94%</td><td>85%</td><td>81%</td><td>91%</td><td>99%</td><td><strong>77.5%</strong></td></tr><tr><td class="name">random</td><td>18%</td><td>33%</td><td>19%</td><td>23%</td><td>34%</td><td>44%</td><td>55%</td><td>72%</td><td>81%</td><td><strong>44.4%</strong></td></tr></tbody></table></div>
+</section>
+
+<section>
+  <div class="head"><div class="marker"><svg class="board-glyph" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect class="on" x="1" y="1" width="4" height="4" rx="1"/><rect class="on" x="7" y="1" width="4" height="4" rx="1"/><rect class="on" x="13" y="1" width="4" height="4" rx="1"/><rect class="on" x="19" y="1" width="4" height="4" rx="1"/><rect class="on" x="1" y="7" width="4" height="4" rx="1"/><rect class="on" x="7" y="7" width="4" height="4" rx="1"/><rect class="" x="13" y="7" width="4" height="4" rx="1"/><rect class="" x="19" y="7" width="4" height="4" rx="1"/><rect class="" x="1" y="13" width="4" height="4" rx="1"/><rect class="" x="7" y="13" width="4" height="4" rx="1"/><rect class="" x="13" y="13" width="4" height="4" rx="1"/><rect class="" x="19" y="13" width="4" height="4" rx="1"/><rect class="" x="1" y="19" width="4" height="4" rx="1"/><rect class="" x="7" y="19" width="4" height="4" rx="1"/><rect class="" x="13" y="19" width="4" height="4" rx="1"/><rect class="" x="19" y="19" width="4" height="4" rx="1"/></svg><span class="eyebrow">the honest part</span></div><h2>What this is not</h2></div>
+  <ul class="plain">
+    <li><strong>The network did not learn Quantik from nothing.</strong> It was taught by
+    an exact solver. The from-scratch AlphaZero run is in the table precisely so the
+    comparison stays honest &mdash; and it lost.</li>
+    <li><strong>The ceiling here is low by construction.</strong> In side-balanced pairs,
+    two near-perfect players each win the side they were handed, so scores are pulled
+    toward 50&thinsp;%. Clearing it by ten points means the opening error rate is genuinely
+    near zero, but nobody is winning 90&thinsp;% of these games.</li>
+    <li><strong>A three-hour solve was thrown away.</strong> The oracle buffered its
+    results and wrote them at the end; an over-broad process kill destroyed the lot. It
+    now streams and resumes &mdash; which immediately saved the next interrupted run. A
+    job measured in hours has to be interruptible by construction.</li>
+    <li><strong>One reported metric was wrong for an afternoon.</strong> Validation
+    averaged unequally-weighted chunks, printing a real 89&thinsp;% top-1 accuracy as
+    11&thinsp;%. It looked plausible &mdash; a low loss beside a low accuracy &mdash; which is
+    exactly what made it dangerous.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="head"><div class="marker"><svg class="board-glyph" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><rect class="on" x="1" y="1" width="4" height="4" rx="1"/><rect class="on" x="7" y="1" width="4" height="4" rx="1"/><rect class="on" x="13" y="1" width="4" height="4" rx="1"/><rect class="on" x="19" y="1" width="4" height="4" rx="1"/><rect class="on" x="1" y="7" width="4" height="4" rx="1"/><rect class="on" x="7" y="7" width="4" height="4" rx="1"/><rect class="on" x="13" y="7" width="4" height="4" rx="1"/><rect class="" x="19" y="7" width="4" height="4" rx="1"/><rect class="" x="1" y="13" width="4" height="4" rx="1"/><rect class="" x="7" y="13" width="4" height="4" rx="1"/><rect class="" x="13" y="13" width="4" height="4" rx="1"/><rect class="" x="19" y="13" width="4" height="4" rx="1"/><rect class="" x="1" y="19" width="4" height="4" rx="1"/><rect class="" x="7" y="19" width="4" height="4" rx="1"/><rect class="" x="13" y="19" width="4" height="4" rx="1"/><rect class="" x="19" y="19" width="4" height="4" rx="1"/></svg><span class="eyebrow">reproduce</span></div><h2>Every number above</h2></div>
+  <details>
+    <summary>Commands</summary>
+    <pre>cd quantik-models-py &amp;&amp; git checkout nn-beats-baselines
+.venv/bin/python -m pytest -q                    # 77 tests
+
+# exact labels (Rust solver, streams and resumes)
+.venv/bin/python scripts/build_oracle_corpus.py
+
+# distillation
+.venv/bin/python -m quantik_models.train.supervised   --name qnet --corpus runs/oracle/corpus/sampled.npz   --channels 128 --blocks 6 --epochs 16
+
+# the headline: arena + exact-truth probe in one report
+.venv/bin/python scripts/final_evaluation.py   --agents runs/oracle/final-agents.json --out runs/arena/final   --positions 150 --start-plies 3-5 --workers 16</pre>
+  </details>
+  <p style="font-size:.93rem;color:var(--ink-2)">The engine cross-check is worth a line of
+  its own: enumerating Quantik&rsquo;s canonical positions reproduced the counts published
+  years earlier in the project&rsquo;s own game-tree analysis &mdash; 3, 51, 726, 10,946,
+  105,632, 901,916 &mdash; exactly, at every level.</p>
+</section>
+
+<footer>
+  <span>Network: 1,786,823 parameters, 8 residual blocks&rsquo; worth of trunk at 128 channels,
+  trained 16 epochs on an Apple M5 Pro. Ground truth cross-validated between an independent
+  Rust and Python solver.</span>
+  <span>Confidence intervals are 95&thinsp;% Wilson. Quantik has no draws.</span>
+</footer>
+</div>
+
+<script>
+(function () {
+  var svg = document.querySelector('.chart');
+  if (!svg) return;
+  var cross = document.getElementById('crosshair');
+  var line = cross && cross.querySelector('line');
+  var tip = document.createElement('div');
+  tip.style.cssText = 'position:fixed;pointer-events:none;opacity:0;transition:opacity .12s;' +
+    'background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:.5rem .65rem;' +
+    'font-family:"IBM Plex Mono",monospace;font-size:.72rem;line-height:1.6;color:var(--ink);' +
+    'box-shadow:var(--shadow);z-index:9;white-space:nowrap';
+  document.body.appendChild(tip);
+  var data = {"qnet@200ms": {"4": 0.9696969696969697, "5": 0.9696969696969697, "6": 1.0, "7": 1.0, "8": 1.0, "9": 1.0, "10": 1.0, "11": 1.0, "12": 1.0}, "minimax@100ms": {"4": 0.8484848484848485, "5": 0.9090909090909091, "6": 0.921875, "7": 0.9710144927536232, "8": 1.0, "9": 1.0, "10": 1.0, "11": 1.0, "12": 1.0}, "beam@100ms": {"4": 0.42424242424242425, "5": 0.48484848484848486, "6": 0.640625, "7": 0.9420289855072463, "8": 0.984375, "9": 0.9863013698630136, "10": 1.0, "11": 1.0, "12": 1.0}, "mcts@100ms": {"4": 0.24242424242424243, "5": 0.24242424242424243, "6": 0.546875, "7": 0.8985507246376812, "8": 0.9375, "9": 0.8493150684931506, "10": 0.8125, "11": 0.9076923076923077, "12": 0.9855072463768116}};
+  var names = [["qnet@200ms", "network"], ["minimax@100ms", "minimax"], ["beam@100ms", "beam"], ["mcts@100ms", "MCTS"]];
+  var colours = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)'];
+  svg.querySelectorAll('.hit').forEach(function (hit) {
+    hit.addEventListener('pointerenter', function (event) {
+      var ply = hit.getAttribute('data-ply');
+      var x = parseFloat(hit.getAttribute('x')) + parseFloat(hit.getAttribute('width')) / 2;
+      if (line) { line.setAttribute('x1', x); line.setAttribute('x2', x); cross.style.display = ''; }
+      tip.innerHTML = '<strong>ply ' + ply + '</strong><br>' + names.map(function (n, i) {
+        return '<span style="color:' + colours[i] + '">&#9632;</span> ' + n[1] + ' &middot; ' +
+               Math.round(data[n[0]][ply] * 100) + '%';
+      }).join('<br>');
+      tip.style.opacity = '1';
+      move(event);
+    });
+    hit.addEventListener('pointermove', move);
+    hit.addEventListener('pointerleave', function () {
+      tip.style.opacity = '0';
+      if (cross) cross.style.display = 'none';
+    });
+  });
+  function move(event) {
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = Math.min(event.clientX + 14, window.innerWidth - w - 8) + 'px';
+    tip.style.top = Math.max(event.clientY - h - 12, 8) + 'px';
+  }
+})();
+</script>

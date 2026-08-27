@@ -68,7 +68,74 @@ That single fact determined everything that followed.
 
 ## Results
 
-*(filled in on completion)*
+Round-robin: 300 side-balanced games per pairing from 150 symmetry-distinct
+openings at plies 3-5 (1,800 games per agent), each agent on one CPU thread.
+
+| agent | win rate | ms/move (measured) | outcome accuracy |
+|---|---|---|---|
+| **`qnet@200ms`** | **80.6%** | 213 | **99.6%** |
+| `minimax@100ms` | 72.6% | 218 | 97.2% |
+| `alphazero@200ms` | 67.2% | 206 | 97.2% |
+| `qnet-policy` (one forward pass) | 58.4% | **1** | 94.9% |
+| `beam@100ms` | 45.2% | 451 | 87.8% |
+| `mcts@100ms` | 23.2% | 111 | 77.5% |
+| `random` | 2.8% | 0 | 44.4% |
+
+Direct matches against the incumbent champion, 1,200 games each from 600
+symmetry-distinct openings:
+
+| match | win rate | 95% CI | ms/move |
+|---|---|---|---|
+| `qnet@200ms` vs `minimax@100ms` | **60.5%** | 57.7-63.2% | 211 vs 194 |
+| `qnet@50ms` vs `minimax@100ms` | **55.8%** | 52.9-58.5% | **63 vs 203** |
+
+The second row is the result that settles it: the network beats the incumbent
+**while spending 3.2x less time per move**, on the same single CPU thread.
+
+### Per-ply accuracy — where the margin actually lives
+
+| agent | ply 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|
+| `qnet@200ms` | **97.0%** | **97.0%** | **100%** | **100%** | 100% | 100% | 100% | 100% | 100% |
+| `minimax@100ms` | 84.8% | 90.9% | 92.2% | 97.1% | 100% | 100% | 100% | 100% | 100% |
+| `alphazero@200ms` | 84.8% | 90.9% | 93.8% | 95.7% | 100% | 100% | 100% | 100% | 100% |
+| `qnet-policy` | 87.9% | 90.9% | 89.1% | 89.9% | 93.8% | 98.6% | 98.4% | 100% | 100% |
+| `beam@100ms` | 42.4% | 48.5% | 64.1% | 94.2% | 98.4% | 98.6% | 100% | 100% | 100% |
+| `mcts@100ms` | 24.2% | 24.2% | 54.7% | 89.9% | 93.8% | 84.9% | 81.2% | 90.8% | 98.6% |
+
+The entire margin is plies 4-7. The network is not out-searching the solver; it
+carries distilled exact values into positions minimax cannot reach in 100 ms.
+
+### The one number that made it work
+
+Value-head mean absolute error against a ±1 truth:
+
+| model | value MAE |
+|---|---|
+| AlphaZero from scratch | 0.727 |
+| distilled from the exact oracle | **0.084** |
+
+AlphaZero's value target was a blend of an 8-ply game result and its own
+untrained root estimate — a circular signal. Exact labels break the circle,
+and everything else followed.
+
+### Three findings that outlast the headline
+
+1. **The policy head alone places fourth at 1 ms/move** — one forward pass, no
+   search, beating a beam search spending 451 ms. Most of what the classical
+   engines buy with compute, the network simply has.
+2. **Equal accuracy is not equal strength.** `alphazero@200ms` and
+   `minimax@100ms` both score 97.2%, and minimax wins the match 58-42. Average
+   accuracy hides *where* the errors fall.
+3. **Nominal budgets are fiction.** `beam@100ms` actually spends 451 ms/move
+   (it checks its clock only between beam levels); minimax spends ~2x its
+   budget. Every time in this report is measured.
+
+### Published report
+
+`docs/nn-quest/report.html` — regenerate with
+`.venv/bin/python scripts/build_report.py`, which reads the run reports so no
+number is ever hand-transcribed.
 
 ## Reproducing
 
