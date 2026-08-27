@@ -3,7 +3,7 @@
 **Goal:** Train the first neural network that beats the existing Quantik
 strategies (minimax / MCTS / beam / random) head-to-head.
 
-**Status:** PHASE 0 — environment + baseline recon
+**Status:** PHASE 1 — baseline measured, building self-play
 
 ## How to resume
 
@@ -42,3 +42,21 @@ cat docs/nn-quest/JOURNAL.md # full narrative log
 
 1. Probe exact-solve cost from the empty board (feasibility of perfect labels).
 2. Build the python arena (side-balanced paired games) + baseline table.
+
+## Baseline to beat (2026-08-27)
+
+`runs/arena/baseline-100ms.md` — 128 side-balanced games/pairing, ply-4 openings:
+`minimax@100ms` **90.1%** > `beam@100ms` 65.6% > `mcts@100ms` 40.9% > `random` 3.4%.
+
+Reproduce with:
+```bash
+.venv/bin/python scripts/run_arena.py --out runs/arena/baseline-100ms \
+  --label "baselines @ 100 ms/move" --time-limit 0.1 --positions 32 --seeds 2 --workers 16
+```
+
+## Modules built so far
+
+- `src/quantik_models/env/fastboard.py` — vectorized rules (tests: `tests/test_fastboard.py`)
+- `src/quantik_models/selfplay/mcts.py` — batched AlphaZero MCTS (tests: `tests/test_batched_mcts.py`)
+- `src/quantik_models/selfplay/evaluator.py` — `UniformEvaluator`, `NetEvaluator`
+- `src/quantik_models/arena/` — agents, registry, parallel matches, `scripts/run_arena.py`
