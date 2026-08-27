@@ -417,3 +417,31 @@ puts more decisions in the contested region.
 **Final evaluation design, revised:** ~500 distinct openings at plies 3-5, one
 seed, giving ~1,000 games and a ~±3% interval — and a network with a genuinely
 larger opening edge, which is what the exact opening corpus is for.
+
+### Run 2 — supervised distillation on the sampled corpus (`sup-sampled-c128b6`)
+
+c128/b6 (1,786,823 params), 3,087,356 exactly-labelled positions (plies 6-13,
+250,000 with exact optimal-move sets), ply-balanced draws, per-batch symmetry
+augmentation, ~185 s/epoch on MPS.
+
+| epoch | val top-1 | value MAE | value sign | ply-6 top-1 | ply-7 top-1 |
+|---|---|---|---|---|---|
+| 0 | 87.8% | 0.377 | 87.8% | 82.0% | 84.2% |
+| 1 | 91.3% | 0.199 | 93.0% | 86.3% | 88.1% |
+| 2 | 92.8% | 0.159 | 94.2% | 89.0% | 90.1% |
+| 4 | 94.4% | 0.128 | 95.4% | — | — |
+| 6 | 95.1% | 0.107 | 96.1% | — | — |
+| 7 | 95.3% | 0.103 | 96.3% | — | — |
+
+Value MAE against a ±1 truth: **0.727 (AlphaZero) → 0.103**. The value head
+now knows who is winning, which is precisely what the probe said was missing.
+
+### Decision — no AlphaZero fine-tune on top
+
+The obvious next step would be to fine-tune the distilled net with self-play.
+Not doing it, deliberately: self-play labels are the net's own bootstrapped
+estimates, and every position it would generate already has an *exact* label
+available for less compute. Fine-tuning would replace a perfect teacher with an
+imperfect one. AlphaZero-from-scratch remains in the results as the documented
+baseline it is — it tied minimax at 97.2%, and diagnosing *why it stalled there*
+is what produced the oracle in the first place.
