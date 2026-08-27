@@ -11,8 +11,8 @@ and 640 is not obviously enough.
 - **But the probe really was too thin where it mattered** — only 33 won
   positions each at plies 4 and 5, the two plies that carry the entire margin.
   It is now **8,440** positions (7,030 won), with 1,240 at each of plies 4-5.
-- **On the larger probe the result holds and sharpens**: +3.14 percentage
-  points overall (95% CI +2.70 to +3.60), paired exact test **p = 2.5e-49**.
+- **On the larger probe the result holds and sharpens**: +3.12 percentage
+  points overall (95% CI +2.67 to +3.57), paired exact test **p = 8.4e-49**.
 - **The model saw 5.02% of the game through ply 9, and 0% of plies 0-5** —
   the plies where it beats minimax.
 
@@ -88,27 +88,27 @@ an exact McNemar test on the positions where the two disagree.
 
 | ply | positions | `qnet@200ms` | `minimax@100ms` |
 |---|---|---|---|
-| 4 | 951 | **96.42%** | 84.44% |
+| 4 | 951 | **96.21%** | 84.44% |
 | 5 | 1,024 | **97.75%** | 91.80% |
 | 6 | 1,050 | **98.86%** | 95.24% |
 | 7 | 1,125 | **99.91%** | 99.20% |
-| 8 | 732 | 100% | 100% |
-| 9 | 595 | 100% | 100% |
-| 10 | 541 | 100% | 100% |
-| 11 | 507 | 100% | 100% |
-| 12 | 505 | 100% | 100% |
-| **all** | **7,030** | **99.00%** | **95.86%** |
+| 8 | 732 | **100.00%** | 100.00% |
+| 9 | 595 | **100.00%** | 100.00% |
+| 10 | 541 | **100.00%** | 100.00% |
+| 11 | 507 | **100.00%** | 100.00% |
+| 12 | 505 | **100.00%** | 100.00% |
+| **all** | **7,030** | **98.98%** | **95.86%** |
 
 ### The test
 
 | | all plies | opening (4-7) |
 |---|---|---|
 | won positions compared | 7,030 | 4,150 |
-| only `qnet` right | 241 | 241 |
+| only `qnet` right | 239 | 239 |
 | only `minimax` right | 20 | 20 |
-| accuracy difference | +3.14% | +5.33% |
-| 95% CI (paired bootstrap) | +2.70 to +3.60 | +4.58 to +6.10 |
-| exact paired test | **p = 2.5e-49** | **p = 2.5e-49** |
+| accuracy difference | +3.12% | +5.28% |
+| 95% CI (paired bootstrap) | +2.67% to +3.57% | +4.53% to +6.05% |
+| exact paired test | **p = 8.4e-49** | **p = 8.4e-49** |
 
 **Every disagreement between them is in the opening.** Across 2,880 won
 positions at plies 8-12, both play perfectly — not one error either way. The
@@ -138,9 +138,9 @@ artifact of that probe's ply distribution, not real strength.
 ### Was the original 640 wrong?
 
 No — underpowered, not wrong. Minimax measured 84.8% at ply 4 on 33 positions
-and 84.44% on 951; the network 97.0% and 96.42%. The point estimates were
+and 84.44% on 951; the network 97.0% and 96.21%. The point estimates were
 accurate; the intervals were just too wide to lean on. The overall figures
-moved (network 99.63% → 99.00%, minimax 97.19% → 95.86%) because the new probe
+moved (network 99.63% → 98.98%, minimax 97.19% → 95.86%) because the new probe
 deliberately weights the opening far more heavily, not because either agent
 changed.
 
