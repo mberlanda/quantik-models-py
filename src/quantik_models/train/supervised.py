@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from ..data.exact_corpus import ExactCorpus, policy_weight, unpack
 from ..env import fastboard as fb
 from ..export.checkpoint import export_checkpoint
 from ..model.policy_value_net import (
@@ -66,8 +67,21 @@ class SupervisedConfig:
 
 
 def load_corpus(path: str | Path) -> dict[str, np.ndarray]:
-    with np.load(path) as data:
-        return {k: data[k] for k in data.files}
+    """Corpus arrays in the shape the training loop wants.
+
+    Policy targets are stored as a 64-bit optimal-action mask (see
+    `data.exact_corpus`); they are expanded per batch rather than up front,
+    because a dense `(n, 64) float32` array for a 3M-row corpus is 790 MB of
+    mostly zeros and dominated startup time.
+    """
+    corpus = ExactCorpus.load(path)
+    return {
+        "boards": corpus.boards,
+        "optimal_mask": corpus.optimal_mask,
+        "policy_weight": policy_weight(corpus.optimal_mask),
+        "value_target": corpus.value_target,
+        "plies": corpus.plies,
+    }
 
 
 def split_by_key(boards: np.ndarray, val_fraction: float) -> np.ndarray:
@@ -173,7 +187,7 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
 
     def batch_arrays(idx: np.ndarray, augment: bool):
         boards = corpus["boards"][idx]
-        policy = corpus["policy_target"][idx]
+        policy = unpack(corpus["optimal_mask"][idx])
         if augment:
             spatial, shape = fb.random_symmetries(idx.shape[0], rng)
             boards = fb.transform_boards(boards, spatial, shape)

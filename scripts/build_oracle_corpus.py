@@ -26,6 +26,7 @@ from pathlib import Path
 
 import numpy as np
 
+from quantik_models.data.exact_corpus import ExactCorpus, pack_actions
 from quantik_models.env import fastboard as fb
 
 DEFAULT_PLAN = {
@@ -83,10 +84,10 @@ def run_oracle(oracle_bin: Path, qfen_path: Path, out_path: Path) -> None:
         )
 
 
-def rows_from_oracle(paths: list[Path]) -> dict[str, np.ndarray]:
-    """Turn oracle JSONL into deduplicated training arrays."""
+def rows_from_oracle(paths: list[Path]) -> ExactCorpus:
+    """Turn oracle JSONL into a deduplicated `ExactCorpus`."""
     policy_boards: list[np.ndarray] = []
-    policy_targets: list[np.ndarray] = []
+    policy_targets: list[list[int]] = []
     policy_values: list[float] = []
     value_boards: list[np.ndarray] = []
     value_targets: list[float] = []
@@ -97,11 +98,8 @@ def rows_from_oracle(paths: list[Path]) -> dict[str, np.ndarray]:
                 continue
             record = json.loads(line)
             board = fb.from_qfen(record["qfen"])[0]
-            optimal = record["outcome_optimal"]
-            target = np.zeros(fb.ACTION_COUNT, dtype=np.float32)
-            target[optimal] = 1.0 / len(optimal)
             policy_boards.append(board)
-            policy_targets.append(target)
+            policy_targets.append([int(a) for a in record["outcome_optimal"]])
             policy_values.append(1.0 if record["won"] else -1.0)
 
             parent = board[None, :]
@@ -113,30 +111,22 @@ def rows_from_oracle(paths: list[Path]) -> dict[str, np.ndarray]:
                 value_targets.append(-1.0 if -float(value) < 0 else 1.0)
 
     boards = np.array(policy_boards + value_boards, dtype=np.uint16)
-    n_policy = len(policy_boards)
-    policy = np.concatenate(
-        [
-            np.array(policy_targets, dtype=np.float32),
-            np.zeros((len(value_boards), fb.ACTION_COUNT), dtype=np.float32),
-        ]
-    )
-    policy_weight = np.concatenate(
-        [np.ones(n_policy, dtype=np.float32), np.zeros(len(value_boards), dtype=np.float32)]
+    masks = np.concatenate(
+        [pack_actions(policy_targets), np.zeros(len(value_boards), dtype=np.uint64)]
     )
     values = np.array(policy_values + value_targets, dtype=np.float32)
 
     # Dedup by canonical key, preferring rows that carry a policy target.
     keys = fb.canonical_keys(boards)
-    order = np.argsort(-policy_weight, kind="stable")
+    order = np.argsort(masks == 0, kind="stable")
     _, first = np.unique(keys[order], return_index=True)
     keep = np.sort(order[first])
-    return {
-        "boards": boards[keep],
-        "policy_target": policy[keep],
-        "policy_weight": policy_weight[keep],
-        "value_target": values[keep],
-        "plies": fb.popcount(fb.occupancy(boards[keep])).astype(np.int16),
-    }
+    return ExactCorpus(
+        boards=boards[keep],
+        optimal_mask=masks[keep],
+        value_target=values[keep],
+        plies=fb.popcount(fb.occupancy(boards[keep])).astype(np.int16),
+    )
 
 
 def main(argv=None) -> int:
@@ -197,13 +187,11 @@ def main(argv=None) -> int:
                 flush=True,
             )
 
-    arrays = rows_from_oracle([p for p in jsonl_paths if p.exists()])
-    npz_path = args.out / "exact.npz"
-    np.savez_compressed(npz_path, **arrays)
-    n_policy = int(arrays["policy_weight"].sum())
+    corpus = rows_from_oracle([p for p in jsonl_paths if p.exists()])
+    npz_path = corpus.save(args.out / "exact.npz")
     print(
-        f"wrote {npz_path}: {arrays['boards'].shape[0]:,} unique positions "
-        f"({n_policy:,} with exact policy targets)"
+        f"wrote {npz_path}: {len(corpus):,} unique positions "
+        f"({corpus.policy_rows:,} with exact policy targets)"
     )
     return 0
 

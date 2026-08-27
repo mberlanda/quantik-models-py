@@ -137,3 +137,50 @@ def test_metric_merge_handles_an_all_empty_metric():
     from quantik_models.train.supervised import _merge
 
     assert _merge([{"top1": (0.0, 0.0)}])["top1"] == 0.0
+
+
+# --- exact-corpus storage -------------------------------------------------
+
+
+def test_action_mask_round_trips_to_a_uniform_policy():
+    from quantik_models.data.exact_corpus import pack_actions, unpack
+
+    masks = pack_actions([[0], [3, 17, 63], list(range(64)), []])
+    dense = unpack(masks)
+    assert dense[0, 0] == 1.0
+    assert np.allclose(dense[1, [3, 17, 63]], 1 / 3)
+    assert dense[1].sum() == pytest.approx(1.0)
+    assert np.allclose(dense[2], 1 / 64)
+    assert dense[3].sum() == 0.0  # value-only row
+
+
+def test_dense_and_action_packing_agree():
+    from quantik_models.data.exact_corpus import pack_actions, pack_dense, unpack
+
+    rng = np.random.default_rng(4)
+    sets = [sorted(rng.choice(64, size=int(rng.integers(1, 9)), replace=False).tolist())
+            for _ in range(200)]
+    from_actions = pack_actions(sets)
+    assert np.array_equal(pack_dense(unpack(from_actions)), from_actions)
+
+
+def test_corpus_concat_prefers_policy_rows_and_dedups():
+    from quantik_models.data.exact_corpus import ExactCorpus, pack_actions
+
+    rng = np.random.default_rng(6)
+    boards = fb.empty_boards(50)
+    for _ in range(6):
+        legal = fb.legal_masks(boards)
+        boards = fb.apply_actions(boards, (rng.random(legal.shape) * legal).argmax(axis=1))
+    plies = fb.popcount(fb.occupancy(boards)).astype(np.int16)
+    value_only = ExactCorpus(boards, np.zeros(50, dtype=np.uint64), np.ones(50, np.float32), plies)
+    spatial, shape = fb.random_symmetries(50, rng)
+    with_policy = ExactCorpus(
+        fb.transform_boards(boards, spatial, shape),
+        pack_actions([[1]] * 50),
+        np.ones(50, np.float32),
+        plies,
+    )
+    merged = ExactCorpus.concat([with_policy, value_only])
+    assert len(merged) == 50
+    assert merged.policy_rows == 50

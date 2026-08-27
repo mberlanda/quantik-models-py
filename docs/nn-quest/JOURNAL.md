@@ -313,3 +313,29 @@ complete solution of the region where minimax is beatable.
 Killed the sampled-corpus job after ply 6, since the complete solve subsumes
 plies 0-6. Kept its plies 6-12 output: **3,087,356** unique exactly-labelled
 positions, **250,000** with exact policy targets.
+
+### Build 9 — compact corpus storage
+
+The first full-corpus training run sat for **12 minutes before its first
+epoch**, all of it decompressing and canonicalizing. Cause: a
+`(3.09M, 64) float32` dense policy array is 790 MB, and 92% of its rows are
+value-only — all zeros.
+
+Every policy target the oracle produces is uniform over a set of
+outcome-optimal actions, so the whole target is really a 64-bit set.
+`data/exact_corpus.py` stores it as one `uint64` mask (8 bytes/row instead of
+256) and expands it per batch; an empty mask means "value label only", which
+also replaces the separate `policy_weight` column. `ExactCorpus.load` still
+reads the old dense format so earlier runs stay reproducible.
+
+### Build 10 — the final evaluation harness
+
+`scripts/final_evaluation.py` runs the two measurements a claim of "beats the
+incumbents" actually needs, into one report: the side-balanced arena **with
+measured ms/move**, and per-ply outcome accuracy against exact truth. Winning
+the arena while being slower per move, or while being less accurate, would not
+be the same result.
+
+Note for whoever runs it: the machine must be otherwise idle. Under load from
+the corpus solve, minimax measured 772 ms/move against its clean 196 ms — the
+timings are only meaningful on a quiet machine.

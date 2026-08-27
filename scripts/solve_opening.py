@@ -30,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
+from quantik_models.data.exact_corpus import ExactCorpus
 from quantik_models.env import fastboard as fb
 
 
@@ -139,10 +140,11 @@ def induct(boards: np.ndarray, child_keys: np.ndarray, child_won: np.ndarray):
     # Outcome-optimal moves: from a won position, only the winning moves; from
     # a lost one every move loses, so all of them are equally optimal.
     keep = np.where(any_win[rows], move_wins, True)
-    policy = np.zeros((n, fb.ACTION_COUNT), dtype=np.float32)
-    policy[rows[keep], actions[keep]] = 1.0
-    policy /= policy.sum(axis=1, keepdims=True)
-    return any_win, policy
+    mask = np.zeros(n, dtype=np.uint64)
+    np.bitwise_or.at(
+        mask, rows[keep], (np.uint64(1) << actions[keep].astype(np.uint64))
+    )
+    return any_win, mask
 
 
 def main(argv=None) -> int:
@@ -166,15 +168,13 @@ def main(argv=None) -> int:
     )
 
     boards_out: list[np.ndarray] = []
-    policy_out: list[np.ndarray] = []
-    policy_weight: list[np.ndarray] = []
+    mask_out: list[np.ndarray] = []
     value_out: list[np.ndarray] = []
 
     # The frontier itself contributes exact values but no policy (its children
     # were never solved).
     boards_out.append(levels[args.frontier])
-    policy_out.append(np.zeros((frontier_won.shape[0], fb.ACTION_COUNT), dtype=np.float32))
-    policy_weight.append(np.zeros(frontier_won.shape[0], dtype=np.float32))
+    mask_out.append(np.zeros(frontier_won.shape[0], dtype=np.uint64))
     value_out.append(np.where(frontier_won, 1.0, -1.0).astype(np.float32))
 
     child_keys = fb.canonical_keys(levels[args.frontier])
@@ -184,10 +184,9 @@ def main(argv=None) -> int:
     for ply in range(args.frontier - 1, -1, -1):
         started = time.perf_counter()
         boards = levels[ply]
-        won, policy = induct(boards, child_keys, child_won)
+        won, mask = induct(boards, child_keys, child_won)
         boards_out.append(boards)
-        policy_out.append(policy)
-        policy_weight.append(np.ones(boards.shape[0], dtype=np.float32))
+        mask_out.append(mask)
         value_out.append(np.where(won, 1.0, -1.0).astype(np.float32))
         print(
             f"ply {ply}: {boards.shape[0]:,} positions, {won.mean():.1%} won by the mover "
@@ -198,18 +197,17 @@ def main(argv=None) -> int:
         order = np.argsort(keys)
         child_keys, child_won = keys[order], won[order]
 
-    arrays = {
-        "boards": np.concatenate(boards_out),
-        "policy_target": np.concatenate(policy_out),
-        "policy_weight": np.concatenate(policy_weight),
-        "value_target": np.concatenate(value_out),
-    }
-    arrays["plies"] = fb.popcount(fb.occupancy(arrays["boards"])).astype(np.int16)
-    path = args.out / "opening-exact.npz"
-    np.savez_compressed(path, **arrays)
+    boards = np.concatenate(boards_out)
+    corpus = ExactCorpus(
+        boards=boards,
+        optimal_mask=np.concatenate(mask_out),
+        value_target=np.concatenate(value_out),
+        plies=fb.popcount(fb.occupancy(boards)).astype(np.int16),
+    )
+    path = corpus.save(args.out / "opening-exact.npz")
     print(
-        f"wrote {path}: {arrays['boards'].shape[0]:,} exactly-solved positions "
-        f"({int(arrays['policy_weight'].sum()):,} with exact policy)"
+        f"wrote {path}: {len(corpus):,} exactly-solved positions "
+        f"({corpus.policy_rows:,} with exact policy)"
     )
     return 0
 
