@@ -67,19 +67,32 @@ def enumerate_levels(frontier_ply: int, cache: Path) -> list[np.ndarray]:
     return levels
 
 
-def solve_frontier(boards: np.ndarray, oracle_bin: Path, workdir: Path) -> np.ndarray:
-    """Root-only exact solve of every frontier position; returns a `won` mask."""
+def solve_frontier(
+    boards: np.ndarray, oracle_bin: Path, workdir: Path, threads: int | None
+) -> np.ndarray:
+    """Root-only exact solve of every frontier position; returns a `won` mask.
+
+    Delegates to the oracle in append mode so the solve streams to disk and
+    resumes: re-running skips the QFENs already in `frontier.jsonl`. A
+    million-position solve is hours long and must survive an interrupt.
+    """
     qfen_path = workdir / "frontier.qfen"
     jsonl_path = workdir / "frontier.jsonl"
-    if not jsonl_path.exists() or jsonl_path.stat().st_size == 0:
-        if not qfen_path.exists():
-            qfen_path.write_text("\n".join(fb.to_qfen(b) for b in boards))
-        print(f"solving {boards.shape[0]:,} frontier positions...", flush=True)
+    if not qfen_path.exists():
+        qfen_path.write_text("\n".join(fb.to_qfen(b) for b in boards))
+    solved = sum(1 for _ in jsonl_path.open()) if jsonl_path.exists() else 0
+    if solved < boards.shape[0]:
+        print(
+            f"solving {boards.shape[0] - solved:,} of {boards.shape[0]:,} "
+            f"frontier positions...",
+            flush=True,
+        )
         started = time.perf_counter()
-        with qfen_path.open("rb") as stdin, jsonl_path.open("wb") as stdout:
-            subprocess.run(
-                [str(oracle_bin), "--roots-only"], stdin=stdin, stdout=stdout, check=True
-            )
+        command = [str(oracle_bin), "--roots-only", "--append-to", str(jsonl_path)]
+        if threads:
+            command += ["--threads", str(threads)]
+        with qfen_path.open("rb") as stdin:
+            subprocess.run(command, stdin=stdin, check=True)
         print(f"  done in {time.perf_counter() - started:.0f}s", flush=True)
 
     won_by_key: dict[int, bool] = {}
@@ -154,13 +167,21 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--oracle-bin",
         type=Path,
-        default=Path("../quantik-core-rust/target/release/examples/exact_oracle"),
+        default=Path("../.oracle-worktree/target/release/examples/exact_oracle"),
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=14,
+        help="rayon threads for the solver; leave headroom so the machine stays usable",
     )
     args = parser.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
 
     levels = enumerate_levels(args.frontier, args.out)
-    frontier_won = solve_frontier(levels[args.frontier], args.oracle_bin, args.out)
+    frontier_won = solve_frontier(
+        levels[args.frontier], args.oracle_bin, args.out, args.threads
+    )
     print(
         f"frontier ply {args.frontier}: "
         f"{frontier_won.mean():.1%} are wins for the side to move",
