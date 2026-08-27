@@ -122,8 +122,8 @@ def mcnemar(a: ProbeResult, b: ProbeResult, plies: tuple[int, ...] | None = None
     total = int(mask.sum())
     return {
         "positions": total,
-        "accuracy_a": both + a_only and (both + a_only) / total or 0.0,
-        "accuracy_b": both + b_only and (both + b_only) / total or 0.0,
+        "accuracy_a": (both + a_only) / total if total else 0.0,
+        "accuracy_b": (both + b_only) / total if total else 0.0,
         "a_right_b_wrong": a_only,
         "b_right_a_wrong": b_only,
         "both_right": both,
