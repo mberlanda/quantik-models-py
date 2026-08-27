@@ -68,7 +68,7 @@ def render(report: dict) -> str:
         "",
         f"Generated `{report['generated_at']}`. "
         f"{report['games_per_pairing']} side-balanced games per pairing from "
-        f"{report['positions']} unique ply-{report['start_plies']} openings; "
+        f"{report['positions']} symmetry-distinct openings at plies {report['start_plies']}; "
         f"probe of {report.get('probe_positions', 0)} exactly-solved held-out positions.",
         "",
         "## Leaderboard",
@@ -126,7 +126,11 @@ def main(argv=None) -> int:
     parser.add_argument("--title", default="Quantik: network vs the incumbents")
     parser.add_argument("--probe", type=Path, default=Path("runs/oracle/probe.jsonl"))
     parser.add_argument("--positions", type=int, default=48)
-    parser.add_argument("--start-plies", type=int, default=4)
+    parser.add_argument(
+        "--start-plies",
+        default="3-5",
+        help="opening depth: a single ply (\"4\") or an inclusive range (\"3-5\")",
+    )
     parser.add_argument("--position-seed", type=int, default=20260827)
     parser.add_argument("--seeds", type=int, default=2)
     parser.add_argument("--workers", type=int, default=None)
@@ -135,8 +139,13 @@ def main(argv=None) -> int:
 
     specs = json.loads(args.agents.read_text())
     names = [build_agent(s).name for s in specs]
+    if "-" in str(args.start_plies):
+        low, high = (int(v) for v in str(args.start_plies).split("-"))
+        start_plies: int | list[int] = list(range(low, high + 1))
+    else:
+        start_plies = int(args.start_plies)
     positions = sample_start_positions(
-        args.positions, plies=args.start_plies, seed=args.position_seed
+        args.positions, plies=start_plies, seed=args.position_seed
     )
     seeds = tuple(range(args.seeds))
 

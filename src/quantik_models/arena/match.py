@@ -10,6 +10,7 @@ move has lost), so a match is fully described by the win split.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -21,16 +22,41 @@ Board = npt.NDArray[np.uint16]
 
 
 def sample_start_positions(
-    count: int, plies: int, seed: int, unique: bool = True
+    count: int,
+    plies: int | Sequence[int],
+    seed: int,
+    unique: bool = True,
 ) -> npt.NDArray[np.uint16]:
     """`count` distinct non-terminal boards reached by `plies` random moves.
 
     Starting matches from a shared, varied set of openings is what keeps a
-    deterministic agent pair from replaying one game over and over.
+    deterministic agent pair from replaying one game over and over — and with
+    deterministic agents it is the *only* source of variety, since replaying a
+    position under a different seed replays the same game.
+
+    `plies` may be a sequence, in which case the openings are spread evenly
+    over those depths. Shallower starts leave more of the game in the
+    contested region where engines actually differ.
+
+    Positions are deduplicated **up to symmetry**: two openings related by a
+    board rotation or a shape relabeling are the same game, and counting them
+    as separate matches would silently narrow the confidence interval.
     """
+    if not isinstance(plies, int):
+        depths = list(plies)
+        per_depth = [count // len(depths)] * len(depths)
+        for i in range(count - sum(per_depth)):
+            per_depth[i] += 1
+        parts = [
+            sample_start_positions(n, depth, seed + 1000 * depth, unique)
+            for depth, n in zip(depths, per_depth)
+            if n > 0
+        ]
+        return np.concatenate(parts)
+
     rng = np.random.default_rng(seed)
     collected: list[np.ndarray] = []
-    seen: set[bytes] = set()
+    seen: set[int] = set()
     while len(collected) < count:
         batch = fb.empty_boards(max(count * 4, 256))
         for _ in range(plies):
@@ -44,8 +70,10 @@ def sample_start_positions(
         if batch.shape[0] == 0:
             continue
         done, _ = fb.terminal_status(batch)
-        for board in batch[~done]:
-            key = board.tobytes()
+        live = batch[~done]
+        if live.shape[0] == 0:
+            continue
+        for board, key in zip(live, fb.canonical_keys(live).tolist()):
             if unique and key in seen:
                 continue
             seen.add(key)
