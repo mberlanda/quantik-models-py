@@ -223,3 +223,29 @@ def test_board_codes_round_trip_is_injective(sym_batch):
     unique_codes = len(set(codes.tolist()))
     unique_boards = len({b.tobytes() for b in sym_batch})
     assert unique_codes == unique_boards
+
+
+def test_square_channel_view_round_trips(sym_batch):
+    """The uint8 square view must describe exactly the same board."""
+    squares = fb.square_channels(sym_batch)
+    rebuilt = np.zeros_like(sym_batch)
+    for channel in range(8):
+        bits = (squares == channel + 1)
+        rebuilt[:, channel] = (bits * fb.SQUARE_BITS[None, :]).sum(axis=1).astype(np.uint16)
+    assert np.array_equal(rebuilt, sym_batch)
+    assert np.all(squares <= 8)
+
+
+def test_canonical_key_equals_the_explicit_192_way_minimum(sym_batch):
+    """Guard the optimized reduction against the literal definition."""
+    subset = sym_batch[:200]
+    explicit = np.full(subset.shape[0], np.iinfo(np.uint64).max, dtype=np.uint64)
+    for spatial in range(8):
+        for shape_index in range(len(fb.SHAPE_PERMS)):
+            moved = fb.transform_boards(
+                subset,
+                np.full(subset.shape[0], spatial),
+                np.full(subset.shape[0], shape_index),
+            )
+            explicit = np.minimum(explicit, fb.board_codes(moved))
+    assert np.array_equal(fb.canonical_keys(subset), explicit)
