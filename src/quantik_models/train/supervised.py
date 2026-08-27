@@ -262,7 +262,10 @@ def main(argv=None) -> int:
             parser.add_argument(flag, action="store_true", default=value)
             parser.add_argument("--no-" + field_name.replace("_", "-"), dest=field_name, action="store_false")
         elif value is None:
-            parser.add_argument(flag, default=None)
+            # Optional fields have no default to infer a type from; the two
+            # numeric ones must not arrive as strings.
+            optional_type = int if field_name in {"channels", "blocks"} else str
+            parser.add_argument(flag, type=optional_type, default=None)
         else:
             parser.add_argument(flag, type=type(value), default=value)
     args = parser.parse_args(argv)
