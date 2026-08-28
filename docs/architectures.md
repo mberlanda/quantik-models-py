@@ -54,7 +54,7 @@ architecture, the registry resolves it.
 ```python
 from quantik_models.model import registry
 
-registry.architectures()          # ('mlp', 'resnet')
+registry.architectures()          # ('cpool', 'mlp', 'resnet')
 registry.presets("resnet")        # ('medium', 'small', 'smoke', 'target')
 
 model = registry.build("resnet", preset="small")
@@ -184,3 +184,30 @@ presets did.
 
 See `architecture-mlp.md` for the layer-by-layer account and for what this
 network cannot tell us.
+
+### `cpool` — the constraint model
+
+Message passing over Quantik's twelve constraint groups (four rows, four
+columns, four 2x2 zones). Each block pools the sixteen cell tokens into the
+groups they belong to, transforms them there, and scatters the result back
+to the member cells — the game's rule structure written into the wiring
+rather than approximated by stacked kernels that align to none of it.
+
+| preset | channels | blocks | parameters | matched against |
+|---|---|---|---|---|
+| `smoke` | 16 | 2 | 5,893 | CI only |
+| `small` | 96 | 4 | 307,333 | `resnet-c64-b4` (+0.9%) |
+| `medium` | 191 | 6 | 1,780,253 | `resnet-c128-b6` (-0.4%) |
+
+The groups are derived in `model.spec`, not restated by hand, and
+`tests/test_constraint_groups.py` asserts they are the same twelve sets as
+the engine's `WIN_MASKS`. Rows and columns share one set of group weights
+because transposition is in D4; zones have their own.
+
+This architecture emits **per-cell** logits, so it is the one that has to
+transpose before flattening — `flatten_cell_shape_logits`, tested directly,
+because `position * 4 + shape` is the right shape and dtype and completely
+wrong.
+
+See `architecture-constraint-pool.md` for the layer-by-layer account and
+for what would falsify the hypothesis.
