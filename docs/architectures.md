@@ -147,6 +147,10 @@ convolution to 1 channel then a small MLP to a tanh value.
 `resnet-c128-b6` (1,786,823 parameters) is the published model and is
 reached with `--preset small --channels 128 --blocks 6`.
 
+See `decisions/0001-architecture-lineup.md` for which architectures are in
+the comparison, which were declined and why, and how the comparison is
+kept fair.
+
 Note for anyone reasoning about receptive fields: on a 4x4 board the stem
 plus one residual block already covers the whole position. Depth here buys
 representational capacity, not reach — which is why "this architecture sees
