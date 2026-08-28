@@ -150,13 +150,63 @@ question here.** It depends on where play starts, which is a property of
 the deployment and not of the model. An engine that opens from an empty
 board wants the ResNet; one resuming a midgame position wants `cpool`.
 
+## Under search, the differences largely vanish
+
+The section above named `net-mcts` as "the experiment most likely to
+change the ranking again". It was run: the same three checkpoints inside
+`BatchedMCTS` at **128 simulations**, 300 games per ordered pairing, same
+seeds and start depths.
+
+Fixed simulations rather than a time limit, deliberately. A timed
+benchmark measures how fast each network runs as much as how well it
+plays, and these runs shared a machine with a solver saturating twelve
+threads. Fixed simulations is the same amount of search work per move
+regardless of what else the CPU is doing.
+
+Every significant difference disappears.
+
+| pairing | policy @ply3 | mcts @ply3 | policy @ply6 | mcts @ply6 |
+|---|---|---|---|---|
+| `resnet` vs `mlp` | **57.0%** *(sig)* | 53.8% | 52.3% | 49.7% |
+| `cpool` vs `resnet` | 49.6% | 46.8% | **54.7%** *(sig)* | 51.8% |
+| `cpool` vs `mlp` | 50.1% | 50.8% | 53.2% | 48.5% |
+
+Under `net-policy` two pairings were significant. Under `net-mcts128`,
+none is — every Wilson interval spans 50%. The leaderboards still order
+themselves the same way at ply 3 (`resnet` 53.5%, `cpool` 48.8%, `mlp`
+47.7%), but the head-to-head records no longer support the ordering, and
+at ply 6 the leaderboard scrambles entirely: `mlp` 50.9%, `cpool` 50.2%,
+`resnet` 48.9%, all inside noise.
+
+**128 simulations is enough search to wash out the differences between
+these networks.** That is a deflating result for the architecture
+comparison and it should be stated plainly rather than buried: if the
+deployment runs search at this budget, the choice between these three
+matters much less than every accuracy table in this project suggests.
+
+It is also the expected shape. The network supplies a prior and a leaf
+value; search corrects both, and the more search there is, the less the
+prior's quality can matter. What these numbers pin down is that on a
+4x4 board with roughly two dozen legal moves, 128 simulations is already
+past the point where architecture is the binding constraint.
+
+### The control this needs
+
+The obvious objection is that 128 simulations might be nearly *solving*
+these positions, in which case the result says nothing about the networks
+and everything about the game's size. `uniform-mcts` is the control: the
+**same** PUCT search at the same budget, with the network replaced by
+uniform priors and a value of zero.
+
+If uniform-MCTS matches the network agents, search is doing all the work
+and none of these networks is contributing anything at this budget. If it
+loses clearly, the networks are contributing — and the differences
+*between* them are simply smaller than search can resolve.
+
+That run is in `runs/autoplay/control-p{3,6}/`.
+
 ## What this still does not establish
 
-- **These are `net-policy` agents** — one forward pass, argmax, no search.
-  Search would let a better value head do work that pure move choice
-  cannot, which is `cpool`'s strength. `net-mcts` over the same three is
-  the obvious follow-up, and it is the experiment most likely to change
-  the ranking again.
 - **No baseline.** None of these played the minimax or MCTS engines, so
   every rate here is relative to the other two networks.
 - **Random starts, not played ones.** `--start-plies N` plays N *random*
