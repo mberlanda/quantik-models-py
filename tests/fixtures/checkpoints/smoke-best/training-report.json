@@ -1,0 +1,22 @@
+{
+  "history": {
+    "buffer_rows": 2380,
+    "first_player_win_rate": 0.4375,
+    "games": 32.0,
+    "gate_score": 0.25,
+    "iteration": 1,
+    "max_game_plies": 12.0,
+    "mean_abs_root_value": 0.13460470736026764,
+    "mean_game_plies": 8.875,
+    "policy_loss": 3.2498124718666075,
+    "policy_top1": 0.166796875,
+    "promoted": false,
+    "rows": 284.0,
+    "selfplay_seconds": 0.5657025830005296,
+    "total_seconds": 2.4351039999746718,
+    "train_seconds": 0.0923048340191599,
+    "unique_positions": 210.0,
+    "value_loss": 0.2801967427134514
+  },
+  "run": "smoke"
+}

@@ -1,0 +1,21 @@
+{
+  "architecture": "resnet-c16-b2",
+  "calibration_report": "training-report.json",
+  "contract_version": "1.2.0",
+  "created_at": "2026-08-27T13:20:55.445150+00:00",
+  "input_contracts": [
+    "tensor-board.v1",
+    "bitboard.v1",
+    "action-index.v1"
+  ],
+  "legal_action_mask_required": true,
+  "model_family": "quantik-policy-value-resnet",
+  "model_id": "smoke-best",
+  "output_contract": "policy-logits-64+value-tanh",
+  "parameter_count": 13991,
+  "schema": "model-checkpoint.v1",
+  "size_bytes": 60596,
+  "training_data_manifest": "training-report.json",
+  "weights_format": "safetensors",
+  "weights_hash": "sha256:59aa94e89ceb7a4fddd54bf875a12bb38c9a3b6d558590cc336273e49d57bb86"
+}

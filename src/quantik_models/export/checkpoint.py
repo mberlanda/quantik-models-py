@@ -23,15 +23,38 @@ _MANIFEST_NAME = "manifest.json"
 _REPORT_NAME = "training-report.json"
 
 
+def _supported_contract_version() -> str:
+    """The contracts release this checkpoint claims compatibility with.
+
+    Read from quantik-core-py rather than written down here. A literal
+    default silently stamped every checkpoint `1.1.0` and kept doing so
+    after contracts moved to 1.2.0, which made the exports unloadable by
+    the very validator this manifest exists to satisfy.
+    """
+    try:
+        from quantik_core.contracts import SUPPORTED_CONTRACTS_RELEASE
+    except ImportError as exc:  # pragma: no cover - depends on the environment
+        raise RuntimeError(
+            "quantik-core is required to stamp a contracts release on a "
+            "checkpoint manifest; install it (see the README) or pass an "
+            "explicit contract_version="
+        ) from exc
+    return str(SUPPORTED_CONTRACTS_RELEASE)
+
+
 def export_checkpoint(
     model: PolicyValueNet,
     *,
     out_dir: Path,
     model_id: str,
     training_report: dict[str, Any],
-    contract_version: str = "1.1.0",
+    contract_version: str | None = None,
 ) -> Path:
-    """Write weights, training report, and manifest; return manifest path."""
+    """Write weights, training report, and manifest; return manifest path.
+
+    `contract_version` defaults to the release quantik-core-py supports.
+    """
+    contract_version = contract_version or _supported_contract_version()
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 

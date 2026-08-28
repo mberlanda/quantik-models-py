@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from quantik_models.data.materialize import from_selfplay, load_npz, main, write_npz
+from quantik_core.contracts import SUPPORTED_CONTRACTS_RELEASE
 from quantik_core.ml_data import load_selfplay_jsonl
 
 
@@ -13,7 +14,7 @@ def test_selfplay_materialization_roundtrip(tmp_path: Path) -> None:
         json.dumps(
             {
                 "schema": "selfplay.v1",
-                "contract_version": "1.1.0",
+                "contract_version": SUPPORTED_CONTRACTS_RELEASE,
                 "game_id": 0,
                 "ply": 0,
                 "qfen": "..../..../..../....",
@@ -45,7 +46,19 @@ def test_cli_materializes_selfplay(tmp_path: Path) -> None:
     source = tmp_path / "selfplay.jsonl"
     output = tmp_path / "view.npz"
     source.write_text(
-        '{"schema":"selfplay.v1","contract_version":"1.1.0","game_id":0,"ply":0,"qfen":"..../..../..../....","side_to_move":0,"policy":[{"shape":0,"position":0,"visits":1}],"value":1.0}\n',
+        json.dumps(
+            {
+                "schema": "selfplay.v1",
+                "contract_version": SUPPORTED_CONTRACTS_RELEASE,
+                "game_id": 0,
+                "ply": 0,
+                "qfen": "..../..../..../....",
+                "side_to_move": 0,
+                "policy": [{"shape": 0, "position": 0, "visits": 1}],
+                "value": 1.0,
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     assert main(["--selfplay-jsonl", str(source), "--output-npz", str(output)]) == 0
