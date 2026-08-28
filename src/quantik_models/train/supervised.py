@@ -38,13 +38,8 @@ from ..data.exact_corpus import (
 from .metrics import merge_weighted as _merge
 from ..env import fastboard as fb
 from ..export.checkpoint import export_checkpoint
-from ..model.policy_value_net import (
-    PRESETS,
-    PolicyValueNet,
-    PolicyValueNetConfig,
-    masked_log_softmax,
-    parameter_count,
-)
+from ..model import registry
+from ..model.policy_value_net import masked_log_softmax, parameter_count
 from .alphazero import resolve_device
 
 
@@ -52,6 +47,7 @@ from .alphazero import resolve_device
 class SupervisedConfig:
     name: str = "sup"
     corpus: str = "runs/oracle/corpus/exact.npz"
+    arch: str = "resnet"
     preset: str = "small"
     channels: int | None = None
     blocks: int | None = None
@@ -72,10 +68,19 @@ class SupervisedConfig:
     seed: int = 20260827
     init_from: str | None = None
 
-    def net_config(self) -> PolicyValueNetConfig:
-        if self.channels is not None and self.blocks is not None:
-            return PolicyValueNetConfig(channels=self.channels, blocks=self.blocks)
-        return PRESETS[self.preset]
+    def build_model(self):
+        """Resolve `arch` + `preset` + overrides into a model.
+
+        Width and depth are passed as overrides rather than baked into a
+        config type, so an architecture that has no notion of `channels`
+        simply ignores it and the same CLI drives all of them.
+        """
+        overrides = {}
+        if self.channels is not None:
+            overrides["channels"] = self.channels
+        if self.blocks is not None:
+            overrides["blocks"] = self.blocks
+        return registry.build(self.arch, preset=self.preset, **overrides)
 
 
 def load_corpus(path: str | Path) -> dict[str, np.ndarray]:
@@ -149,7 +154,7 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
         flush=True,
     )
 
-    model = PolicyValueNet(config.net_config()).to(device)
+    model = config.build_model().to(device)
     if config.init_from:
         from safetensors.torch import load_file
 

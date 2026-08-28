@@ -24,8 +24,14 @@ torch = [
   "torch>=2.4",
   "safetensors>=0.4",
 ]
+onnx = [
+  # torch.onnx.export routes through onnxscript from torch 2.6 onwards, so
+  # the exporter is not usable from the torch extra alone.
+  "onnx>=1.16",
+  "onnxscript>=0.1",
+]
 all = [
-  "quantik-models[dev,arrow,torch]",
+  "quantik-models[dev,arrow,torch,onnx]",
 ]
 
 [project.scripts]

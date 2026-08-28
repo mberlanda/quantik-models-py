@@ -102,6 +102,9 @@ checkpoint, and `docs/scaling-guide.md` for the smoke -> small ->
 target path. The design/tradeoff discussion lives in
 `docs/policy-value-training-paper.md`.
 
+See `docs/architectures.md` for the model contract, the architecture
+registry, and how checkpoints are exported (safetensors plus ONNX).
+
 See `docs/model-report.md`, `docs/pipeline.md`, `docs/tensor-structure.md`,
 `docs/labeling-strategy.md`, `docs/autoplay-training.md`, and
 `docs/frontend-play.md`.
