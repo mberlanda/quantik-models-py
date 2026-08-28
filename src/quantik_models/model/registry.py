@@ -95,6 +95,37 @@ def presets(name: str) -> tuple[str, ...]:
     return tuple(sorted(entry(name).presets))
 
 
+def name_for(model: nn.Module) -> str:
+    """The registry name that built this model.
+
+    Keyed on the config type, which is one-to-one with an architecture, so
+    a checkpoint can record how to rebuild itself without anyone having to
+    keep a second mapping in sync.
+    """
+    config_type = type(getattr(model, "config"))
+    for name, spec in _REGISTRY.items():
+        if spec.config_type is config_type:
+            return name
+    raise ValueError(f"no registered architecture builds {config_type.__name__}")
+
+
+def spec_for(model: nn.Module) -> dict[str, Any]:
+    """`{"arch": ..., "config": {...}}` — enough to rebuild this model.
+
+    Written into the checkpoint manifest so a loader does not have to parse
+    the human-readable `architecture` string. That string is for people;
+    `resnet-c128-b6` and `mlp-h455-b4` do not share a grammar, and a loader
+    that tried to parse both would be guessing.
+    """
+    return {"arch": name_for(model), "config": asdict(getattr(model, "config"))}
+
+
+def build_from_spec(spec: dict[str, Any]) -> nn.Module:
+    """Rebuild a model from the spec `spec_for` produced."""
+    entry_ = entry(spec["arch"])
+    return entry_.build(entry_.config_type(**spec["config"]))
+
+
 def build(name: str, *, preset: str | None = None, **overrides: Any) -> nn.Module:
     """Construct an architecture from a preset, with optional overrides.
 
