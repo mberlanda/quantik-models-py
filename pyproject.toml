@@ -29,6 +29,9 @@ onnx = [
   # the exporter is not usable from the torch extra alone.
   "onnx>=1.16",
   "onnxscript>=0.1",
+  # The exporter is only trustworthy if something executes the graph it
+  # produced: onnxruntime backs the torch-vs-ONNX agreement test.
+  "onnxruntime>=1.18",
 ]
 all = [
   "quantik-models[dev,arrow,torch,onnx]",
