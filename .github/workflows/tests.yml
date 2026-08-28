@@ -1,0 +1,92 @@
+name: "Tests"
+
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: "pytest (py${{ matrix.python-version }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install with every optional extra
+        run: |
+          python -m pip install --upgrade pip
+          # Against the *published* core, not a sibling main. A unit-test
+          # workflow that checks out quantik-core-py at HEAD couples this
+          # repo's green to another repo's in-flight work, which is the
+          # circular wait that stalled the 1.2.0 release for six weeks.
+          pip install "quantik-core>=1.2,<2"
+          pip install -e ".[dev,arrow,torch,onnx]" \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Assert every optional dependency is importable
+        # Most of this suite guards itself with `pytest.importorskip`, so a
+        # missing extra turns into a green run with a third of the tests
+        # silently skipped rather than into a failure. Fail loudly here
+        # instead.
+        run: |
+          python - <<'PY'
+          import importlib
+          for name in (
+              "torch", "safetensors", "onnx", "onnxscript", "onnxruntime",
+              "pyarrow", "quantik_core.artifact_data", "quantik_core.contracts",
+          ):
+              importlib.import_module(name)
+              print("ok", name)
+          PY
+
+      - name: Run the unit tests
+        run: python -m pytest -q -rs --junitxml=junit.xml
+
+      - name: Fail if a test skipped for a missing dependency
+        # This is the regression the job exists to catch: an extra that is
+        # not installed turns `pytest.importorskip` into a green run with a
+        # whole module unexercised. Skips for local corpus data under
+        # `runs/` are legitimate — that data is gitignored and can never
+        # exist on a runner — so match on the import reason, not the count.
+        run: |
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          suite = ET.parse("junit.xml").getroot().find("testsuite")
+          missing, allowed = [], []
+          for case in suite.iter("testcase"):
+              skipped = case.find("skipped")
+              if skipped is None:
+                  continue
+              name = f"{case.get('classname')}::{case.get('name')}"
+              reason = (skipped.get("message") or "").strip()
+              bucket = missing if "could not import" in reason else allowed
+              bucket.append(f"{name} — {reason}")
+
+          print(f"{suite.get('tests')} tests, {len(missing) + len(allowed)} skipped")
+          for line in allowed:
+              print(f"  skipped (local data): {line}")
+          for line in missing:
+              print(f"  skipped (MISSING DEPENDENCY): {line}")
+          if missing:
+              sys.exit("every extra is installed; nothing should skip on an import")
+          PY
