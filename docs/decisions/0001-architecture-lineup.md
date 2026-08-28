@@ -213,6 +213,22 @@ It depends on where play starts, which is a property of the deployment.
 Any future architecture claim needs a game result at a stated start depth,
 not only a validation number.
 
+**And under search the differences largely vanish.** The same three
+checkpoints inside `BatchedMCTS` at 128 simulations produce *no*
+significant head-to-head result at either start depth — both of the
+significant `net-policy` gaps disappear, and the ply-6 leaderboard
+scrambles into noise. The network supplies a prior and a leaf value;
+search corrects both, and 128 simulations on a 4x4 board is already past
+the point where architecture is the binding constraint.
+
+That has a direct consequence for this lineup: **the comparison is a
+statement about the raw evaluator, not about the engine.** It is the right
+comparison for choosing what to train and what to publish, and the wrong
+one for predicting how a searching engine will play. `autoplay.md` records
+both, and names the control (`uniform-mcts`, the same search with no
+network) that separates "search washes out the differences" from "search
+does all the work".
+
 **And the third branch happened too, which qualifies the second.** `cpool`
 wins the IID holdout and the deep probes and *loses the shallow ones*. The
 prediction attached to that pattern — that the wiring "helps memorise the
