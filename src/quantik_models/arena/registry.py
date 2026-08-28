@@ -90,6 +90,20 @@ def build_agent(spec: dict[str, Any]):
         return CoreMCTSAgent(name=name, **spec)
     if kind == "beam":
         return BeamAgent(name=name, **spec)
+    if kind == "uniform-mcts":
+        # The control the network agents are missing: the *same* PUCT
+        # search, at the same budget, with the network replaced by uniform
+        # priors and a value of zero. `mcts` is a different algorithm
+        # entirely (UCB1 with random rollouts, from quantik-core), so it
+        # cannot answer "how much is the network contributing" — this can,
+        # because everything except the evaluator is held fixed.
+        from ..selfplay.evaluator import UniformEvaluator
+        from ..selfplay.mcts import MCTSParams
+
+        params = MCTSParams(**spec.pop("params", {"simulations": 128}))
+        return NetMCTSAgent(
+            UniformEvaluator(), params=params, name=name or "uniform-mcts", **spec
+        )
     if kind in {"net-policy", "net-mcts"}:
         evaluator = load_evaluator(
             spec.pop("checkpoint"),
