@@ -54,7 +54,7 @@ architecture, the registry resolves it.
 ```python
 from quantik_models.model import registry
 
-registry.architectures()          # ('cpool', 'mlp', 'resnet')
+registry.architectures()          # ('attn', 'cpool', 'mlp', 'resnet')
 registry.presets("resnet")        # ('medium', 'small', 'smoke', 'target')
 
 model = registry.build("resnet", preset="small")
@@ -262,3 +262,31 @@ wrong.
 
 See `architecture-constraint-pool.md` for the layer-by-layer account and
 for what would falsify the hypothesis.
+
+### `attn` — the same bet without the prior
+
+Transformer encoder over the sixteen cells: pre-norm blocks, learned
+positional embeddings, the same two heads. It emits per-cell logits, so it
+uses the same tested `flatten_cell_shape_logits` as `cpool`.
+
+| preset | d_model | blocks | parameters | matched against |
+|---|---|---|---|---|
+| `smoke` | 16 | 2 | 6,117 | CI only |
+| `small` | 96 | 4 | 308,485 | `resnet-c64-b4` (+1.2%) |
+| `medium` | 192 | 6 | 1,800,709 | `resnet-c128-b6` (+0.8%) |
+
+The reason for it is **content-dependent interaction**, not range — on 4x4
+range is not an argument, and an earlier draft that said otherwise was
+wrong. A convolution's weight between two cells is fixed at training time;
+attention makes it a function of what actually occupies them, which is
+closer to how the blocking rule works.
+
+`cpool` makes the same bet with a much stronger prior: it is *told* which
+cells are related. This network has to discover rows, columns and zones as
+attention patterns. That is what makes the pair informative — if `attn`
+matches `cpool`, the explicit wiring was unnecessary; if it loses, the
+prior was doing real work.
+
+Pre-norm blocks specifically, because post-norm transformers need a warmup
+schedule and the trainer's cosine schedule is shared across the lineup. A
+model needing its own schedule would not be comparable to the others.
