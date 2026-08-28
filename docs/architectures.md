@@ -9,11 +9,26 @@ output  (B, 64) policy logits     policy-logits-64+value-tanh
         (B,)    value in [-1, 1]
 ```
 
-Nine input planes: eight bitboard planes (two players x four shapes) and one
-constant plane carrying the side to move, exactly as
-`quantik_core.ml_data.qfen_to_tensor` produces them. Sixty-four output
-logits, indexed `action_index = shape * 16 + position` with
-`position = row * 4 + col`.
+Nine input planes and sixty-four output logits, the latter indexed
+`action_index = shape * 16 + position` with `position = row * 4 + col`.
+
+**The plane order is mover-relative, and this matters more than it looks.**
+`fastboard.encode_tensors` — which is what both `train/supervised.py` and
+`selfplay/evaluator.py` feed the network — puts the side-to-move's four
+shapes in channels 0-3, the opponent's in 4-7, and the side-to-move flag in
+channel 8. The plane order therefore swaps with parity.
+
+`quantik_core.ml_data.qfen_to_tensor` orders the same nine planes by colour
+instead: player 0 first, always. Both encodings call themselves
+`tensor-board.v1` and both are valid readings of its 9x4x4 shape, but they
+are not interchangeable. A runtime that builds the colour-ordered tensor
+and feeds it to a checkpoint trained on the mover-relative one gets the two
+players swapped on every position where player 1 is to move — half of them
+— and the result is a model that plays legally and badly, with nothing to
+indicate anything is wrong.
+
+`fastboard.to_core_tensor` produces the colour-ordered layout for interop.
+Nothing in the training or serving path currently uses it.
 
 Those constants live in `quantik_models.model.spec` so that no architecture
 restates them, and an architecture that emits per-cell logits has to

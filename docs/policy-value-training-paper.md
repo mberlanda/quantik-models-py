@@ -149,17 +149,45 @@ as a diagnostic — how much legality the raw network absorbs is an
 empirical question worth tracking, but no correctness property ever
 depends on it.
 
-### 3.3 Deterministic content-addressed sharding
+### 3.3 Deterministic position-keyed sharding
 
-Train/validation/test membership is computed per row as
-`sha1(tensor_bytes || policy_bytes || source_tag) mod 100` against
-80/10/10 thresholds. Membership therefore survives row reordering,
-re-materialization, and corpus growth — a row can never silently
-migrate from test to train between runs, which is the failure mode that
-invalidates longitudinal comparisons. The cost is that exact global
-split fractions are only approached in expectation; at smoke-corpus
-sizes a split can be empty (the trainer falls back to validating on
-train and says so in the report).
+Train/validation/test membership is computed per row from the *canonical*
+position key: the smallest packed code over all 192 symmetries of the
+board. The key is spread over 100 buckets against 80/10/10 thresholds.
+Membership therefore survives row reordering, re-materialization and
+corpus growth — a row can never silently migrate from test to train
+between runs, which is the failure mode that invalidates longitudinal
+comparisons. The cost is that exact global split fractions are only
+approached in expectation; at smoke-corpus sizes a split can be empty
+(the trainer falls back to validating on train and says so in the report).
+
+**Correction.** Earlier versions of this section described the bucket as
+`sha1(tensor_bytes || policy_bytes || source_tag) mod 100`, and
+`data.dataset.split_assignments` implemented exactly that. It leaked in
+two ways, both of which inflate validation scores by testing the model on
+what it has already memorized:
+
+1. *Symmetric images split independently.* Quantik has a 192-element
+   symmetry group, and a rotated or shape-relabelled copy of a position
+   has different tensor bytes. A validation board could therefore be a
+   transformation of a training board.
+2. *The same position split differently per label and per corpus.* Two
+   rows describing one position but carrying different policy targets, or
+   arriving from different corpora, hashed to different buckets. This
+   only bites once corpora are merged — which is what the
+   `quantik-models-train` console script does with repeated `--npz`.
+
+The published `resnet-c128-b6` checkpoint is **not** affected. It was
+trained through `train/supervised.py`, which has always split on the
+canonical key via `exact_corpus.split_by_key`, and its corpus holds one
+row per canonical position: measured on `exact-sampled.npz`, 3,087,356
+rows resolve to 3,087,356 distinct canonical keys with zero keys shared
+between the training and validation sides. The defect was that two
+training entry points disagreed on a methodological invariant, and this
+paper documented the weaker one. Both now key on the canonical position,
+and `tests/test_split_leakage.py` pins all three properties:
+no canonical position spans two splits, symmetric images land together,
+and the bucket ignores the target and the source tag.
 
 ### 3.4 Checkpoint contract
 
