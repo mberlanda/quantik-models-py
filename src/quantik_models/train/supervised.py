@@ -40,6 +40,7 @@ from ..env import fastboard as fb
 from ..export.checkpoint import export_checkpoint
 from ..model import registry
 from ..model.policy_value_net import masked_log_softmax, parameter_count
+from . import freezing
 from .alphazero import resolve_device
 
 
@@ -67,6 +68,10 @@ class SupervisedConfig:
     device: str = "auto"
     seed: int = 20260827
     init_from: str | None = None
+    # Dotted module prefixes to hold fixed, e.g. "stem,trunk". Only
+    # meaningful with `init_from`: freezing randomly initialised weights
+    # trains a model around noise it can never correct.
+    freeze: str | None = None
 
     def build_model(self):
         """Resolve `arch` + `preset` + overrides into a model.
@@ -160,8 +165,23 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
 
         model.load_state_dict(load_file(str(Path(config.init_from) / "weights.safetensors")))
         print(f"initialized from {config.init_from}", flush=True)
+
+    patterns = [p.strip() for p in config.freeze.split(",") if p.strip()] if config.freeze else []
+    if patterns and not config.init_from:
+        raise ValueError(
+            "--freeze without --init-from would train a model around frozen "
+            "random weights it can never correct"
+        )
+    freeze_report = freezing.freeze(model, patterns)
+    frozen_norms = freezing.frozen_norm_modules(model, freeze_report)
+    if patterns:
+        print(freeze_report.summary(), flush=True)
+
+    # Only the trainable parameters go to the optimizer. AdamW would
+    # otherwise carry moment buffers for tensors that never receive a
+    # gradient, which costs memory and makes the state dict misleading.
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=config.lr, weight_decay=config.weight_decay
+        freezing.trainable_parameters(model), lr=config.lr, weight_decay=config.weight_decay
     )
     sampling = (
         ply_sampling_weights(corpus["plies"][train_idx]) if config.balance_plies else None
@@ -188,7 +208,11 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     best_val = float("inf")
     for epoch in range(config.epochs):
         started = time.perf_counter()
-        model.train()
+        # Not `model.train()`: that recurses and puts frozen batch norms
+        # back into training mode, where they keep updating running
+        # statistics from the batch. A trunk that is still tracking is not
+        # frozen, and nothing in the loss curve would say so.
+        freezing.set_train_mode(model, frozen_norms)
         if sampling is None:
             order = rng.permutation(train_idx)
         else:
