@@ -22,7 +22,7 @@ from typing import Any, Callable, Protocol
 
 from torch import nn
 
-from . import mlp_net, policy_value_net
+from . import constraint_pool_net, mlp_net, policy_value_net
 
 
 class PolicyValueModel(Protocol):
@@ -61,6 +61,13 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         presets=mlp_net.PRESETS,
         summary="Flattened dense trunk; the control for whether 4x4 spatial "
         "structure is worth modelling at all.",
+    ),
+    "cpool": ArchitectureEntry(
+        build=constraint_pool_net.ConstraintPoolNet,
+        config_type=constraint_pool_net.ConstraintPoolNetConfig,
+        presets=constraint_pool_net.PRESETS,
+        summary="Message passing over Quantik's twelve constraint groups; "
+        "the game's rule structure written into the wiring.",
     ),
 }
 
