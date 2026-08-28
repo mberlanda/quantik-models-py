@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 
 import numpy as np
+
+from boards import random_tensors
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -14,9 +16,16 @@ from quantik_models.train.trainer import TrainConfig, main, train  # noqa: E402
 
 def _write_learnable_view(path: Path, n: int = 256) -> None:
     """Synthetic but learnable data: policy always action 0, value = +1
-    when plane-0 mean exceeds the median (so loss can decrease)."""
-    rng = np.random.default_rng(7)
-    tensors = rng.random((n, 9, 4, 4), dtype=np.float32)
+    when plane-0 mean exceeds the median (so loss can decrease).
+
+    The boards are real reachable positions rather than uniform noise. The
+    split is keyed on the canonical position, so it needs encodings that
+    decode back to a legal board; noise also gave the network inputs
+    unlike anything it sees in training, which made this a weaker test of
+    the loop than it looked.
+    """
+    tensors = random_tensors(n, seed=7)
+
     policy = np.zeros((n, 64), dtype=np.float32)
     policy[:, 0] = 1.0
     signal = tensors[:, 0].mean(axis=(1, 2))
