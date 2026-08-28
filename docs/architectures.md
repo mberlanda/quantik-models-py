@@ -103,7 +103,8 @@ no notion of `channels` simply ignores it, so one CLI drives all of them.
 | `model.onnx` | graph **and** weights | executable by a runtime that has never seen this package |
 
 The ONNX artifact is what makes a checkpoint consumable from Rust without
-reimplementing the architecture there. Three details are load-bearing:
+reimplementing the architecture there. Five details are load-bearing, and
+three of them were learned the hard way:
 
 - **Exported in eval mode**, so batch norm folds its running statistics.
   A graph exported in train mode gives different answers for the same
@@ -111,8 +112,18 @@ reimplementing the architecture there. Three details are load-bearing:
 - **`external_data=False`**, so the graph and its weights stay in one file.
   The exporter otherwise spills tensors into a sibling `model.onnx.data`
   that `onnx_hash` would not cover.
-- **Opset 17**, which has native LayerNorm; older opsets decompose it into
-  a noisier subgraph.
+- **Traced at batch 2, not batch 1.** `torch.export` specializes any
+  dimension of size 0 or 1. A graph traced with a single example is frozen
+  at batch one *while still advertising a symbolic batch dimension* — the
+  input signature says `['batch', 9, 4, 4]` and an internal `Reshape`
+  says otherwise.
+- **`dynamic_shapes`, not `dynamic_axes`.** The dynamo exporter ignores
+  `dynamic_axes` and warns that it does.
+- **Opset 18**, which is the dynamo exporter's floor. Requesting 17 gets a
+  graph at 18 followed by a down-conversion that fails *silently* for some
+  architectures, leaving a file at 18. `onnx_opset` in the manifest is
+  therefore read back from the exported file rather than recorded from the
+  request — the two disagreed for `cpool`.
 
 `weights_format` stays `"safetensors"` because the contract admits a single
 value. The ONNX artifact is recorded beside it as `onnx_export`, with its
@@ -128,6 +139,27 @@ pip install -e ".[dev,torch,onnx]"
 ```
 
 Pass `with_onnx=False` to skip it where torch alone is available.
+
+## Before a long run: the preflight
+
+```bash
+.venv/bin/python -m quantik_models.train.preflight \
+  --corpus runs/oracle/corpus/exact-sampled.npz \
+  --preset medium --epochs 16
+```
+
+About a minute per architecture, running the real code paths —
+`load_corpus`, `split_by_key`, `_forward_losses`, `export_checkpoint` — on
+a handful of batches. It checks that the corpus carries what it claims,
+that the split leaks no canonical key, that every parameter receives
+gradient, that the loss falls on a fixed batch, that the masked argmax of
+a single position is legal, and that the exported graph agrees with torch
+at three batch sizes. Then it projects a wall-clock per architecture, so a
+run is budgeted before it is started.
+
+It earned its keep on the first invocation: `cpool` at `medium` exported a
+graph that failed at any batch but the traced one, which the unit tests had
+missed because they only exercised the `smoke` preset.
 
 ## Registered architectures
 

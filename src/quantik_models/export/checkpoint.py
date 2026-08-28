@@ -31,6 +31,7 @@ from typing import Any
 import torch
 from safetensors.torch import save_file
 from torch import nn
+from torch.export import Dim
 
 from ..model.policy_value_net import parameter_count
 from ..model.spec import BOARD_SIZE, INPUT_PLANES
@@ -40,10 +41,18 @@ _ONNX_NAME = "model.onnx"
 _MANIFEST_NAME = "manifest.json"
 _REPORT_NAME = "training-report.json"
 
-# The opset needs to cover the ops every registered architecture uses;
-# 17 brings native LayerNorm, which the attention trunk needs and which
+# The dynamo exporter's floor is 18; asking for anything lower makes it
+# export at 18 and then attempt a down-conversion that fails silently for
+# some graphs — leaving a file at 18 while the caller believes it got what
+# it asked for. 18 also has native LayerNorm, which `cpool` uses and which
 # older opsets decompose into a noisier subgraph.
-_ONNX_OPSET = 17
+_ONNX_OPSET = 18
+
+# torch.export specializes any dimension of size 0 or 1, so a graph traced
+# with a batch of one is frozen at one no matter what dynamic axes are
+# declared — the declared symbolic dimension survives in the input
+# signature while an internal Reshape hard-codes the batch. Trace with two.
+_TRACE_BATCH = 2
 
 
 def _supported_contract_version() -> str:
@@ -83,20 +92,21 @@ def export_onnx(model: nn.Module, path: Path) -> None:
     """
     was_training = model.training
     model.eval()
-    example = torch.zeros(1, INPUT_PLANES, BOARD_SIZE, BOARD_SIZE)
+    example = torch.zeros(_TRACE_BATCH, INPUT_PLANES, BOARD_SIZE, BOARD_SIZE)
     try:
         with torch.no_grad():
             torch.onnx.export(
                 model,
-                example,
+                (example,),
                 str(path),
                 input_names=["board"],
                 output_names=["policy_logits", "value"],
-                dynamic_axes={
-                    "board": {0: "batch"},
-                    "policy_logits": {0: "batch"},
-                    "value": {0: "batch"},
-                },
+                # `dynamic_shapes`, not `dynamic_axes`: the dynamo exporter
+                # ignores the latter, and warns that it does. With
+                # `dynamic_axes` the input signature said "batch" while the
+                # graph body was specialized — a lie that only surfaced at
+                # a batch size nobody had tested.
+                dynamic_shapes=({0: Dim("batch")},),
                 opset_version=_ONNX_OPSET,
                 # Keep the graph and its weights in one file. The exporter
                 # otherwise spills tensors into a sibling `.onnx.data`, which
@@ -107,6 +117,23 @@ def export_onnx(model: nn.Module, path: Path) -> None:
     finally:
         if was_training:
             model.train()
+
+
+def onnx_opset(path: Path) -> int:
+    """The opset the file actually declares.
+
+    Read back rather than assumed. `opset_version` is a request, and a
+    failed down-conversion leaves a graph at a different version with no
+    exception raised — so a manifest that recorded the request would be
+    describing a file that does not exist.
+    """
+    import onnx
+
+    model = onnx.load(str(path), load_external_data=False)
+    for opset in model.opset_import:
+        if opset.domain in ("", "ai.onnx"):
+            return int(opset.version)
+    raise ValueError(f"{path} declares no default-domain opset")
 
 
 def export_checkpoint(
@@ -172,7 +199,7 @@ def export_checkpoint(
         # can verify whichever one it actually loads.
         manifest["onnx_export"] = _ONNX_NAME
         manifest["onnx_hash"] = _sha256(onnx_path)
-        manifest["onnx_opset"] = _ONNX_OPSET
+        manifest["onnx_opset"] = onnx_opset(onnx_path)
         manifest["onnx_size_bytes"] = onnx_path.stat().st_size
 
     manifest_path = out_dir / _MANIFEST_NAME
