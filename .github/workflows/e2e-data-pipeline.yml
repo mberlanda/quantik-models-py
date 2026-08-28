@@ -94,9 +94,14 @@ jobs:
           python -m pip install -e "$CORE_PY[arrow]"
           python -m pip install -e "$MODELS[dev,arrow]"
 
-      - name: Run model unit tests
+      # Not the main test run — that is `tests.yml`, which installs every
+      # extra. This one deliberately runs against the torch-free base
+      # install, so the modules that guard themselves with importorskip
+      # skip here on purpose and what remains proves the package is
+      # importable and usable without an accelerator stack.
+      - name: Run model unit tests against the torch-free install
         working-directory: quantik-models-py
-        run: python -m pytest
+        run: python -m pytest -q -rs
 
       - name: Run tiny end-to-end data pipeline
         working-directory: quantik-models-py
