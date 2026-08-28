@@ -140,6 +140,20 @@ pip install -e ".[dev,torch,onnx]"
 
 Pass `with_onnx=False` to skip it where torch alone is available.
 
+## After a run: two evaluations, not one
+
+The validation number a training run prints is measured on the trained
+distribution. `docs/shift-evaluation.md` measures what survives leaving it,
+on 7,800 exactly-solved positions sharing no canonical key with the corpus:
+
+```bash
+.venv/bin/python -m quantik_models.eval.shift \
+  --checkpoint runs/train/lineup-cpool/best --out runs/eval/shift.json
+```
+
+Report both. On this lineup the two rank the architectures differently in
+the shallow plies, which is the regime an engine opens from.
+
 ## Before a long run: the preflight
 
 ```bash
