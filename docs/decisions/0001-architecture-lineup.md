@@ -167,6 +167,35 @@ The lineup is worthless if the models are not comparable, so:
   useless for its first five moves, and only the second evaluation would say
   so.
 
+## Outcome, 2026-08-28
+
+All three trained at `medium` for 16 epochs on `exact-sampled.npz`. Both
+evaluations ran; `shift-evaluation.md` has the detail.
+
+| model | IID top-1 | shift, shallow (4-6) | shift, deep (7-12) |
+|---|---|---|---|
+| `resnet-c128-b6` | 0.9701 | **0.9126** | 0.9720 |
+| `mlp-h455-b4` | 0.9516 | 0.8843 | 0.9578 |
+| `cpool-c191-b6` | **0.9851** | 0.9092 | **0.9883** |
+
+Three things this settles, against what the section above predicted:
+
+**The MLP loses, so the spatial prior is real.** At matched parameters it
+trails by ~1.9 points of IID top-1 and considerably more on the value head.
+The first branch below — "if the MLP matches the ResNet" — did not happen,
+so `ConstraintPoolNet` is judged against the ResNet as planned.
+
+**ConstraintPoolNet wins clearly**, which by the second branch promotes the
+hypergraph and recurrent variants from "written down" to "next".
+
+**But the third branch happened too, and it qualifies the second.** `cpool`
+wins the IID holdout and the deep probes and *loses the shallow ones*. The
+prediction attached to that pattern — that the wiring "helps memorise the
+trained distribution rather than generalise the rule" — is wrong as stated:
+`cpool` generalises better to unseen positions, which is what the deep
+probes are. What it does not do is extrapolate to **unseen plies**. Those
+are different failures and the record should not have conflated them.
+
 ## What would change this decision
 
 If the MLP matches the ResNet, the spatial prior is worth nothing here and
