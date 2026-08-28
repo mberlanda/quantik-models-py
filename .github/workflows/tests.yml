@@ -60,21 +60,33 @@ jobs:
       - name: Run the unit tests
         run: python -m pytest -q -rs --junitxml=junit.xml
 
-      - name: Fail if any test was skipped
-        # With every extra installed there is nothing left to skip, so a
-        # skip means an import guard fired and a whole module went
-        # unexercised. That is the failure mode this job exists to catch.
+      - name: Fail if a test skipped for a missing dependency
+        # This is the regression the job exists to catch: an extra that is
+        # not installed turns `pytest.importorskip` into a green run with a
+        # whole module unexercised. Skips for local corpus data under
+        # `runs/` are legitimate — that data is gitignored and can never
+        # exist on a runner — so match on the import reason, not the count.
         run: |
           python - <<'PY'
           import sys
           import xml.etree.ElementTree as ET
 
           suite = ET.parse("junit.xml").getroot().find("testsuite")
-          skipped = int(suite.get("skipped", "0"))
-          print(f"{suite.get('tests')} tests, {skipped} skipped")
-          if skipped:
-              for case in suite.iter("testcase"):
-                  if case.find("skipped") is not None:
-                      print(f"  skipped: {case.get('classname')}::{case.get('name')}")
-              sys.exit("optional dependencies are installed; nothing should skip")
+          missing, allowed = [], []
+          for case in suite.iter("testcase"):
+              skipped = case.find("skipped")
+              if skipped is None:
+                  continue
+              name = f"{case.get('classname')}::{case.get('name')}"
+              reason = (skipped.get("message") or "").strip()
+              bucket = missing if "could not import" in reason else allowed
+              bucket.append(f"{name} — {reason}")
+
+          print(f"{suite.get('tests')} tests, {len(missing) + len(allowed)} skipped")
+          for line in allowed:
+              print(f"  skipped (local data): {line}")
+          for line in missing:
+              print(f"  skipped (MISSING DEPENDENCY): {line}")
+          if missing:
+              sys.exit("every extra is installed; nothing should skip on an import")
           PY
