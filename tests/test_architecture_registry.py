@@ -79,8 +79,13 @@ def test_overrides_apply_on_top_of_a_preset() -> None:
     assert model.architecture == "resnet-c32-b1"
 
 
+# Exercised at more than one preset: the batch-specialization bug below
+# reproduced only at `medium`, because the op a 3-D `Linear` lowers to
+# depends on its width. Testing the smallest preset is cheap and was not
+# enough.
 @pytest.mark.parametrize("name", ARCHITECTURES)
-def test_onnx_export_matches_torch(name: str, tmp_path) -> None:
+@pytest.mark.parametrize("preset", ["smoke", "medium"])
+def test_onnx_export_matches_torch(name: str, preset: str, tmp_path) -> None:
     """The ONNX graph is only useful if it computes the same function.
 
     This is the guard for serving the checkpoint from a non-Python runtime:
@@ -91,8 +96,11 @@ def test_onnx_export_matches_torch(name: str, tmp_path) -> None:
     ort = pytest.importorskip("onnxruntime")
     import numpy as np
 
+    if preset not in registry.presets(name):
+        pytest.skip(f"{name} has no {preset} preset")
+
     torch.manual_seed(0)
-    model = registry.build(name, preset=_smoke_preset(name)).eval()
+    model = registry.build(name, preset=preset).eval()
     manifest_path = export_checkpoint(
         model, out_dir=tmp_path, model_id=f"{name}-test", training_report={}
     )
@@ -103,13 +111,50 @@ def test_onnx_export_matches_torch(name: str, tmp_path) -> None:
     # of what a runtime actually loads.
     assert not (tmp_path / "model.onnx.data").exists()
 
-    sample = torch.randn(4, INPUT_PLANES, BOARD_SIZE, BOARD_SIZE)
-    with torch.no_grad():
-        want_policy, want_value = model(sample)
     session = ort.InferenceSession(
         str(tmp_path / "model.onnx"), providers=["CPUExecutionProvider"]
     )
-    got_policy, got_value = session.run(None, {"board": sample.numpy()})
 
-    np.testing.assert_allclose(got_policy, want_policy.numpy(), atol=1e-5)
-    np.testing.assert_allclose(got_value, want_value.numpy(), atol=1e-5)
+    # The declared batch dimension must be symbolic — but declaring it is
+    # not the same as honouring it, which is the whole point of the loop
+    # below.
+    assert isinstance(session.get_inputs()[0].shape[0], str)
+
+    # Several batch sizes, none of them the traced one. torch.export
+    # specializes dimensions of size 0 or 1, so a graph traced at batch 1
+    # is frozen at 1 while still advertising a symbolic dimension; and an
+    # internal Reshape can hard-code the traced batch even when the
+    # signature is honest. A single-batch-size round trip passes in both
+    # cases.
+    for batch in (1, 5, 64):
+        sample = torch.randn(batch, INPUT_PLANES, BOARD_SIZE, BOARD_SIZE)
+        with torch.no_grad():
+            want_policy, want_value = model(sample)
+        got_policy, got_value = session.run(None, {"board": sample.numpy()})
+        np.testing.assert_allclose(got_policy, want_policy.numpy(), atol=1e-5)
+        np.testing.assert_allclose(got_value, want_value.numpy(), atol=1e-5)
+
+
+@pytest.mark.parametrize("name", ARCHITECTURES)
+def test_manifest_records_the_opset_the_file_has(name: str, tmp_path) -> None:
+    """`opset_version` is a request, not a result.
+
+    A failed down-conversion leaves the graph at a different version and
+    raises nothing, so a manifest that recorded the request would describe
+    a file that does not exist. That happened: `cpool` shipped at opset 18
+    stamped 17.
+    """
+    pytest.importorskip("onnxscript")
+    onnx = pytest.importorskip("onnx")
+
+    model = registry.build(name, preset=_smoke_preset(name)).eval()
+    manifest_path = export_checkpoint(
+        model, out_dir=tmp_path, model_id=f"{name}-test", training_report={}
+    )
+    manifest = json.loads(manifest_path.read_text())
+
+    graph = onnx.load(str(tmp_path / "model.onnx"), load_external_data=False)
+    declared = next(
+        o.version for o in graph.opset_import if o.domain in ("", "ai.onnx")
+    )
+    assert manifest["onnx_opset"] == declared
