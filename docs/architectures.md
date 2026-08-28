@@ -209,7 +209,8 @@ representational capacity, not reach — which is why "this architecture sees
 globally and that one does not" is never a meaningful distinction on this
 game, and why alternatives have to be justified on different grounds.
 
-See `policy-value-training-paper.md` for how it is trained and why it is
+See `architecture-resnet.md` for the layer-by-layer account, and
+`policy-value-training-paper.md` for how it is trained and why it is
 distilled from search rather than learned from self-play.
 
 ### `mlp` — the control

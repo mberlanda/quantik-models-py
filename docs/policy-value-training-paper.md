@@ -109,6 +109,14 @@ data-generation details [7]).
 
 ### 3.1 Network
 
+> **Layer-by-layer detail lives in `architecture-resnet.md`**: every layer
+> with its parameter count, where the 99.2% of parameters in the trunk go,
+> the two head bottlenecks and which of them is an inherited choice rather
+> than a justified one, and the batch-norm edges that only bite in serving
+> and in fine-tuning. This section states the shape; that document states
+> the contents.
+
+
 The model is a deliberately conventional AlphaZero-style residual
 network [1, 2]: a 3×3 convolutional stem from 9 input planes to `C`
 channels, `B` residual blocks, a policy head (1×1 convolution, flatten,
