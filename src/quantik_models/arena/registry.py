@@ -29,27 +29,52 @@ def load_evaluator(checkpoint: str | Path, device: str = "cpu", batch_size: int 
     Workers replay the same spec for every game, so caching keeps the weights
     off the critical path after the first call in each process.
     """
+    import json
+
     from safetensors.torch import load_file
     import torch
 
-    from ..model.policy_value_net import PolicyValueNet, PolicyValueNetConfig
+    from ..model import registry as model_registry
     from ..selfplay.evaluator import NetEvaluator
 
     key = f"{checkpoint}|{device}"
     if key in _CACHE:
         return _CACHE[key]
     path = Path(checkpoint)
-    import json
 
     manifest = json.loads((path / "manifest.json").read_text())
-    architecture = manifest["architecture"]  # "resnet-c{channels}-b{blocks}"
-    channels, blocks = architecture.removeprefix("resnet-c").split("-b")
-    model = PolicyValueNet(PolicyValueNetConfig(channels=int(channels), blocks=int(blocks)))
+    model = _model_from_manifest(manifest, model_registry)
     model.load_state_dict(load_file(str(path / "weights.safetensors")))
     resolved = torch.device(device)
     evaluator = NetEvaluator(model, resolved, batch_size=batch_size)
     _CACHE[key] = evaluator
     return evaluator
+
+
+def _model_from_manifest(manifest: dict[str, Any], model_registry):
+    """Rebuild the architecture a checkpoint was trained with.
+
+    Prefers `architecture_spec`, which records the registry name and the
+    config outright. Falls back to parsing the human-readable
+    `architecture` string for checkpoints written before that field
+    existed — all of which are ResNets, because it was the only
+    architecture at the time.
+    """
+    spec = manifest.get("architecture_spec")
+    if spec is not None:
+        return model_registry.build_from_spec(spec)
+
+    architecture = manifest["architecture"]
+    if not architecture.startswith("resnet-c"):
+        raise ValueError(
+            f"checkpoint records architecture {architecture!r} but no "
+            "`architecture_spec`; re-export it with a current "
+            "quantik-models to make it loadable"
+        )
+    channels, blocks = architecture.removeprefix("resnet-c").split("-b")
+    return model_registry.build(
+        "resnet", preset="small", channels=int(channels), blocks=int(blocks)
+    )
 
 
 def build_agent(spec: dict[str, Any]):
