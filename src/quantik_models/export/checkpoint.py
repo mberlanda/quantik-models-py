@@ -33,6 +33,7 @@ from safetensors.torch import save_file
 from torch import nn
 from torch.export import Dim
 
+from ..model import registry
 from ..model.policy_value_net import parameter_count
 from ..model.spec import BOARD_SIZE, INPUT_PLANES
 
@@ -179,6 +180,11 @@ def export_checkpoint(
         "calibration_report": _REPORT_NAME,
         "parameter_count": parameter_count(model),
         "architecture": model.architecture,
+        # `architecture` is the human-readable name; this is the machine
+        # one. `resnet-c128-b6` and `mlp-h455-b4` do not share a grammar,
+        # so a loader that parsed the string would be guessing at which
+        # architecture it was even looking at.
+        "architecture_spec": registry.spec_for(model),
         "legal_action_mask_required": True,
     }
 
