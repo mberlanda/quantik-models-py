@@ -4,6 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
+from boards import random_tensors
+
 from quantik_models.data.dataset import (
     LoadedTrainingData,
     expand_legal_mask,
@@ -14,7 +16,7 @@ from quantik_models.data.dataset import (
 
 def _write_view(path: Path, n: int, seed: int) -> None:
     rng = np.random.default_rng(seed)
-    tensors = rng.random((n, 9, 4, 4), dtype=np.float32)
+    tensors = random_tensors(n, seed=seed)
     policy = rng.random((n, 64), dtype=np.float32)
     policy /= policy.sum(axis=1, keepdims=True)
     np.savez_compressed(

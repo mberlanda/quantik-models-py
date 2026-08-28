@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Literal, Sequence
 
 import numpy as np
+import numpy.typing as npt
+
+from ..env import fastboard as fb
 
 from .materialize import load_npz
 
@@ -29,6 +32,39 @@ def expand_legal_mask(mask: np.ndarray) -> np.ndarray:
     return ((mask[:, None] >> bits[None, :]) & np.uint64(1)).astype(np.bool_)
 
 
+def boards_from_tensors(tensors: np.ndarray) -> npt.NDArray[np.uint16]:
+    """Recover `(n, 8)` uint16 bitboards from `(n, 9, 4, 4)` encodings.
+
+    Inverts `fastboard.encode_tensors`, which is **mover-relative**:
+    channels 0-3 hold the side-to-move's shapes and 4-7 the opponent's, so
+    the plane order swaps with parity. Channel 8 carries the side to move
+    and is what tells us which way round this row is.
+
+    Note that `quantik_core.ml_data.qfen_to_tensor` orders the same nine
+    planes by colour instead. Both call themselves `tensor-board.v1`; this
+    inverse matches the one the trainer actually feeds the network.
+    """
+    tensors = np.asarray(tensors)
+    n = len(tensors)
+    player = (tensors[:, 8].reshape(n, -1)[:, 0] > 0.5).astype(np.int64)
+
+    planes = tensors[:, :8].reshape(n, 8, 16) > 0.5
+    weights = 1 << np.arange(16, dtype=np.int64)
+    packed = (planes * weights).sum(axis=2).astype(np.uint16)
+
+    rows = np.arange(n)
+    order = np.concatenate(
+        [
+            (player[:, None] * 4) + np.arange(4),
+            ((1 - player)[:, None] * 4) + np.arange(4),
+        ],
+        axis=1,
+    )
+    boards = np.zeros((n, 8), dtype=np.uint16)
+    boards[rows[:, None], order] = packed
+    return boards
+
+
 def split_assignments(
     tensors: np.ndarray,
     policy_target: np.ndarray,
@@ -37,27 +73,42 @@ def split_assignments(
     train_pct: int = 80,
     val_pct: int = 10,
 ) -> np.ndarray:
-    """Deterministic per-row split labels.
+    """Deterministic per-row split labels, keyed on the canonical position.
 
-    bucket = (first 8 big-endian bytes of sha1(tensor_bytes || policy_bytes
-    || tag)) mod 100:
-    [0, train_pct) -> train, [train_pct, train_pct+val_pct) -> val,
-    the rest -> test.
+    The bucket is derived from `canonical_keys`, so every row describing the
+    same game position lands on the same side of the split no matter how it
+    was reached: a rotation of it, a relabelling of its shapes, a different
+    policy target, or a different source corpus.
+
+    This replaces a hash of `tensor_bytes || policy_bytes || source_tag`,
+    which leaked in two ways. Symmetric images of one position have
+    different tensor bytes, so a rotated copy of a training board could sit
+    in validation; and the same position carrying different targets across
+    merged corpora split independently. Both inflate validation scores by
+    letting the model be tested on what it memorised.
+
+    `policy_target` and `source_tags` are kept in the signature — the row
+    count is validated against them — but no longer contribute to the
+    bucket. That is the point: membership must depend on the position and
+    nothing else.
     """
     if not 0 < train_pct + val_pct < 100:
         raise ValueError("train_pct + val_pct must be in (0, 100)")
-    labels = np.empty(len(source_tags), dtype=object)
-    for i, tag in enumerate(source_tags):
-        digest = hashlib.sha1(
-            tensors[i].tobytes() + policy_target[i].tobytes() + tag.encode("utf-8")
-        ).digest()
-        bucket = int.from_bytes(digest[:8], "big") % 100
-        if bucket < train_pct:
-            labels[i] = "train"
-        elif bucket < train_pct + val_pct:
-            labels[i] = "val"
-        else:
-            labels[i] = "test"
+    if len(tensors) != len(source_tags) or len(tensors) != len(policy_target):
+        raise ValueError("tensors, policy_target and source_tags must align")
+
+    keys = fb.canonical_keys(boards_from_tensors(tensors))
+    # Same 24-bit spread as `exact_corpus.split_by_key`, so both entry
+    # points agree on which positions are held out.
+    spread = (keys * np.uint64(0x9E3779B97F4A7C15)) >> np.uint64(40)
+    bucket = (spread * np.uint64(100)) >> np.uint64(24)
+
+    labels = np.empty(len(tensors), dtype=object)
+    labels[:] = "test"
+    labels[bucket < np.uint64(train_pct)] = "train"
+    in_val = (bucket >= np.uint64(train_pct)) & (bucket < np.uint64(train_pct + val_pct))
+    labels[in_val] = "val"
+    return labels
     return labels.astype(np.str_)
 
 
