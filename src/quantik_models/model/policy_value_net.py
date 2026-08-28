@@ -30,6 +30,12 @@ PRESETS: dict[str, PolicyValueNetConfig] = {
     "smoke": PolicyValueNetConfig(channels=16, blocks=2),
     # Laptop baseline (single-digit MB).
     "small": PolicyValueNetConfig(channels=64, blocks=4),
+    # The published `resnet-c128-b6`, 1,786,823 parameters. It had only ever
+    # been reachable as `--preset small --channels 128 --blocks 6`, which
+    # meant the project's flagship size was an incantation rather than a
+    # name — and left the other architectures with nothing to match against
+    # by preset.
+    "medium": PolicyValueNetConfig(channels=128, blocks=6),
     # Sized so float32 safetensors lands in the 50-100 MB contract
     # envelope (~15.4M parameters ~= 61 MB).
     "target": PolicyValueNetConfig(channels=256, blocks=13),

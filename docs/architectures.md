@@ -54,8 +54,8 @@ architecture, the registry resolves it.
 ```python
 from quantik_models.model import registry
 
-registry.architectures()          # ('resnet',)
-registry.presets("resnet")        # ('small', 'smoke', 'target')
+registry.architectures()          # ('mlp', 'resnet')
+registry.presets("resnet")        # ('medium', 'small', 'smoke', 'target')
 
 model = registry.build("resnet", preset="small")
 model = registry.build("resnet", preset="small", channels=128, blocks=6)
@@ -142,10 +142,12 @@ convolution to 1 channel then a small MLP to a tanh value.
 |---|---|---|---|
 | `smoke` | 16 | 2 | 13,991 |
 | `small` | 64 | 4 | 304,711 |
+| `medium` | 128 | 6 | 1,786,823 |
 | `target` | 256 | 13 | 15,374,023 |
 
-`resnet-c128-b6` (1,786,823 parameters) is the published model and is
-reached with `--preset small --channels 128 --blocks 6`.
+`resnet-c128-b6` is the published model, and `medium` is it. It used to be
+reachable only as `--preset small --channels 128 --blocks 6`, which made
+the project's flagship size an incantation rather than a name.
 
 See `decisions/0001-architecture-lineup.md` for which architectures are in
 the comparison, which were declined and why, and how the comparison is
@@ -159,3 +161,26 @@ game, and why alternatives have to be justified on different grounds.
 
 See `policy-value-training-paper.md` for how it is trained and why it is
 distilled from search rather than learned from self-play.
+
+### `mlp` — the control
+
+Flattened dense trunk: the `(9, 4, 4)` input becomes 144 features and goes
+through pre-activation residual dense blocks, with the same two heads. It
+throws spatial structure away deliberately, to make "convolution is worth
+having on a 4x4 board" a falsifiable claim rather than an assumption.
+
+| preset | hidden | blocks | parameters | matched against |
+|---|---|---|---|---|
+| `smoke` | 32 | 1 | 11,137 | CI only |
+| `small` | 178 | 4 | 305,285 | `resnet-c64-b4` (+0.2%) |
+| `medium` | 455 | 4 | 1,788,343 | `resnet-c128-b6` (+0.1%) |
+
+Widths are solved against the ResNet rather than chosen for roundness —
+dense parameters grow as `2 * blocks * hidden^2`, so the matching width is
+never a round number, and `tests/test_parameter_matching.py` keeps it
+honest. A control carrying twice the incumbent's capacity would measure
+capacity rather than architecture, which is what the first draft of these
+presets did.
+
+See `architecture-mlp.md` for the layer-by-layer account and for what this
+network cannot tell us.
