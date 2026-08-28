@@ -22,7 +22,7 @@ from typing import Any, Callable, Protocol
 
 from torch import nn
 
-from . import policy_value_net
+from . import mlp_net, policy_value_net
 
 
 class PolicyValueModel(Protocol):
@@ -54,6 +54,13 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         config_type=policy_value_net.PolicyValueNetConfig,
         presets=policy_value_net.PRESETS,
         summary="Convolutional residual trunk; the project's incumbent.",
+    ),
+    "mlp": ArchitectureEntry(
+        build=mlp_net.MLPNet,
+        config_type=mlp_net.MLPNetConfig,
+        presets=mlp_net.PRESETS,
+        summary="Flattened dense trunk; the control for whether 4x4 spatial "
+        "structure is worth modelling at all.",
     ),
 }
 
