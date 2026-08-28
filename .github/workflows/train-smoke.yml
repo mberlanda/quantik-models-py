@@ -103,7 +103,7 @@ jobs:
       - name: Install quantik-models with training extra
         run: |
           python -m pip install --upgrade pip
-          pip install -e "quantik-models-py[dev,torch]" \
+          pip install -e "quantik-models-py[dev,torch,onnx]" \
             --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Run tiny pipeline
@@ -124,6 +124,36 @@ jobs:
         run: |
           python quantik-models-py/examples/inspect_checkpoint.py \
             "$OUT/checkpoint" --npz "$OUT/training-view-selfplay.npz"
+        env:
+          PYTHONPATH: ${{ github.workspace }}/quantik-core-py/src
+
+      - name: Verify the ONNX export matches torch
+        run: |
+          python - <<'PY'
+          import json, pathlib, numpy as np, torch, onnxruntime as ort
+          from safetensors.torch import load_file
+          from quantik_models.model import registry
+
+          out = pathlib.Path("${{ env.OUT }}/checkpoint")
+          manifest = json.loads((out / "manifest.json").read_text())
+          print("architecture:", manifest["architecture"])
+          assert manifest["onnx_export"] == "model.onnx", manifest
+          # Weights must live inside the graph, or onnx_hash covers only
+          # part of what a runtime loads.
+          assert not (out / "model.onnx.data").exists()
+
+          model = registry.build("resnet", preset="smoke").eval()
+          model.load_state_dict(load_file(out / "weights.safetensors"))
+          sample = torch.randn(4, 9, 4, 4)
+          with torch.no_grad():
+              want_policy, want_value = model(sample)
+          session = ort.InferenceSession(
+              str(out / "model.onnx"), providers=["CPUExecutionProvider"])
+          got_policy, got_value = session.run(None, {"board": sample.numpy()})
+          np.testing.assert_allclose(got_policy, want_policy.numpy(), atol=1e-5)
+          np.testing.assert_allclose(got_value, want_value.numpy(), atol=1e-5)
+          print("onnx matches torch on a trained checkpoint")
+          PY
         env:
           PYTHONPATH: ${{ github.workspace }}/quantik-core-py/src
 
