@@ -22,7 +22,7 @@ from typing import Any, Callable, Protocol
 
 from torch import nn
 
-from . import constraint_pool_net, mlp_net, policy_value_net
+from . import attention_net, constraint_pool_net, mlp_net, policy_value_net
 
 
 class PolicyValueModel(Protocol):
@@ -68,6 +68,13 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         presets=constraint_pool_net.PRESETS,
         summary="Message passing over Quantik's twelve constraint groups; "
         "the game's rule structure written into the wiring.",
+    ),
+    "attn": ArchitectureEntry(
+        build=attention_net.AttentionNet,
+        config_type=attention_net.AttentionNetConfig,
+        presets=attention_net.PRESETS,
+        summary="Transformer encoder over the sixteen cells; the weaker "
+        "form of the constraint hypothesis, with no prior.",
     ),
 }
 
