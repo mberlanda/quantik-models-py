@@ -102,18 +102,63 @@ A game does not: one bad move in a sharp opening position decides it, and a
 hundred correct moves in a position already won change nothing. `cpool`
 spends its advantage where the game is no longer in doubt.
 
-## What this does not establish
+## Start depth decides the ranking
 
-- **The arena does not rank `cpool` against `resnet`.** 403–397 is not a
-  result. It says the two are close from ply-3 starts, nothing more.
-- **One start depth.** Everything here is `--start-plies 3`. A deeper start
-  would hand the game to the region `cpool` dominates, and there is a real
-  chance the ordering flips. That is a cheap experiment and it has not been
-  run.
+The paragraph above used to say a deeper start "would hand the game to the
+region `cpool` dominates, and there is a real chance the ordering flips.
+That is a cheap experiment and it has not been run." It has been run now,
+at 300 games per ordered pairing, and the ordering does flip.
+
+| start ply | 1st | 2nd | 3rd |
+|---|---|---|---|
+| 3 | `resnet` 53.7% | `cpool` 49.9% | `mlp` 46.4% |
+| 6 | **`cpool` 53.9%** | `resnet` 48.8% | `mlp` 47.2% |
+| 9 | `cpool` 51.2% | `resnet` 50.9% | `mlp` 47.9% |
+
+The head-to-head that matters, `cpool` versus `resnet`, with Wilson 95%
+intervals:
+
+| start ply | record | rate | 95% CI | |
+|---|---|---|---|---|
+| 3 | 397–403 | 49.6% | [46.2%, 53.1%] | not significant |
+| 6 | **328–272** | **54.7%** | [50.7%, 58.6%] | **significant** |
+| 9 | 299–301 | 49.8% | [45.8%, 53.8%] | not significant |
+
+And `resnet` versus `mlp`, which moves the opposite way:
+
+| start ply | record | rate | 95% CI | |
+|---|---|---|---|---|
+| 3 | **456–344** | **57.0%** | [53.5%, 60.4%] | **significant** |
+| 6 | 314–286 | 52.3% | [48.3%, 56.3%] | not significant |
+| 9 | 310–290 | 51.7% | [47.7%, 55.6%] | not significant |
+
+**Each network's advantage is real and lives at a specific depth.** The
+ResNet's is in the opening: give it ply-3 starts and it beats the MLP
+decisively, and holds `cpool` to a draw. `cpool`'s is in the midgame: start
+at ply 6 and it beats the ResNet significantly, having been unable to at
+ply 3. By ply 9 nothing is significant at all — the positions are close
+enough to decided that move quality stops mattering.
+
+This is the same finding as `shift-evaluation.md`, arrived at by a
+completely different route. Accuracy said `resnet` is the better shallow
+evaluator and `cpool` the better deep one; the arena says whoever is
+stronger *in the region the game is actually fought in* wins. Two
+independent measurements, one story.
+
+It also means **"which architecture is better" is not a well-posed
+question here.** It depends on where play starts, which is a property of
+the deployment and not of the model. An engine that opens from an empty
+board wants the ResNet; one resuming a midgame position wants `cpool`.
+
+## What this still does not establish
+
 - **These are `net-policy` agents** — one forward pass, argmax, no search.
   Search would let a better value head do work that pure move choice
-  cannot, which is exactly `cpool`'s strength. `net-mcts` over the same
-  three is the obvious follow-up.
+  cannot, which is `cpool`'s strength. `net-mcts` over the same three is
+  the obvious follow-up, and it is the experiment most likely to change
+  the ranking again.
 - **No baseline.** None of these played the minimax or MCTS engines, so
-  "53.7%" is a rate against the other two networks, not against the
-  project's incumbent engines.
+  every rate here is relative to the other two networks.
+- **Random starts, not played ones.** `--start-plies N` plays N *random*
+  legal moves. Positions an engine would actually reach at ply 6 are a
+  different, narrower distribution, and the numbers could differ there.

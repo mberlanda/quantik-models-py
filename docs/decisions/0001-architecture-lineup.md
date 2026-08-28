@@ -180,11 +180,11 @@ evaluations ran; `shift-evaluation.md` has the detail.
 
 And a third, 2,400 games of autoplay (`autoplay.md`):
 
-| model | arena win rate | vs the others |
-|---|---|---|
-| `resnet-c128-b6` | **53.7%** | beats `mlp` 57.0% (significant) |
-| `cpool-c191-b6` | 49.9% | ties both |
-| `mlp-h455-b4` | 46.4% | — |
+| start ply | 1st | 2nd | 3rd |
+|---|---|---|---|
+| 3 | `resnet` 53.7% | `cpool` 49.9% | `mlp` 46.4% |
+| 6 | **`cpool` 53.9%** | `resnet` 48.8% | `mlp` 47.2% |
+| 9 | `cpool` 51.2% | `resnet` 50.9% | `mlp` 47.9% |
 
 Three things this settles, against what the section above predicted:
 
@@ -196,12 +196,22 @@ so `ConstraintPoolNet` is judged against the ResNet as planned.
 **ConstraintPoolNet wins clearly**, which by the second branch promotes the
 hypergraph and recurrent variants from "written down" to "next".
 
-**The arena says none of it predicts playing strength.** `cpool` leads
-both accuracy tables and wins no games — 401-399 against the MLP it beats
-by 6.6 accuracy points. Games started at ply 3 are decided in the region
-where `cpool` is weakest, and accuracy counts every position equally where
-a game does not. Any future architecture claim in this project needs a
-game result, not only a validation number.
+**The arena says the ranking depends on where the game is played.** At
+ply-3 starts the ResNet leads and `cpool` beats nobody. At ply-6 starts
+`cpool` beats the ResNet significantly (328-272, 54.7%, CI [50.7%, 58.6%])
+and the ResNet's edge over the MLP evaporates. At ply-9 starts nothing is
+significant — the positions are close enough to decided that move quality
+stops mattering.
+
+Each network's advantage is real and lives at a specific depth, and the
+two measurements agree: accuracy said the ResNet is the better shallow
+evaluator and `cpool` the better deep one; the arena says whoever is
+stronger where the game is fought wins it.
+
+So **"which architecture is better" is not well posed for this project**.
+It depends on where play starts, which is a property of the deployment.
+Any future architecture claim needs a game result at a stated start depth,
+not only a validation number.
 
 **And the third branch happened too, which qualifies the second.** `cpool`
 wins the IID holdout and the deep probes and *loses the shallow ones*. The
