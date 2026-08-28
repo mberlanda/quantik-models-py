@@ -178,6 +178,14 @@ evaluations ran; `shift-evaluation.md` has the detail.
 | `mlp-h455-b4` | 0.9516 | 0.8843 | 0.9578 |
 | `cpool-c191-b6` | **0.9851** | 0.9092 | **0.9883** |
 
+And a third, 2,400 games of autoplay (`autoplay.md`):
+
+| model | arena win rate | vs the others |
+|---|---|---|
+| `resnet-c128-b6` | **53.7%** | beats `mlp` 57.0% (significant) |
+| `cpool-c191-b6` | 49.9% | ties both |
+| `mlp-h455-b4` | 46.4% | — |
+
 Three things this settles, against what the section above predicted:
 
 **The MLP loses, so the spatial prior is real.** At matched parameters it
@@ -188,7 +196,14 @@ so `ConstraintPoolNet` is judged against the ResNet as planned.
 **ConstraintPoolNet wins clearly**, which by the second branch promotes the
 hypergraph and recurrent variants from "written down" to "next".
 
-**But the third branch happened too, and it qualifies the second.** `cpool`
+**The arena says none of it predicts playing strength.** `cpool` leads
+both accuracy tables and wins no games — 401-399 against the MLP it beats
+by 6.6 accuracy points. Games started at ply 3 are decided in the region
+where `cpool` is weakest, and accuracy counts every position equally where
+a game does not. Any future architecture claim in this project needs a
+game result, not only a validation number.
+
+**And the third branch happened too, which qualifies the second.** `cpool`
 wins the IID holdout and the deep probes and *loses the shallow ones*. The
 prediction attached to that pattern — that the wiring "helps memorise the
 trained distribution rather than generalise the rule" — is wrong as stated:

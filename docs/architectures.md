@@ -154,6 +154,10 @@ on 7,800 exactly-solved positions sharing no canonical key with the corpus:
 Report both. On this lineup the two rank the architectures differently in
 the shallow plies, which is the regime an engine opens from.
 
+And then a third, because neither predicts playing strength: `docs/autoplay.md`
+has the arena result, where the architecture leading both accuracy tables
+wins no games.
+
 ## Before a long run: the preflight
 
 ```bash
