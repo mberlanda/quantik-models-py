@@ -162,6 +162,52 @@ def evaluate(checkpoint: Path, probe: ProbeSet, device: str = "cpu") -> Report:
 SHALLOW = (4, 5, 6)
 
 
+def group_occupancy(boards: np.ndarray) -> np.ndarray:
+    """How many of the twelve constraint groups hold at least one piece.
+
+    At a fixed ply this is an inverse measure of how *concentrated* the
+    pieces are: every piece belongs to three groups, so `3 * ply` group
+    memberships spread over more groups means fewer pieces in each. Four
+    pieces touching all twelve groups leaves one piece per group; four
+    pieces touching five groups leaves nearly two and a half.
+
+    That distinction is invisible to ply alone, and it turns out to be
+    where the whole `cpool`-versus-`resnet` difference lives.
+    """
+    from ..model.spec import constraint_groups
+
+    masks = np.array(
+        [sum(1 << cell for cell in group) for group in constraint_groups()],
+        dtype=np.uint16,
+    )
+    occupied = fb.occupancy(boards)
+    return ((occupied[:, None] & masks[None, :]) != 0).sum(axis=1)
+
+
+def mcnemar_exact(a_only: int, b_only: int) -> float:
+    """Two-sided exact McNemar p-value for two models on the same positions.
+
+    Paired, because both models answer the identical set of positions:
+    only the positions where they *disagree* carry information, and an
+    unpaired test throws that away and reports a wider interval than the
+    data supports.
+    """
+    from math import comb
+
+    n = a_only + b_only
+    if n == 0:
+        return 1.0
+    observed = comb(n, a_only) * 0.5**n
+    return min(
+        1.0,
+        sum(
+            comb(n, i) * 0.5**n
+            for i in range(n + 1)
+            if comb(n, i) * 0.5**n <= observed * (1 + 1e-12)
+        ),
+    )
+
+
 def render(reports: list[Report]) -> str:
     plies = sorted({p for r in reports for p in r.by_ply})
     lines = ["# Shift evaluation", ""]
@@ -252,3 +298,61 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def correct_mask(checkpoint: Path, probe: ProbeSet, device: str = "cpu") -> np.ndarray:
+    """Per-position "did it pick an outcome-optimal move", for pairing."""
+    from ..arena.registry import load_evaluator
+
+    priors, _ = load_evaluator(str(checkpoint), device)(
+        probe.boards, fb.legal_masks(probe.boards)
+    )
+    chosen = priors.argmax(axis=1)
+    return np.array(
+        [int(chosen[i]) in probe.optimal[i] for i in range(len(chosen))], dtype=bool
+    )
+
+
+def occupancy_split(
+    probe: ProbeSet,
+    a_correct: np.ndarray,
+    b_correct: np.ndarray,
+    plies: tuple[int, ...] = (4, 5, 6, 7),
+    min_positions: int = 30,
+) -> list[dict]:
+    """Compare two models within each ply, split at that ply's median occupancy.
+
+    Splitting *within* a ply is the point: occupancy and ply are strongly
+    correlated across the probe, so an unconditional occupancy split would
+    just be measuring ply again.
+    """
+    occupancy = group_occupancy(probe.boards)
+    rows = []
+    for ply in plies:
+        in_ply = probe.plies == ply
+        if not in_ply.any():
+            continue
+        median = int(np.median(occupancy[in_ply]))
+        for label, selector in (
+            (f"occ<={median}", occupancy[in_ply] <= median),
+            (f"occ>{median}", occupancy[in_ply] > median),
+        ):
+            index = np.flatnonzero(in_ply)[selector & probe.won[in_ply]]
+            if len(index) < min_positions:
+                continue
+            a, b = a_correct[index], b_correct[index]
+            a_only, b_only = int((a & ~b).sum()), int((~a & b).sum())
+            rows.append(
+                {
+                    "ply": ply,
+                    "bucket": label,
+                    "positions": len(index),
+                    "a_accuracy": float(a.mean()),
+                    "b_accuracy": float(b.mean()),
+                    "difference": float(a.mean() - b.mean()),
+                    "a_only": a_only,
+                    "b_only": b_only,
+                    "p_value": mcnemar_exact(a_only, b_only),
+                }
+            )
+    return rows

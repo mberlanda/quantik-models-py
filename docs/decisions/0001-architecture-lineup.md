@@ -224,10 +224,19 @@ the point where architecture is the binding constraint.
 That has a direct consequence for this lineup: **the comparison is a
 statement about the raw evaluator, not about the engine.** It is the right
 comparison for choosing what to train and what to publish, and the wrong
-one for predicting how a searching engine will play. `autoplay.md` records
-both, and names the control (`uniform-mcts`, the same search with no
-network) that separates "search washes out the differences" from "search
-does all the work".
+one for predicting how a searching engine will play.
+
+**The control settles what that means.** `uniform-mcts` — the same PUCT
+search at the same budget, with the network replaced by uniform priors and
+a value of zero — loses to all three networks 99.2%, 99.5% and 99.5% from
+ply-3 starts, seven games out of 1,200. Search is emphatically *not* doing
+the work: the network is worth nearly the entire game.
+
+So the honest statement is narrow rather than deflating. A 1.8M-parameter
+network is enormously better than no network; the *marginal difference
+between these three architectures* is below what a 128-simulation search
+can resolve. Architecture choice matters for the evaluator and is not
+currently measurable at the engine level with this search budget.
 
 **And the third branch happened too, which qualifies the second.** `cpool`
 wins the IID holdout and the deep probes and *loses the shallow ones*. The

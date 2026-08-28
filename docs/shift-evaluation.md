@@ -96,18 +96,35 @@ are entirely held out and it wins them clearly. What it does not do is
 **extrapolate to unseen plies**. Those are different failures, and only the
 second one is happening.
 
-## A hypothesis, offered as one
+## The shallow deficit is narrower than it looks
 
-At ply 4 the board holds four pieces across twelve constraint groups, so
-most groups are empty or near-empty and the pooled summaries carry little
-signal. A network whose every block routes information through those
-summaries has less to work with exactly where the board is sparsest, while
-a convolutional trunk reads the cells directly and degrades more gently.
+`cpool`'s ply-4 deficit is not spread across ply 4. Splitting each ply at
+its own median **group occupancy** — the number of the twelve constraint
+groups holding at least one piece — and testing paired with exact McNemar,
+because only the positions where the two models disagree carry information:
 
-This is consistent with the numbers and with the architecture, and it is
-**not tested**. It predicts that `cpool`'s advantage should track group
-occupancy rather than ply as such, which is checkable and has not been
-checked.
+| ply | bucket | n | `resnet` | `cpool` | difference | p |
+|---|---|---|---|---|---|---|
+| 4 | occ≤9 | 687 | 0.8967 | 0.8908 | −0.0058 | 0.74 |
+| 4 | **occ>9** | 231 | 0.8268 | 0.7273 | **−0.0996** | **0.0006** |
+| 5 | occ≤10 | 690 | 0.9232 | 0.9275 | +0.0043 | 0.79 |
+| 5 | **occ>10** | 301 | 0.9037 | 0.8439 | **−0.0598** | **0.0064** |
+| 6 | **occ>11** | 258 | 0.8953 | 0.9767 | **+0.0814** | **<0.0001** |
+
+At plies 4 and 5, `cpool` is statistically **tied** with the ResNet on
+low-occupancy positions and loses heavily on high-occupancy ones. It is not
+worse in the opening generally — it is worse on a specific, identifiable
+quarter of it, where the pieces are scattered thin, roughly one to a group.
+Those are also the positions every model finds hardest: the ResNet itself
+drops from 0.8967 to 0.8268 across the same split. `cpool` degrades faster
+on them.
+
+By ply 6 the effect reverses, and `cpool`'s advantage is *largest* on
+high-occupancy positions. `architecture-constraint-pool.md` has the full
+table and what it does and does not settle — including that the original
+one-line explanation offered for the shallow deficit was too simple, since
+no single "sparse groups carry no signal" story produces both signs.
+
 
 ## What this does not settle
 
