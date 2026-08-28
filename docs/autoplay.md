@@ -203,7 +203,41 @@ and none of these networks is contributing anything at this budget. If it
 loses clearly, the networks are contributing — and the differences
 *between* them are simply smaller than search can resolve.
 
-That run is in `runs/autoplay/control-p{3,6}/`.
+It loses overwhelmingly. 200 games per ordered pairing, four agents:
+
+| pairing | @ply3 | @ply6 |
+|---|---|---|
+| `resnet` vs `uniform` | **99.2%** *(397–3)* | **77.5%** *(310–90)* |
+| `cpool` vs `uniform` | **99.5%** *(398–2)* | **79.2%** *(317–83)* |
+| `mlp` vs `uniform` | **99.5%** *(398–2)* | **75.8%** *(303–97)* |
+| `cpool` vs `resnet` | 45.2% | 52.0% |
+| `cpool` vs `mlp` | 51.2% | 49.0% |
+| `mlp` vs `resnet` | 46.5% | 50.0% |
+
+All three networks beat the uniform control by a margin that is not close
+— from ply-3 starts they lose **seven games out of 1,200** between them.
+Meanwhile no network-versus-network pairing is significant at either
+depth.
+
+**So the deflating reading is the wrong one.** The network is not
+redundant under search; it is worth nearly the entire game. What is true is
+narrower and much less discouraging: *the marginal difference between
+these three architectures* is below what a 128-simulation search can
+resolve. A 1.8M-parameter network is enormously better than no network,
+and `cpool` is not measurably better than `resnet` once search runs.
+
+The ply-6 column is worth noting on its own. Uniform-MCTS climbs from 0.6%
+to 22.5% overall simply because starting deeper leaves fewer moves in which
+to go wrong — more evidence that these games are decided early, and that a
+result measured at one start depth says little about another.
+
+Two caveats on the control itself. `UniformEvaluator` returns a value of
+**zero** everywhere, so PUCT gets no leaf signal at all and reduces to
+visit-count exploration — it is a floor, not a competent baseline, and
+"99.5% against the floor" is not the same claim as "99.5% against
+minimax". And these leaderboard percentages differ from the three-agent
+run above because the field now includes a very weak player; the
+head-to-head records are the comparable numbers.
 
 ## What this still does not establish
 
