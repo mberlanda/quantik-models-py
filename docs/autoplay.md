@@ -40,6 +40,23 @@ Positions deduplicate on the **canonical key**, and anything the corpus
 already holds is dropped, because solving is the expensive step: about 5.5
 minutes per hundred positions at these depths on twelve threads.
 
+```bash
+# 3. fold them into the corpus a trainer reads
+python -m quantik_models.data.merge_corpus \
+  --corpus runs/oracle/corpus/exact-sampled.npz \
+  --solved runs/autoplay/lineup-p3/solved.jsonl \
+  --out runs/oracle/corpus/exact-sampled-v2.npz
+```
+
+The merge enforces the two invariants everything downstream assumes. **The
+probe stays held out** — exclusion is applied to the merged result, not
+only to the new rows, because solving a position also labels its children
+and a probe position can arrive as somebody's child without ever being
+sampled. That is exactly how sixteen probe positions reached the first
+corpus. And **one row per canonical position**, with policy-labelled rows
+winning the tie-break over value-only ones, so a position solved in one
+file and derived as a child in another is not counted twice.
+
 ### Deterministic agents need randomised starts
 
 `net-policy` takes the argmax with no temperature, so two games between the

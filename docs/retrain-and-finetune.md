@@ -25,7 +25,7 @@ started from someone else's weights is not evidence about its architecture
 
 Keeps the weights, trains everything. The natural move when the corpus
 grows — for instance after autoplay positions have been solved and folded
-in (`autoplay.md`).
+in with `python -m quantik_models.data.merge_corpus` (see `autoplay.md`).
 
 ```bash
 .venv/bin/python -m quantik_models.train.supervised \
