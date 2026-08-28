@@ -15,6 +15,9 @@ import torch
 from torch import Tensor, nn
 
 
+MODEL_FAMILY = "quantik-policy-value-resnet"
+
+
 @dataclass(frozen=True)
 class PolicyValueNetConfig:
     channels: int
@@ -77,6 +80,14 @@ class PolicyValueNet(nn.Module):
             nn.Linear(config.value_hidden, 1),
             nn.Tanh(),
         )
+
+    @property
+    def architecture(self) -> str:
+        return f"resnet-c{self.config.channels}-b{self.config.blocks}"
+
+    @property
+    def model_family(self) -> str:
+        return MODEL_FAMILY
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
         trunk = self.trunk(self.stem(x))
