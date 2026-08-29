@@ -160,8 +160,19 @@ def resolve_position(qfen: str, side_to_move: int, claimed: tuple[int, ...]) -> 
 class PlayService:
     """The models on disk, the opponents they make, and one move at a time."""
 
-    def __init__(self, models_dir: Path) -> None:
+    def __init__(
+        self,
+        models_dir: Path,
+        *,
+        opening_temperature: float = op.DEFAULT_OPENING_TEMPERATURE,
+        opening_plies: int = op.DEFAULT_OPENING_PLIES,
+    ) -> None:
         self.models_dir = Path(models_dir)
+        # Held on the service rather than read at each `refresh`, so a
+        # re-scan after a checkpoint is re-staged cannot quietly hand the
+        # roster back its defaults.
+        self.opening_temperature = opening_temperature
+        self.opening_plies = opening_plies
         # One lock covers agent construction *and* `select`. The agents,
         # the MCTS trees they build and `arena.registry`'s evaluator cache
         # are all shared mutable state, and the server this feeds is a
@@ -176,7 +187,14 @@ class PlayService:
 
     def refresh(self) -> None:
         models = reg.scan_models(self.models_dir)
-        roster = {opponent.opponent_id: opponent for opponent in op.roster(models)}
+        roster = {
+            opponent.opponent_id: opponent
+            for opponent in op.roster(
+                models,
+                temperature=self.opening_temperature,
+                temperature_plies=self.opening_plies,
+            )
+        }
         with self._lock:
             self._models = models
             self._opponents = roster

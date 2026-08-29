@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from . import SERVICE_VERSION
+from . import opponents as op
 from .server import lan_address, make_server, serve_forever
 from .service import PlayService
 
@@ -48,13 +49,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-store", action="store_true", help="serve moves but record nothing"
     )
+    parser.add_argument(
+        "--opening-temperature",
+        type=float,
+        default=op.DEFAULT_OPENING_TEMPERATURE,
+        help="how much the networks sample their opening moves; 0 makes every "
+        f"game against the same opponent identical (default: "
+        f"{op.DEFAULT_OPENING_TEMPERATURE})",
+    )
+    parser.add_argument(
+        "--opening-plies",
+        type=int,
+        default=op.DEFAULT_OPENING_PLIES,
+        help="plies the opening temperature applies to; past it the networks "
+        f"play their best move (default: {op.DEFAULT_OPENING_PLIES})",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    service = PlayService(args.models)
+    service = PlayService(
+        args.models,
+        opening_temperature=args.opening_temperature,
+        opening_plies=args.opening_plies,
+    )
     models = service.list_models()
     ready = [m for m in models if m["status"] == "ready"]
 
