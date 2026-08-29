@@ -87,9 +87,10 @@ def test_the_card_front_matter_carries_the_metadata_the_hub_indexes():
     )
     assert card.startswith("---\n")
     head = card.split("---", 2)[1]
-    # `mit`, lowercase: the Hub's license table is a fixed set of lowercase
-    # identifiers, and every licensed repo in this workspace is MIT.
-    assert "license: mit" in head
+    # The weights are CC BY-NC 4.0, not the MIT the code carries: every OSI
+    # licence permits royalty-free commercial use, which is the one thing
+    # this reserves. Lowercase, from the Hub's fixed table.
+    assert "license: cc-by-nc-4.0" in head
     assert "pipeline_tag: reinforcement-learning" in head
     assert "model-index:" in head and "0.9893" in head
     assert "  - cpool" in head
@@ -258,3 +259,37 @@ def test_stage_derives_the_repo_id_from_the_namespace(tmp_path, monkeypatch):
     checkpoint = write_checkpoint(tmp_path)
     out = hf.stage(checkpoint, tmp_path / "hub", namespace="an-org")
     assert "an-org/quantik-cpool-c191-b6" in (out / "README.md").read_text()
+
+
+def test_the_card_states_the_licence_split_rather_than_leaving_it_to_inference():
+    """A reader who sees MIT on the GitHub repository will otherwise assume
+    it covers the download. Weights and code are licensed differently here,
+    and that is exactly the kind of thing nobody checks."""
+    card = hf.model_card(MANIFEST)
+    assert "cc-by-nc-4.0" in card.split("---", 2)[1]
+    body = card.split("---", 2)[2]
+    assert "non-commercial" in body.lower()
+    assert "MIT" in body
+
+
+def test_the_card_carries_the_architecture_diagram():
+    """A Hub repo is read on its own, with no README beside it."""
+    card = hf.model_card(MANIFEST)
+    assert "```mermaid" in card
+    assert "constraint block" in card  # the cpool diagram specifically
+
+
+def test_every_registered_architecture_has_a_diagram_and_a_summary():
+    """A new architecture must not be able to ship a card that silently
+    omits its own diagram."""
+    from quantik_models.export import cards
+    from quantik_models.model import registry
+
+    for name in registry.architectures():
+        assert cards.diagram_for(name), f"{name} has no diagram"
+        assert cards.summary_for(name), f"{name} has no summary"
+
+
+def test_the_card_links_the_project_writeup():
+    card = hf.model_card(MANIFEST)
+    assert "mauroberlanda.substack.com/t/quantik" in card

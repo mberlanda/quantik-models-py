@@ -24,10 +24,11 @@ OUT="$1"; shift
 PYTHON="${PYTHON:-.venv/bin/python}"
 # Both default inside the module; named here so a run is self-describing.
 NAMESPACE="${QUANTIK_HF_NAMESPACE:-brpoplpush}"
-# Lowercase `mit`: the Hub takes its licence identifier from a fixed table,
-# and every licensed repository in this workspace is MIT. The module default
-# is the same value — repeated here only so a run is self-describing.
-LICENSE="${HF_LICENSE:-mit}"
+# CC BY-NC 4.0 for the weights, MIT for the code that produced them. Not an
+# OSI licence, and the card says so: every OSI licence permits royalty-free
+# commercial use, which is the one thing this reserves. The module default is
+# the same value — repeated here only so a run is self-describing.
+LICENSE="${HF_LICENSE:-cc-by-nc-4.0}"
 # The evaluation the model-index numbers are read from. Pointing this at a
 # stale directory is the one way to publish a card that describes a
 # checkpoint other than the one beside it.
