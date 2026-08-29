@@ -108,6 +108,16 @@ class Report:
     parameter_count: int
     by_ply: dict[int, Row] = field(default_factory=dict)
 
+    @property
+    def run_name(self) -> str:
+        """The training run this checkpoint came from — `swept-cpool`.
+
+        `runs/train/<run>/best` -> `<run>`, with `best`/`final` dropped
+        because they are the same word for every run and carry nothing.
+        """
+        parts = [p for p in Path(self.checkpoint).parts if p not in ("best", "final")]
+        return parts[-1] if parts else self.checkpoint
+
     def overall(self, plies: tuple[int, ...] | None = None) -> Row:
         rows = [r for p, r in self.by_ply.items() if plies is None or p in plies]
         return Row(
@@ -216,18 +226,29 @@ def render(reports: list[Report]) -> str:
         "training corpus. Accuracy is over positions the mover provably wins."
     )
     lines.append("")
+    # Label by run when two checkpoints share an architecture. Comparing a
+    # model against a retrained version of itself is a normal thing to do
+    # here, and a table with two identically-named columns is unreadable —
+    # worse, it looks fine.
+    names = [r.architecture for r in reports]
+    labels = [
+        f"{r.architecture} ({r.run_name})" if names.count(r.architecture) > 1
+        else r.architecture
+        for r in reports
+    ]
+
     lines.append("| model | params | shallow (4-6) | deep (7-12) | all | value MAE | value sign |")
     lines.append("|---|---|---|---|---|---|---|")
     deep = tuple(p for p in plies if p not in SHALLOW)
-    for r in reports:
+    for label, r in zip(labels, reports):
         s, d, a = r.overall(SHALLOW), r.overall(deep), r.overall()
         lines.append(
-            f"| `{r.architecture}` | {r.parameter_count:,} | {s.accuracy:.4f} | "
+            f"| `{label}` | {r.parameter_count:,} | {s.accuracy:.4f} | "
             f"{d.accuracy:.4f} | {a.accuracy:.4f} | {a.value_mae:.4f} | {a.value_sign:.4f} |"
         )
 
     lines += ["", "## Accuracy by ply", "", "| ply | " + " | ".join(
-        f"`{r.architecture}`" for r in reports) + " |"]
+        f"`{label}`" for label in labels) + " |"]
     lines.append("|---" * (len(reports) + 1) + "|")
     for ply in plies:
         cells = " | ".join(f"{r.by_ply[ply].accuracy:.4f}" for r in reports)

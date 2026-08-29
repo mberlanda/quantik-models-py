@@ -229,6 +229,13 @@ The rule should be a budget defined by convergence — train until validation
 stops improving, with a generous cap — rather than by a fixed epoch count
 inherited from whichever architecture happened to be first.
 
+**And there is now a result that depends on it.** `corpus-v3.md` records a
+model whose deep-band accuracy fell 0.0047 (p = 0.033) on a 10% larger
+corpus given the same sixteen epochs — which is ~10% fewer gradient steps per
+position, and the leading suspect. Train-minus-validation top-1 is under one
+point for every model in this family, so overfitting is not the constraint
+and more epochs is low-risk.
+
 **The mechanism now exists**: `--patience N` stops when the combined
 validation loss has not improved for N consecutive epochs, and `--epochs`
 becomes the cap. It defaults to off, so every run published above still

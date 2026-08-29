@@ -125,3 +125,35 @@ def test_overall_aggregates_only_the_requested_plies(tmp_path) -> None:
     shallow = report.overall((4,))
     assert shallow.total == int((probe.plies == 4).sum())
     assert shallow.total < report.overall().total
+
+
+def test_reports_are_labelled_by_run_when_the_architecture_repeats():
+    """Comparing a model against a retrained version of itself is normal
+    here, and two identically-named columns are unreadable — worse, the
+    table looks perfectly fine."""
+    from quantik_models.eval.shift import Report, Row
+
+    def report(checkpoint):
+        r = Report(checkpoint=checkpoint, architecture="cpool-c191-b6", parameter_count=1)
+        for ply in (4, 5, 6, 7):
+            r.by_ply[ply] = Row(ply=ply, won_positions=1, correct=1, value_abs_error=0.0, value_sign_correct=1, total=1)
+        return r
+
+    a = report("runs/train/swept-cpool/best")
+    b = report("runs/train/v3-cpool/best")
+    assert a.run_name == "swept-cpool" and b.run_name == "v3-cpool"
+
+    md = shift.render([a, b])
+    assert "cpool-c191-b6 (swept-cpool)" in md
+    assert "cpool-c191-b6 (v3-cpool)" in md
+
+
+def test_a_single_report_is_not_cluttered_with_its_run_name():
+    from quantik_models.eval.shift import Report, Row
+
+    r = Report(checkpoint="runs/train/swept-cpool/best", architecture="cpool-c191-b6", parameter_count=1)
+    for ply in (4, 5):
+        r.by_ply[ply] = Row(ply=ply, won_positions=1, correct=1, value_abs_error=0.0, value_sign_correct=1, total=1)
+    md = shift.render([r])
+    assert "`cpool-c191-b6`" in md
+    assert "swept-cpool" not in md

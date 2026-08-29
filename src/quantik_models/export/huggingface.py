@@ -32,6 +32,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from . import cards
 from .digest import file_digest
 
 __all__ = [
@@ -75,7 +76,15 @@ REPO_PREFIX = "quantik"
 # lowercase — `mit`, not `MIT`. Every licensed repository in this workspace is
 # MIT, and a card asserting a licence the source tree does not carry is worse
 # than no card at all.
-DEFAULT_LICENSE = "mit"
+# CC BY-NC 4.0 for the *weights*. Deliberately not an OSI licence and the
+# card says so: every OSI-approved licence permits royalty-free commercial
+# use, which is the one thing this is meant to reserve. Free for research,
+# teaching and non-commercial use with attribution; commercial use is by
+# separate agreement. The *code* that produced these weights stays MIT — a
+# split licence between code and model is normal and worth being explicit
+# about, because a reader who sees MIT on the repository will otherwise
+# assume it covers the download.
+DEFAULT_LICENSE = "cc-by-nc-4.0"
 
 
 def repo_name_for(architecture: str, prefix: str = REPO_PREFIX) -> str:
@@ -370,6 +379,41 @@ def _usage_section(
     return lines
 
 
+def _licence_section(license_id: str) -> list[str]:
+    """Weights and code are licensed differently. Say so.
+
+    A reader who sees MIT on the GitHub repository will otherwise assume it
+    covers the download, and a licence mismatch is exactly the kind of thing
+    nobody checks until it matters.
+    """
+    lines = ["## Licence", ""]
+    if license_id == "cc-by-nc-4.0":
+        lines += [
+            "**The weights in this repository are CC BY-NC 4.0.** Free to "
+            "use, share and adapt for research, teaching and any other "
+            "non-commercial purpose, with attribution. **Commercial use "
+            "requires a separate agreement** — open an issue on the source "
+            "repository or contact the author.",
+            "",
+            "This is deliberately not an OSI-approved open-source licence. "
+            "Every OSI licence permits royalty-free commercial use, which is "
+            "the one thing this reserves.",
+            "",
+            "**The code is separate and more permissive.** `quantik-models` "
+            "and `quantik-core` are MIT, so the training pipeline, the rules "
+            "engine and the evaluation harness carry no such restriction — "
+            "only these weights do.",
+            "",
+        ]
+    else:
+        lines += [
+            f"The weights in this repository are `{license_id}`. The code "
+            "that produced them (`quantik-models`, `quantik-core`) is MIT.",
+            "",
+        ]
+    return lines
+
+
 def model_card(
     manifest: dict[str, Any],
     *,
@@ -413,7 +457,30 @@ def model_card(
         "This model predicts, for a given position, which move an exact "
         "solver would play (policy) and who is winning (value).",
         "",
+        cards.PROJECT,
     ]
+
+    arch_key = architecture.split("-", 1)[0]
+    summary = cards.summary_for(arch_key)
+    diagram = cards.diagram_for(arch_key)
+    if summary or diagram:
+        lines += ["## Architecture", ""]
+        if summary:
+            lines += [summary, ""]
+        if diagram:
+            lines += [diagram, ""]
+        spec = manifest.get("architecture_spec", {}).get("config", {})
+        if spec:
+            lines += ["| | |", "|---|---|"]
+            lines += [f"| {k} | {v} |" for k, v in sorted(spec.items())]
+            lines += [
+                f"| parameters | {manifest['parameter_count']:,} |",
+                "",
+                "Every architecture in this family is matched to within 1.2% "
+                "on parameter count, so a comparison between them is about "
+                "the design and not about capacity.",
+                "",
+            ]
 
     if metrics:
         lines += ["## Results", ""] + _results_table(metrics) + [""]
@@ -493,6 +560,8 @@ def model_card(
         lines += ["## Source", ""]
         lines += [f"- {label}: {url}" for label, url in links.items()]
         lines.append("")
+
+    lines += _licence_section(license_id)
 
     return header + "\n".join(lines) + ("\n" + body.strip() + "\n" if body.strip() else "")
 
