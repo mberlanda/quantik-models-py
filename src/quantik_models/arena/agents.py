@@ -44,6 +44,40 @@ def _state(board: Board) -> State:
     return State(tuple(int(v) for v in board))
 
 
+def _ply(board: Board) -> int:
+    return int(fb.popcount(fb.occupancy(board[None, :]))[0])
+
+
+def _sample(weights: np.ndarray, temperature: float, seed: int) -> int:
+    """Pick an index from `weights` at `temperature`, or its argmax at 0.
+
+    `weights` is a non-negative score per action — MCTS visit counts, or
+    policy priors — already zero everywhere illegal, so an action with a
+    zero score can never be drawn and the legality check upstream stays
+    intact.
+
+    The exponent is taken on weights divided by their maximum rather than
+    on the raw scores. Both forms are proportional and so describe the same
+    distribution, but the raw one overflows: `visits ** (1 / 0.01)` is
+    `128 ** 100`, which is `inf`, and one `inf` turns the normalised vector
+    into `nan` and `rng.choice` into a `ValueError`. Dividing first caps
+    the base at 1.0, so a small temperature underflows the losers to zero
+    and converges on the argmax — which is the limit it should converge on.
+    """
+    if temperature <= 0.0:
+        return int(weights.argmax())
+    top = float(weights.max())
+    if top <= 0.0:
+        return int(weights.argmax())
+    scaled = np.zeros(weights.shape, dtype=np.float64)
+    positive = weights > 0.0
+    scaled[positive] = (weights[positive] / top) ** (1.0 / temperature)
+    total = scaled.sum()
+    if not np.isfinite(total) or total <= 0.0:
+        return int(weights.argmax())
+    return int(np.random.default_rng(seed).choice(scaled.size, p=scaled / total))
+
+
 class RandomAgent:
     """Uniform choice among legal actions."""
 
@@ -155,23 +189,47 @@ class BeamAgent:
 class PolicyAgent:
     """The network's policy head alone — one forward pass, zero search."""
 
-    def __init__(self, evaluator, name: str = "net-policy", temperature: float = 0.0):
+    def __init__(
+        self,
+        evaluator,
+        name: str = "net-policy",
+        temperature: float = 0.0,
+        temperature_plies: int | None = None,
+    ):
         self.evaluator = evaluator
         self.name = name
         self.temperature = temperature
+        self.temperature_plies = temperature_plies
+
+    def _temperature_at(self, board: Board) -> float:
+        """The temperature in force at this position.
+
+        `temperature_plies` bounds sampling to the opening: `None` applies
+        it to the whole game, an integer applies it while fewer than that
+        many pieces are on the board. The board carries its own ply, so no
+        caller has to thread one through `select`.
+        """
+        if self.temperature <= 0.0:
+            return 0.0
+        if self.temperature_plies is None:
+            return self.temperature
+        return self.temperature if _ply(board) < self.temperature_plies else 0.0
 
     def select(self, board: Board, seed: int) -> int:
         boards = board[None, :]
         legal = fb.legal_masks(boards)
         priors, _ = self.evaluator(boards, legal)
-        if self.temperature <= 0.0:
-            return int(priors[0].argmax())
-        weights = np.where(legal[0], priors[0] ** (1.0 / self.temperature), 0.0)
-        weights = weights / weights.sum()
-        return int(np.random.default_rng(seed).choice(fb.ACTION_COUNT, p=weights))
+        # `np.where` rather than trusting the evaluator's own masking: a
+        # prior that leaked onto an illegal action would otherwise become a
+        # drawable outcome once the temperature stops being zero.
+        weights = np.where(legal[0], priors[0], 0.0)
+        return _sample(weights, self._temperature_at(board), seed)
 
     def config_label(self) -> str:
-        return f"net-policy(temperature={self.temperature})"
+        return (
+            f"net-policy(temperature={self.temperature},"
+            f"plies={self.temperature_plies})"
+        )
 
 
 class NetMCTSAgent:
@@ -183,9 +241,12 @@ class NetMCTSAgent:
     """
 
     def __init__(self, evaluator, simulations: int = 128, params: MCTSParams | None = None,
-                 name: str | None = None):
+                 name: str | None = None, temperature: float = 0.0,
+                 temperature_plies: int | None = None):
         self.evaluator = evaluator
         self.params = params or MCTSParams(simulations=simulations)
+        self.temperature = temperature
+        self.temperature_plies = temperature_plies
         if name:
             self.name = name
         elif self.params.time_limit_s:
@@ -193,10 +254,27 @@ class NetMCTSAgent:
         else:
             self.name = f"net-mcts-{self.params.simulations}"
 
+    def _temperature_at(self, board: Board) -> float:
+        """See `PolicyAgent._temperature_at` — the same schedule, so an
+        opponent's opening variety does not depend on which of the two
+        kinds it happens to be."""
+        if self.temperature <= 0.0:
+            return 0.0
+        if self.temperature_plies is None:
+            return self.temperature
+        return self.temperature if _ply(board) < self.temperature_plies else 0.0
+
     def select(self, board: Board, seed: int) -> int:
         search = BatchedMCTS(self.evaluator, self.params, np.random.default_rng(seed))
         visits, _ = search.search(board[None, :], add_noise=False)
-        return int(visits[0].argmax())
+        # Sampling the *visit counts*, not the priors: the visits are what
+        # the search converged on, so a temperature here trades strength
+        # for variety along the search's own ranking rather than throwing
+        # the search away. Root Dirichlet noise (`add_noise`) is the other
+        # place variety could come from and is deliberately not it — it
+        # perturbs the tree the search is built on, so its cost is spread
+        # through every simulation instead of landing on one choice.
+        return _sample(visits[0].astype(np.float64), self._temperature_at(board), seed)
 
     def config_label(self) -> str:
         budget = (
@@ -204,4 +282,8 @@ class NetMCTSAgent:
             if self.params.time_limit_s
             else f"sims={self.params.simulations}"
         )
-        return f"net-mcts({budget},c_puct={self.params.c_puct},leaf_batch={self.params.leaf_batch})"
+        return (
+            f"net-mcts({budget},c_puct={self.params.c_puct},"
+            f"leaf_batch={self.params.leaf_batch},"
+            f"temperature={self.temperature},plies={self.temperature_plies})"
+        )
