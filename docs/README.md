@@ -1,6 +1,6 @@
 # Reading these documents
 
-Twenty-one documents accumulate quickly. This is the order they make sense in,
+Twenty-three documents accumulate quickly. This is the order they make sense in,
 and what each one is for.
 
 Two conventions worth knowing before you start.
@@ -64,6 +64,7 @@ These are the documents to read if you want to know how much to trust the rest.
 ## Publishing and playing
 
 - [`publishing-to-hugging-face.md`](publishing-to-hugging-face.md) — what a Hub repository requires, the version-control model, and the documentation a published model needs. Every mistake in it publishes cleanly.
+- [`play-service.md`](play-service.md) — the local move handler: the request contract, what it refuses, and the two checks that exist because their failures are silent.
 - [`frontend-play.md`](frontend-play.md) — playing against these models from the browser.
 
 ## Archives
