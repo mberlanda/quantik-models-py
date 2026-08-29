@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from itertools import permutations
 from pathlib import Path
@@ -126,26 +127,44 @@ def ply_histogram(boards: np.ndarray) -> dict[int, int]:
     return dict(sorted(Counter(fb.popcount(fb.occupancy(boards)).tolist()).items()))
 
 
+def pairings(names: Iterable[str], against: str | None = None) -> list[tuple[str, str]]:
+    """The ordered pairings to play.
+
+    Ordered, not unordered: moving first is a real advantage in Quantik, so
+    a pairing that only ever ran one way round would attribute that
+    advantage to the agent rather than to the seat.
+
+    `against` restricts the schedule to pairings involving that one agent,
+    both ways round. Measuring a field against a common oracle is a
+    different experiment from a round robin, and running the full round
+    robin to extract it spends most of the budget replaying games that are
+    already measured — with four networks and one oracle, 12 of the 20
+    ordered pairings are network-versus-network.
+    """
+    ordered = list(permutations(sorted(names), 2))
+    if against is None:
+        return ordered
+    if against not in set(names):
+        raise ValueError(f"no agent named {against!r} among {sorted(names)}")
+    return [pair for pair in ordered if against in pair]
+
+
 def run(
     specs: list[dict],
     games_per_pairing: int,
     *,
     seed: int = 0,
     start_plies: int = 0,
+    against: str | None = None,
     progress=None,
 ) -> list[Game]:
-    """Every ordered pairing plays `games_per_pairing` games.
-
-    Ordered, not unordered: moving first is a real advantage in Quantik, so
-    a pairing that only ever ran one way round would attribute that
-    advantage to the agent rather than to the seat.
-    """
+    """Play `games_per_pairing` games over the schedule `pairings` returns."""
     from .registry import build_agent
 
     agents = {spec.get("name", spec["kind"]): build_agent(dict(spec)) for spec in specs}
     games: list[Game] = []
     rng = np.random.default_rng(seed)
-    for mover_name, responder_name in permutations(sorted(agents), 2):
+    for mover_name, responder_name in pairings(agents, against):
         for index in range(games_per_pairing):
             board = fb.empty_boards(1)[0]
             for _ in range(start_plies):
@@ -215,6 +234,11 @@ def main(argv: list[str] | None = None) -> int:
         "already well covered by the corpus",
     )
     parser.add_argument(
+        "--against",
+        default=None,
+        help="restrict play to pairings involving this agent, both ways round",
+    )
+    parser.add_argument(
         "--corpus",
         type=Path,
         default=Path("runs/oracle/corpus/exact-sampled.npz"),
@@ -223,15 +247,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     specs = json.loads(args.agents.read_text())
-    total = len(specs) * (len(specs) - 1) * args.games
-    print(f"{len(specs)} agents, {total} games")
+    names = [spec.get("name", spec["kind"]) for spec in specs]
+    schedule = pairings(names, args.against)
+    total = len(schedule) * args.games
+    print(f"{len(specs)} agents, {len(schedule)} ordered pairings, {total} games")
 
     def progress(n: int) -> None:
         if n % max(1, total // 20) == 0:
             print(f"  {n}/{total}", flush=True)
 
     games = run(
-        specs, args.games, seed=args.seed, start_plies=args.start_plies, progress=progress
+        specs,
+        args.games,
+        seed=args.seed,
+        start_plies=args.start_plies,
+        against=args.against,
+        progress=progress,
     )
 
     args.out.mkdir(parents=True, exist_ok=True)
