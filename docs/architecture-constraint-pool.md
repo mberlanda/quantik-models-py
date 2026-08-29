@@ -176,11 +176,23 @@ runs a batch of four against a graph traced with a batch of one, which is
 what caught it — a round-trip test at the traced batch size would have
 passed.
 
-> **Provenance.** Everything below was measured at `--lr 2e-3`, the
-> trainer's old global default — chosen for the ResNet, the only
-> architecture that existed when it was set. Until the learning-rate sweep
-> finishes these are comparisons at *the ResNet's* preferred setting. See
-> `attention-negative-result.md`.
+> **Restated 2026-08-30.** Everything below was originally measured with
+> this architecture trained at `2e-3`, a rate chosen for the ResNet. It
+> prefers **6e-4**, and retraining changed the conclusions, not just the
+> decimals. Corrected numbers are in `shift-evaluation.md` and
+> `autoplay.md`.
+>
+> | | at 2e-3 | at 6e-4 |
+> |---|---|---|
+> | IID top-1 | 0.9851 | **0.9893** |
+> | shift shallow (4-6) | 0.9092 | **0.9295** |
+> | shift deep (7-12) | 0.9883 | **0.9919** |
+> | ply-4 high-occupancy gap vs resnet | -0.0996, p=0.0006 | **-0.0260, p=0.42** |
+>
+> The shallow deficit this document analyses at length **is gone** — `cpool`
+> now beats the ResNet at every depth — and the occupancy effect that
+> explained it is no longer significant. What survives is the other half:
+> `cpool`'s *advantage* at plies 6-7 is largest on high-occupancy positions.
 
 ## What happened
 

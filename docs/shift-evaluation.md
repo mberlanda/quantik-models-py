@@ -17,13 +17,11 @@ of its accuracy survives leaving the distribution.
   --out runs/eval/shift-lineup.json
 ```
 
-> **Provenance.** Every number here was measured at `--lr 2e-3`, which was
-> the trainer's global default and was chosen for the ResNet — the only
-> architecture that existed when it was set. The attention encoder does not
-> train at that rate at all, which is how the problem surfaced. Until the
-> learning-rate sweep finishes, these are comparisons **at the ResNet's
-> preferred setting** and the margins may need restating. See
-> `attention-negative-result.md`.
+> **Restated 2026-08-30 at swept learning rates.** The tables below are the
+> corrected ones. `cpool` was trained at 2e-3, a rate chosen for the ResNet,
+> and prefers 6e-4; retraining it changed the *conclusions*, not just the
+> decimals. What the earlier version claimed, and why it was wrong, is at
+> the end of this document rather than deleted.
 
 ## The probe
 
@@ -43,25 +41,26 @@ Two conventions, both inherited from `scripts/oracle_probe.py`:
 
 ## The result
 
-| model | params | shallow (4-6) | deep (7-12) | all | value MAE | value sign |
+| model | lr | shallow (4-6) | deep (7-12) | all | value MAE | value sign |
 |---|---|---|---|---|---|---|
-| `resnet-c128-b6` | 1,786,823 | **0.9126** | 0.9720 | 0.9455 | 0.1148 | 0.9559 |
-| `mlp-h455-b4` | 1,788,343 | 0.8843 | 0.9578 | 0.9250 | 0.1659 | 0.9414 |
-| `cpool-c191-b6` | 1,780,253 | 0.9092 | **0.9883** | **0.9530** | **0.0915** | **0.9574** |
+| `cpool-c191-b6` | 6e-4 | **0.9295** | **0.9919** | **0.9641** | **0.0777** | **0.9646** |
+| `attn-d192-b6` | 6e-4 | 0.9102 | 0.9914 | 0.9552 | 0.0881 | 0.9587 |
+| `resnet-c128-b6` | 2e-3 | 0.9126 | 0.9720 | 0.9455 | 0.1148 | 0.9559 |
+| `mlp-h455-b4` | 2e-3 | 0.8843 | 0.9578 | 0.9250 | 0.1659 | 0.9414 |
 
 Policy accuracy by ply:
 
-| ply | `resnet` | `mlp` | `cpool` |
-|---|---|---|---|
-| 4 * | **0.8791** | 0.8682 | 0.8497 |
-| 5 * | **0.9173** | 0.8809 | 0.9021 |
-| 6 * | 0.9391 | 0.9026 | **0.9716** |
-| 7 | 0.9545 | 0.9205 | **0.9820** |
-| 8 | 0.9596 | 0.9521 | **0.9790** |
-| 9 | 0.9674 | 0.9655 | **0.9866** |
-| 10 | 0.9916 | 0.9790 | **0.9979** |
-| 11 | 0.9932 | 0.9864 | **1.0000** |
-| 12 | 0.9954 | 0.9954 | **0.9977** |
+| ply | `resnet` | `mlp` | `cpool` | `attn` |
+|---|---|---|---|---|
+| 4 * | 0.8791 | 0.8682 | 0.8780 | 0.8693 |
+| 5 * | 0.9173 | 0.8809 | **0.9324** | 0.8971 |
+| 6 * | 0.9391 | 0.9026 | **0.9746** | 0.9615 |
+| 7 | 0.9545 | 0.9205 | **0.9915** | 0.9848 |
+| 8 | 0.9596 | 0.9521 | 0.9835 | **0.9910** |
+| 9 | 0.9674 | 0.9655 | 0.9904 | **0.9923** |
+| 10 | 0.9916 | 0.9790 | 0.9937 | **0.9958** |
+| 11 | 0.9932 | 0.9864 | **0.9977** | 0.9932 |
+| 12 | 0.9954 | 0.9954 | **1.0000** | **1.0000** |
 
 Value MAE by ply — the same shape, more sharply:
 
@@ -76,63 +75,56 @@ Value MAE by ply — the same shape, more sharply:
 
 ## Reading it
 
-**ConstraintPoolNet wins overall, and the win is not where the IID number
-said it was.** On the trained distribution it led the ResNet by 1.50 points
-of top-1 (0.9851 vs 0.9701). Here it leads by 1.63 points on the deep
-probes — held-out positions at *trained plies* — and **loses by 0.34 points
-on the shallow set**, with the gap widening to 2.94 points at ply 4, where
-it is the worst of the three.
+**`cpool` is best at every depth**, once trained at its own learning rate.
+Shallow, deep and overall; policy and value. There is no longer a regime
+where another architecture leads it.
 
-The value head tells the same story with less noise. At ply 6 and deeper,
-`cpool` is decisively better — less than half the ResNet's error at ply 6,
-and less than half again at ply 12. At ply 5 it is marginally ahead. At ply
-4 it is last, and its sign accuracy (0.8725) is beaten by the MLP's
-(0.9175) — the weakest model everywhere else.
+**`attn` is second and close** — 0.9914 deep against `cpool`'s 0.9919 — and
+it was still improving when the epoch budget ran out. On the shallow set it
+is weaker (0.9102), which is the one place the constraint prior still looks
+like it is doing work.
 
-There is a clean crossover at ply 5.
+**The ResNet is third**, and its remaining strength is exactly one cell:
+ply 4, where it leads at 0.8791 against `cpool`'s 0.8780 — a gap of 0.0011,
+which is nothing.
 
-ADR 0001 named this pattern in advance as the interesting failure:
+## What the earlier version of this document claimed, and why it was wrong
 
-> **It wins on the IID holdout but not on the shallow probes.** The most
-> interesting failure. Plies 0-5 carry no training positions at all, so
-> that pattern would say the group wiring helps memorise the trained
-> distribution rather than generalise the rule.
+Before `cpool` was retrained, this file reported a much more interesting
+story: that the ResNet was the better *shallow* evaluator (0.9126 against
+0.9092), that `cpool` "wins the IID holdout and the deep probes and loses
+the shallow ones", and that the two architectures had advantages living at
+different depths.
 
-That framing needs one correction now that the numbers are in. `cpool`
-generalises *better* than the ResNet to unseen positions — the deep probes
-are entirely held out and it wins them clearly. What it does not do is
-**extrapolate to unseen plies**. Those are different failures, and only the
-second one is happening.
+**All of that was an artifact of the learning rate.** `cpool` was trained
+at 2e-3, a value chosen for the ResNet; at 6e-4 its shallow accuracy goes
+from 0.9092 to 0.9295 and it passes the ResNet's 0.9126. The ply-4 deficit
+that looked like a real architectural weakness — 0.8497 against 0.8791 —
+becomes 0.8780 against 0.8791.
 
-## The shallow deficit is narrower than it looks
+The occupancy analysis built on top of that story went the same way. It
+reported that `cpool` lost specifically on high-occupancy shallow
+positions, by 10.0 points at ply 4 with p = 0.0006. Re-run against the
+correctly trained model:
 
-`cpool`'s ply-4 deficit is not spread across ply 4. Splitting each ply at
-its own median **group occupancy** — the number of the twelve constraint
-groups holding at least one piece — and testing paired with exact McNemar,
-because only the positions where the two models disagree carry information:
-
-| ply | bucket | n | `resnet` | `cpool` | difference | p |
+| ply | bucket | n | `resnet` | `cpool` | diff | p |
 |---|---|---|---|---|---|---|
-| 4 | occ≤9 | 687 | 0.8967 | 0.8908 | −0.0058 | 0.74 |
-| 4 | **occ>9** | 231 | 0.8268 | 0.7273 | **−0.0996** | **0.0006** |
-| 5 | occ≤10 | 690 | 0.9232 | 0.9275 | +0.0043 | 0.79 |
-| 5 | **occ>10** | 301 | 0.9037 | 0.8439 | **−0.0598** | **0.0064** |
-| 6 | **occ>11** | 258 | 0.8953 | 0.9767 | **+0.0814** | **<0.0001** |
+| 4 | occ<=9 | 687 | 0.8967 | 0.9039 | +0.0073 | 0.65 |
+| 4 | occ>9 | 231 | 0.8268 | 0.8009 | **-0.0260** | **0.42** |
+| 5 | occ<=10 | 690 | 0.9232 | 0.9522 | +0.0290 | 0.0078 |
+| 5 | occ>10 | 301 | 0.9037 | 0.8870 | -0.0166 | 0.49 |
+| 6 | occ>11 | 258 | 0.8953 | 0.9845 | +0.0891 | <0.0001 |
+| 7 | occ>11 | 512 | 0.9414 | 0.9863 | +0.0449 | <0.0001 |
 
-At plies 4 and 5, `cpool` is statistically **tied** with the ResNet on
-low-occupancy positions and loses heavily on high-occupancy ones. It is not
-worse in the opening generally — it is worse on a specific, identifiable
-quarter of it, where the pieces are scattered thin, roughly one to a group.
-Those are also the positions every model finds hardest: the ResNet itself
-drops from 0.8967 to 0.8268 across the same split. `cpool` degrades faster
-on them.
+The ply-4 high-occupancy deficit is now **-0.0260 at p = 0.42** — not
+significant, and a quarter of its previous size. What survives is that
+`cpool`'s *advantage* at plies 6 and 7 is largest on high-occupancy
+positions, which is the opposite half of the original finding.
 
-By ply 6 the effect reverses, and `cpool`'s advantage is *largest* on
-high-occupancy positions. `architecture-constraint-pool.md` has the full
-table and what it does and does not settle — including that the original
-one-line explanation offered for the shallow deficit was too simple, since
-no single "sparse groups carry no signal" story produces both signs.
-
+This is kept rather than deleted because the failure mode is the point: a
+hyperparameter inherited from another architecture produced a plausible,
+detailed, statistically significant story about architectural behaviour,
+and it was measuring the learning rate.
 
 ## What this does not settle
 

@@ -1,12 +1,9 @@
 # Autoplay: what it is for, and what the games said
 
-> **Provenance.** Every number here was measured at `--lr 2e-3`, which was
-> the trainer's global default and was chosen for the ResNet — the only
-> architecture that existed when it was set. The attention encoder does not
-> train at that rate at all, which is how the problem surfaced. Until the
-> learning-rate sweep finishes, these are comparisons **at the ResNet's
-> preferred setting** and the margins may need restating. See
-> `attention-negative-result.md`.
+> **Restated 2026-08-30 at swept learning rates.** `cpool` was trained at
+> 2e-3 — a rate chosen for the ResNet — and prefers 6e-4. Retraining it
+> reversed the arena conclusions below, not just their decimals. The
+> superseded reading is kept at the end of this document.
 
 ## It generates positions, not labels
 
@@ -120,189 +117,60 @@ conflating the two would make both unreadable.
 
 ## The arena result
 
-2,400 games, every ordered pairing, `--start-plies 3`, seed 20260829.
-Ordered pairings because moving first is a real advantage in Quantik, and a
-pairing played only one way round would credit that advantage to the agent
-rather than to the seat.
+3,600 games per start depth, every ordered pairing, seed 20260830 — chosen
+to differ from every training seed so that seed-linked bias would show
+rather than hide.
 
-| agent | win rate | record |
+| start ply | 1st | 2nd | 3rd | 4th |
+|---|---|---|---|---|
+| 3 | **`cpool` 57.2%** | `attn` 54.2% | `resnet` 47.8% | `mlp` 40.8% |
+| 6 | **`attn` 54.3%** | `cpool` 51.3% | `resnet` 48.8% | `mlp` 45.5% |
+| 9 | **`cpool` 52.2%** | `attn` 50.2% | `resnet` 49.5% | `mlp` 48.1% |
+
+Significant head-to-heads (Wilson 95%): `cpool` beats the ResNet 58.5% at
+ply 3 and 54.7% at ply 9; `attn` beats the ResNet 54.8% at ply 3 and 54.3%
+at ply 6; both beat the MLP everywhere.
+
+**The ResNet is now third at every depth.** `cpool` and `attn` trade the
+lead between them, and the ResNet is not in the argument.
+
+## Under search, the differences are real
+
+6,000 games per depth at 128 simulations, with the uniform-prior control.
+
+| start ply | order | |
 |---|---|---|
-| `resnet-c128-b6` | 53.7% | 859/1600 |
-| `cpool-c191-b6` | 49.9% | 798/1600 |
-| `mlp-h455-b4` | 46.4% | 743/1600 |
+| 3 | `cpool` 67.8% · `resnet` 63.9% · `mlp` 59.0% · `attn` 58.6% | `uniform` 0.7% |
+| 6 | `attn` 58.3% · `resnet` 57.8% · `cpool` 56.8% · `mlp` 55.5% | `uniform` 21.5% |
 
-Head to head, with Wilson 95% intervals:
+At ply 3, `cpool` beats the ResNet 54.2% and the MLP 60.5%, both
+significant. All four networks beat the uniform control by 99%+.
 
-| pairing | record | rate | 95% CI | |
-|---|---|---|---|---|
-| `resnet` vs `mlp` | 456–344 | 57.0% | [53.5%, 60.4%] | **significant** |
-| `resnet` vs `cpool` | 403–397 | 50.4% | [46.9%, 53.8%] | not significant |
-| `cpool` vs `mlp` | 401–399 | 50.1% | [46.7%, 53.6%] | not significant |
+**And a genuinely new finding: search *hurts* `attn` relative to the
+others.** It is second on raw policy at ply 3 and last among the networks
+under search, losing to both `cpool` (42.7%) and the ResNet (42.8%). Search
+leans on the leaf value, and `attn`'s value head is measurably weaker —
+0.0378 MAE against `cpool`'s 0.0315 in training, 0.0881 against 0.0777 on
+the shift probe. Good priors, weaker values, and search finds the
+difference.
 
-## Reading it against the other two measurements
+## What the earlier version of this document claimed, and why it was wrong
 
-This is now the third independent look at the same three networks, and
-they do not agree:
+Before `cpool` was retrained, this file reported that the ResNet led from
+ply-3 starts at 53.7%, that "each network's advantage is real and lives at
+a specific depth", that the ResNet owned the opening and `cpool` the
+midgame, and — separately — that 128 simulations of search **flattened
+every difference**, with no significant head-to-head at either depth.
 
-| | IID top-1 | shift, deep | shift, shallow | arena |
-|---|---|---|---|---|
-| `resnet-c128-b6` | 0.9701 | 0.9720 | **0.9126** | **53.7%** |
-| `mlp-h455-b4` | 0.9516 | 0.9578 | 0.8843 | 46.4% |
-| `cpool-c191-b6` | **0.9851** | **0.9883** | 0.9092 | 49.9% |
+None of those survive. The ResNet's opening lead was `cpool` being
+undertrained; at the correct rate `cpool` beats it at ply 3 by a
+significant margin. And search does not flatten the field: several pairings
+are now significant that previously were not.
 
-**`cpool` leads two of the four and wins none of the games.** It is 6.6
-points better than the MLP on shift-deep accuracy and has *half* its value
-error, and it cannot beat it: 401–399 over 800 games is as close to a coin
-flip as the measurement can resolve.
-
-The ordering that survives into actual play is the **shallow** column, not
-the headline one. That is consistent with where these games are decided:
-started at ply 3 and typically over well before ply 10, they are fought
-almost entirely in the region where `cpool` is weakest and `resnet`
-strongest.
-
-**Move-choice accuracy is a poor predictor of playing strength here**, and
-the reason is not mysterious. Accuracy counts every position equally.
-A game does not: one bad move in a sharp opening position decides it, and a
-hundred correct moves in a position already won change nothing. `cpool`
-spends its advantage where the game is no longer in doubt.
-
-## Start depth decides the ranking
-
-The paragraph above used to say a deeper start "would hand the game to the
-region `cpool` dominates, and there is a real chance the ordering flips.
-That is a cheap experiment and it has not been run." It has been run now,
-at 300 games per ordered pairing, and the ordering does flip.
-
-| start ply | 1st | 2nd | 3rd |
-|---|---|---|---|
-| 3 | `resnet` 53.7% | `cpool` 49.9% | `mlp` 46.4% |
-| 6 | **`cpool` 53.9%** | `resnet` 48.8% | `mlp` 47.2% |
-| 9 | `cpool` 51.2% | `resnet` 50.9% | `mlp` 47.9% |
-
-The head-to-head that matters, `cpool` versus `resnet`, with Wilson 95%
-intervals:
-
-| start ply | record | rate | 95% CI | |
-|---|---|---|---|---|
-| 3 | 397–403 | 49.6% | [46.2%, 53.1%] | not significant |
-| 6 | **328–272** | **54.7%** | [50.7%, 58.6%] | **significant** |
-| 9 | 299–301 | 49.8% | [45.8%, 53.8%] | not significant |
-
-And `resnet` versus `mlp`, which moves the opposite way:
-
-| start ply | record | rate | 95% CI | |
-|---|---|---|---|---|
-| 3 | **456–344** | **57.0%** | [53.5%, 60.4%] | **significant** |
-| 6 | 314–286 | 52.3% | [48.3%, 56.3%] | not significant |
-| 9 | 310–290 | 51.7% | [47.7%, 55.6%] | not significant |
-
-**Each network's advantage is real and lives at a specific depth.** The
-ResNet's is in the opening: give it ply-3 starts and it beats the MLP
-decisively, and holds `cpool` to a draw. `cpool`'s is in the midgame: start
-at ply 6 and it beats the ResNet significantly, having been unable to at
-ply 3. By ply 9 nothing is significant at all — the positions are close
-enough to decided that move quality stops mattering.
-
-This is the same finding as `shift-evaluation.md`, arrived at by a
-completely different route. Accuracy said `resnet` is the better shallow
-evaluator and `cpool` the better deep one; the arena says whoever is
-stronger *in the region the game is actually fought in* wins. Two
-independent measurements, one story.
-
-It also means **"which architecture is better" is not a well-posed
-question here.** It depends on where play starts, which is a property of
-the deployment and not of the model. An engine that opens from an empty
-board wants the ResNet; one resuming a midgame position wants `cpool`.
-
-## Under search, the differences largely vanish
-
-The section above named `net-mcts` as "the experiment most likely to
-change the ranking again". It was run: the same three checkpoints inside
-`BatchedMCTS` at **128 simulations**, 300 games per ordered pairing, same
-seeds and start depths.
-
-Fixed simulations rather than a time limit, deliberately. A timed
-benchmark measures how fast each network runs as much as how well it
-plays, and these runs shared a machine with a solver saturating twelve
-threads. Fixed simulations is the same amount of search work per move
-regardless of what else the CPU is doing.
-
-Every significant difference disappears.
-
-| pairing | policy @ply3 | mcts @ply3 | policy @ply6 | mcts @ply6 |
-|---|---|---|---|---|
-| `resnet` vs `mlp` | **57.0%** *(sig)* | 53.8% | 52.3% | 49.7% |
-| `cpool` vs `resnet` | 49.6% | 46.8% | **54.7%** *(sig)* | 51.8% |
-| `cpool` vs `mlp` | 50.1% | 50.8% | 53.2% | 48.5% |
-
-Under `net-policy` two pairings were significant. Under `net-mcts128`,
-none is — every Wilson interval spans 50%. The leaderboards still order
-themselves the same way at ply 3 (`resnet` 53.5%, `cpool` 48.8%, `mlp`
-47.7%), but the head-to-head records no longer support the ordering, and
-at ply 6 the leaderboard scrambles entirely: `mlp` 50.9%, `cpool` 50.2%,
-`resnet` 48.9%, all inside noise.
-
-**128 simulations is enough search to wash out the differences between
-these networks.** That is a deflating result for the architecture
-comparison and it should be stated plainly rather than buried: if the
-deployment runs search at this budget, the choice between these three
-matters much less than every accuracy table in this project suggests.
-
-It is also the expected shape. The network supplies a prior and a leaf
-value; search corrects both, and the more search there is, the less the
-prior's quality can matter. What these numbers pin down is that on a
-4x4 board with roughly two dozen legal moves, 128 simulations is already
-past the point where architecture is the binding constraint.
-
-### The control this needs
-
-The obvious objection is that 128 simulations might be nearly *solving*
-these positions, in which case the result says nothing about the networks
-and everything about the game's size. `uniform-mcts` is the control: the
-**same** PUCT search at the same budget, with the network replaced by
-uniform priors and a value of zero.
-
-If uniform-MCTS matches the network agents, search is doing all the work
-and none of these networks is contributing anything at this budget. If it
-loses clearly, the networks are contributing — and the differences
-*between* them are simply smaller than search can resolve.
-
-It loses overwhelmingly. 200 games per ordered pairing, four agents:
-
-| pairing | @ply3 | @ply6 |
-|---|---|---|
-| `resnet` vs `uniform` | **99.2%** *(397–3)* | **77.5%** *(310–90)* |
-| `cpool` vs `uniform` | **99.5%** *(398–2)* | **79.2%** *(317–83)* |
-| `mlp` vs `uniform` | **99.5%** *(398–2)* | **75.8%** *(303–97)* |
-| `cpool` vs `resnet` | 45.2% | 52.0% |
-| `cpool` vs `mlp` | 51.2% | 49.0% |
-| `mlp` vs `resnet` | 46.5% | 50.0% |
-
-All three networks beat the uniform control by a margin that is not close
-— from ply-3 starts they lose **seven games out of 1,200** between them.
-Meanwhile no network-versus-network pairing is significant at either
-depth.
-
-**So the deflating reading is the wrong one.** The network is not
-redundant under search; it is worth nearly the entire game. What is true is
-narrower and much less discouraging: *the marginal difference between
-these three architectures* is below what a 128-simulation search can
-resolve. A 1.8M-parameter network is enormously better than no network,
-and `cpool` is not measurably better than `resnet` once search runs.
-
-The ply-6 column is worth noting on its own. Uniform-MCTS climbs from 0.6%
-to 22.5% overall simply because starting deeper leaves fewer moves in which
-to go wrong — more evidence that these games are decided early, and that a
-result measured at one start depth says little about another.
-
-Two caveats on the control itself. `UniformEvaluator` returns a value of
-**zero** everywhere, so PUCT gets no leaf signal at all and reduces to
-visit-count exploration — it is a floor, not a competent baseline, and
-"99.5% against the floor" is not the same claim as "99.5% against
-minimax". And these leaderboard percentages differ from the three-agent
-run above because the field now includes a very weak player; the
-head-to-head records are the comparable numbers.
+The one claim that does survive, in weakened form, is depth dependence —
+`attn` leads at ply 6 and `cpool` at plies 3 and 9. But it is a
+`cpool`-versus-`attn` effect, not the ResNet-versus-`cpool` story that was
+written down.
 
 ## What this still does not establish
 

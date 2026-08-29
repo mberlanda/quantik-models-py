@@ -204,7 +204,25 @@ worth knowing before comparing them to anything else:
 | arena from ply-3 starts | **53.7%** — best of the three |
 | arena from ply-6 starts | 48.8% — beaten by `cpool` |
 
-**The ResNet is the best opening player in the lineup and not the best
-midgame player.** `shift-evaluation.md` and `autoplay.md` have the detail;
+**Corrected 2026-08-30.** This section used to conclude that the ResNet was
+"the best opening player in the lineup and not the best midgame player".
+That was wrong, and it was wrong for a reason worth keeping: `cpool` was
+trained at 2e-3 — *this* architecture's preferred rate — and prefers 6e-4.
+Retrained, it beats the ResNet at every depth, and the ResNet is third at
+every arena start depth.
+
+| | resnet | best of the lineup |
+|---|---|---|
+| IID top-1 | 0.9701 | `cpool` 0.9893 |
+| shift, plies 4-6 | 0.9126 | `cpool` 0.9295 |
+| shift, plies 7-12 | 0.9720 | `cpool` 0.9919 |
+| arena @ply3 | 47.8% | `cpool` 57.2% |
+| arena @ply6 | 48.8% | `attn` 54.3% |
+
+The ResNet's only remaining lead is ply 4 on the shift probe, 0.8791
+against `cpool`'s 0.8780 — a gap of 0.0011.
+
+`shift-evaluation.md` and `autoplay.md` have the detail;
 `decisions/0001-architecture-lineup.md` has what it means for the
-comparison.
+comparison, and `learning-rate-sweep.md` has why the earlier numbers were
+what they were.
