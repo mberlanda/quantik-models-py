@@ -131,3 +131,86 @@ def test_load_leaderboard_reads_an_arena_games_json(tmp_path):
     )
     board = fg.load_leaderboard(tmp_path / "games.json")
     assert board[0]["agent"] == "cpool"
+
+
+def test_build_skips_missing_inputs_rather_than_crashing(tmp_path, capsys):
+    """A fresh clone has no `runs/`, so every input is missing.
+
+    The right behaviour is to name what it could not find and write what it
+    can, not to raise — the figures are a report step, and a report step
+    that aborts on the first absent file reports nothing.
+    """
+    from quantik_models.report import build_figures
+
+    runs = tmp_path / "runs"
+    write_run(runs / "train", "lineup-resnet", [0.90, 0.95])
+    written = build_figures.build(runs, tmp_path / "out", eval_dir="nope")
+    out = capsys.readouterr().out
+    assert [p.name for p in written] == ["training-curves.svg"]
+    assert "skipped (missing)" in out
+    assert "lrsweep" in out and "shift.json" in out
+
+
+def test_build_writes_nothing_and_reports_it_when_runs_is_empty(tmp_path, capsys):
+    from quantik_models.report import build_figures
+
+    assert build_figures.main(["--runs", str(tmp_path / "nothing"), "--out", str(tmp_path / "out")]) == 1
+    assert "is runs/ populated" in capsys.readouterr().out
+
+
+def test_the_figures_read_a_real_trainer_run(tmp_path):
+    """End-to-end against `metrics.jsonl` as the trainer actually writes it.
+
+    Every other test here builds the file itself, which pins the format this
+    module *expects* rather than the one it *gets*. This is the only test
+    that would notice the trainer renaming a field.
+    """
+    pytest.importorskip("torch")
+    pytest.importorskip("safetensors")
+
+    import numpy as np
+
+    from quantik_models.data.exact_corpus import ExactCorpus
+    from quantik_models.env import fastboard as fb
+    from quantik_models.train.supervised import SupervisedConfig, train
+
+    from boards import random_positions
+
+    boards = random_positions(128, seed=5, plies=7)
+    legal = fb.legal_masks(boards)
+    mask = np.zeros(len(boards), dtype=np.uint64)
+    for row in range(len(boards)):
+        for action in np.flatnonzero(legal[row])[:2]:
+            mask[row] |= np.uint64(1) << np.uint64(int(action))
+    corpus = tmp_path / "corpus.npz"
+    ExactCorpus(
+        boards=boards,
+        optimal_mask=mask,
+        value_target=np.zeros(len(boards), dtype=np.float32),
+        plies=np.full(len(boards), 7, dtype=np.int16),
+    ).save(corpus)
+
+    train(
+        SupervisedConfig(
+            name="lineup-resnet",
+            corpus=str(corpus),
+            arch="resnet",
+            preset="smoke",
+            epochs=2,
+            batch_size=32,
+            device="cpu",
+            val_fraction=0.2,
+            balance_plies=False,
+        ),
+        tmp_path / "runs" / "train",
+    )
+
+    run = fg.load_training_run(tmp_path / "runs" / "train" / "lineup-resnet")
+    assert run.epochs == [0, 1]
+    assert 0.0 <= run.best_top1 <= 1.0
+    assert run.lr > 0.0
+
+    from quantik_models.report import build_figures
+
+    written = build_figures.build(tmp_path / "runs", tmp_path / "figures", eval_dir="none")
+    assert [p.name for p in written] == ["training-curves.svg"]

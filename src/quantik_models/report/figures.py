@@ -22,7 +22,7 @@ puts dark axis text on a dark page.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -149,7 +149,9 @@ def _save(fig, out: Path) -> Path:
     return out
 
 
-def training_curves(runs: Iterable[TrainingRun], out: Path, superseded: set[str] = frozenset()) -> Path:
+def training_curves(
+    runs: Iterable[TrainingRun], out: Path, superseded: AbstractSet[str] = frozenset()
+) -> Path:
     """Validation top-1 against epoch, one line per run.
 
     Runs named in `superseded` are drawn dashed: they were trained at a rate

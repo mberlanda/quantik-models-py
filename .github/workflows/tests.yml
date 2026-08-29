@@ -38,7 +38,7 @@ jobs:
           # repo's green to another repo's in-flight work, which is the
           # circular wait that stalled the 1.2.0 release for six weeks.
           pip install "quantik-core>=1.2,<2"
-          pip install -e ".[dev,arrow,torch,onnx]" \
+          pip install -e ".[dev,arrow,torch,onnx,viz]" \
             --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Assert every optional dependency is importable
@@ -51,7 +51,8 @@ jobs:
           import importlib
           for name in (
               "torch", "safetensors", "onnx", "onnxscript", "onnxruntime",
-              "pyarrow", "quantik_core.artifact_data", "quantik_core.contracts",
+              "pyarrow", "matplotlib",
+              "quantik_core.artifact_data", "quantik_core.contracts",
           ):
               importlib.import_module(name)
               print("ok", name)

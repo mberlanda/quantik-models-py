@@ -73,7 +73,7 @@ def build(runs: Path, out: Path, eval_dir: str) -> list[Path]:
         ("policy", (3, 6, 9), "Policy arena: ranking against start depth"),
         ("mcts", (3, 6), "128-simulation MCTS arena, with the uniform control"),
     ):
-        boards = {}
+        boards: dict[int, list[dict]] = {}
         for ply in plies:
             games = runs / "eval" / eval_dir / f"{prefix}-p{ply}" / "games.json"
             if games.exists():
@@ -83,10 +83,10 @@ def build(runs: Path, out: Path, eval_dir: str) -> list[Path]:
         if boards:
             written.append(fg.arena_by_depth(boards, out / f"arena-{prefix}.svg", title=title))
 
-    for path in skipped:
-        print(f"skipped (missing): {path}")
-    for path in written:
-        print(f"wrote {path}")
+    for missing in skipped:
+        print(f"skipped (missing): {missing}")
+    for figure in written:
+        print(f"wrote {figure}")
     return written
 
 
