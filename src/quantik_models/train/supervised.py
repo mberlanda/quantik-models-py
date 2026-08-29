@@ -24,6 +24,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import get_args, get_type_hints
 
 import numpy as np
 import torch
@@ -54,7 +55,11 @@ class SupervisedConfig:
     blocks: int | None = None
     epochs: int = 30
     batch_size: int = 1024
-    lr: float = 2e-3
+    # None means "ask the architecture". A shared default is not neutral —
+    # 2e-3 was chosen for the ResNet, and every architecture added later
+    # inherited it silently. The attention encoder does not train at 2e-3
+    # at all. See `registry.ArchitectureEntry.default_lr`.
+    lr: float | None = None
     min_lr: float = 1e-5
     weight_decay: float = 1e-4
     value_loss_weight: float = 1.0
@@ -72,6 +77,10 @@ class SupervisedConfig:
     # meaningful with `init_from`: freezing randomly initialised weights
     # trains a model around noise it can never correct.
     freeze: str | None = None
+
+    def resolved_lr(self) -> float:
+        """The learning rate this run will actually use."""
+        return self.lr if self.lr is not None else registry.default_lr(self.arch)
 
     def build_model(self):
         """Resolve `arch` + `preset` + overrides into a model.
@@ -142,7 +151,10 @@ def _forward_losses(model, boards, policy, policy_weight, value, device, value_l
 def train(config: SupervisedConfig, out_root: Path) -> Path:
     run_dir = out_root / config.name
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "config.json").write_text(json.dumps(asdict(config), indent=2))
+    # Record the resolved learning rate, not `null`: a config that says
+    # "None" does not reproduce the run it describes.
+    recorded = asdict(config) | {"lr": config.resolved_lr()}
+    (run_dir / "config.json").write_text(json.dumps(recorded, indent=2))
     metrics_path = run_dir / "metrics.jsonl"
 
     device = resolve_device(config.device)
@@ -180,8 +192,9 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     # Only the trainable parameters go to the optimizer. AdamW would
     # otherwise carry moment buffers for tensors that never receive a
     # gradient, which costs memory and makes the state dict misleading.
+    lr = config.resolved_lr()
     optimizer = torch.optim.AdamW(
-        freezing.trainable_parameters(model), lr=config.lr, weight_decay=config.weight_decay
+        freezing.trainable_parameters(model), lr=lr, weight_decay=config.weight_decay
     )
     sampling = (
         ply_sampling_weights(corpus["plies"][train_idx]) if config.balance_plies else None
@@ -190,9 +203,10 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=config.epochs * steps_per_epoch, eta_min=config.min_lr
     )
+    source = "explicit" if config.lr is not None else f"{config.arch} default"
     print(
         f"{config.name}: {parameter_count(model):,} params on {device}, "
-        f"{config.epochs} epochs x {steps_per_epoch} steps",
+        f"{config.epochs} epochs x {steps_per_epoch} steps, lr {lr:g} ({source})",
         flush=True,
     )
 
@@ -311,7 +325,19 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     return run_dir / "best"
 
 
-def main(argv=None) -> int:
+# Resolved once: `from __future__ import annotations` makes every
+# annotation a string, so the optional-field types below need the real
+# objects rather than the source text.
+_HINTS = get_type_hints(SupervisedConfig)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI, derived from `SupervisedConfig`.
+
+    Separate from `main` so the flag types can be tested without running a
+    training loop — which is how the `--lr`-as-string bug got past every
+    test the first time.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("runs/train"))
     defaults = asdict(SupervisedConfig())
@@ -321,14 +347,25 @@ def main(argv=None) -> int:
             parser.add_argument(flag, action="store_true", default=value)
             parser.add_argument("--no-" + field_name.replace("_", "-"), dest=field_name, action="store_false")
         elif value is None:
-            # Optional fields have no default to infer a type from; the two
-            # numeric ones must not arrive as strings.
-            optional_type = int if field_name in {"channels", "blocks"} else str
-            parser.add_argument(flag, type=optional_type, default=None)
+            # Optional fields have no runtime value to infer a type from, so
+            # read it off the annotation. This was a hardcoded name list
+            # ({"channels", "blocks"} -> int, everything else -> str) until
+            # `lr` became optional, was not on the list, and started arriving
+            # as the string "2e-3" — which AdamW rejects with a TypeError
+            # about comparing float and str, twelve runs into a sweep.
+            annotation = _HINTS[field_name]
+            inner = [a for a in get_args(annotation) if a is not type(None)]
+            parser.add_argument(flag, type=inner[0] if inner else str, default=None)
         else:
             parser.add_argument(flag, type=type(value), default=value)
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
-    config = SupervisedConfig(**{k: v for k, v in vars(args).items() if k in defaults})
+    fields = asdict(SupervisedConfig())
+    config = SupervisedConfig(**{k: v for k, v in vars(args).items() if k in fields})
     path = train(config, args.out)
     print(f"best checkpoint: {path}")
     return 0

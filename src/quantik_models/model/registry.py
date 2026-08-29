@@ -46,6 +46,22 @@ class ArchitectureEntry:
     config_type: type
     presets: dict[str, Any]
     summary: str
+    # The learning rate this architecture is trained at, as a property of
+    # the architecture rather than of the trainer.
+    #
+    # This field exists because the alternative caused a real failure. The
+    # trainer's default was 2e-3, chosen for the ResNet because it was the
+    # only architecture at the time; every architecture added afterwards
+    # silently inherited it. The attention encoder does not train at 2e-3
+    # at all — flat at 0.5130 for sixteen epochs — and trains at 3e-4. It
+    # was nearly recorded as a failed architecture on the strength of a
+    # hyperparameter belonging to a different one.
+    #
+    # A shared default is not neutral: it privileges whichever architecture
+    # it was chosen for. Making it per-architecture means a new
+    # architecture must state its own, rather than inheriting the
+    # incumbent's by omission.
+    default_lr: float = 2e-3
 
 
 _REGISTRY: dict[str, ArchitectureEntry] = {
@@ -54,6 +70,7 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         config_type=policy_value_net.PolicyValueNetConfig,
         presets=policy_value_net.PRESETS,
         summary="Convolutional residual trunk; the project's incumbent.",
+        default_lr=2e-3,
     ),
     "mlp": ArchitectureEntry(
         build=mlp_net.MLPNet,
@@ -61,6 +78,7 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         presets=mlp_net.PRESETS,
         summary="Flattened dense trunk; the control for whether 4x4 spatial "
         "structure is worth modelling at all.",
+        default_lr=2e-3,
     ),
     "cpool": ArchitectureEntry(
         build=constraint_pool_net.ConstraintPoolNet,
@@ -68,6 +86,7 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         presets=constraint_pool_net.PRESETS,
         summary="Message passing over Quantik's twelve constraint groups; "
         "the game's rule structure written into the wiring.",
+        default_lr=2e-3,
     ),
     "attn": ArchitectureEntry(
         build=attention_net.AttentionNet,
@@ -75,6 +94,8 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         presets=attention_net.PRESETS,
         summary="Transformer encoder over the sixteen cells; the weaker "
         "form of the constraint hypothesis, with no prior.",
+        # 2e-3 does not train this architecture at all; 3e-4 does.
+        default_lr=3e-4,
     ),
 }
 
@@ -100,6 +121,11 @@ def entry(name: str) -> ArchitectureEntry:
 
 def presets(name: str) -> tuple[str, ...]:
     return tuple(sorted(entry(name).presets))
+
+
+def default_lr(name: str) -> float:
+    """The learning rate this architecture is trained at."""
+    return entry(name).default_lr
 
 
 def name_for(model: nn.Module) -> str:
