@@ -12,4 +12,9 @@ outputs/
 artifacts/
 .coverage
 runs/
+# Hugging Face staging output. The README and docs both write here, and a
+# staged directory is ~14 MB of weights per model — committing it to *this*
+# repo is the same mistake the publishing guide warns about one directory
+# over, minus the LFS.
+staging/
 experiments/**/artifacts/
