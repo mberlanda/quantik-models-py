@@ -141,10 +141,12 @@ when it stops. `attn`'s 0.9879 is a floor, and a shared epoch budget is not
 equal treatment for the same reason a shared learning rate was not — it was
 chosen when the ResNet was the only architecture. This is unfixed.
 
-**No classical baseline.** Every win rate on this page is against another
-network or against the uniform control. Nothing here says these models beat
-`quantik-core`'s own minimax or beam search — a different and harder
-question, and still unmeasured.
+**No classical baseline on *this* page.** Every win rate above is against
+another network or against the uniform control. The fixed-opponent
+measurement is in `oracle-benchmark.md`, and it is the one that says whether
+any of this is good rather than which of it is better: against
+`minimax-d2` at ply 3, `cpool` is even (49.4%) and the other three lose,
+`mlp` by seventeen points. Beam search remains unmeasured.
 
 **Nothing trained on `exact-sampled-v2.npz`.** The corpus with plies 3-6
 filled exists and no figure on this page uses it. Training on it would

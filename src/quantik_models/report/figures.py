@@ -349,7 +349,11 @@ def arena_by_depth(boards: dict[int, list[dict]], out: Path, title: str) -> Path
 
 
 def oracle_benchmark(
-    pooled: list[dict], per_run: dict[str, dict[str, float]], out: Path, oracle: str
+    pooled: list[dict],
+    per_run: dict[str, dict[str, float]],
+    out: Path,
+    oracle: str,
+    subtitle: str = "",
 ) -> Path:
     """Win rate against a fixed oracle: pooled bar, one dot per run.
 
@@ -392,9 +396,24 @@ def oracle_benchmark(
                     color=colour_for(row["agent"]),
                 )
     ax.axvline(0.5, color=INK, linewidth=0.9, alpha=0.5)
+    # Inside the axes: above them it collides with the title.
+    ax.text(
+        0.5,
+        0.985,
+        "even ",
+        transform=ax.get_xaxis_transform(),
+        ha="right",
+        va="top",
+        fontsize=8,
+        color=INK,
+        alpha=0.7,
+    )
     ax.set_yticks(list(ys))
     ax.set_yticklabels([row["agent"] for row in rows])
-    ax.set_xlabel(f"win rate against `{oracle}`", color=INK)
-    ax.set_title(f"Against a fixed opponent: {oracle}", color=INK, loc="left", fontsize=11)
+    ax.set_xlabel(f"win rate against {oracle}", color=INK)
+    title = f"Against a fixed opponent: {oracle}"
+    if subtitle:
+        title += f"  ·  {subtitle}"
+    ax.set_title(title, color=INK, loc="left", fontsize=11)
     ax.grid(True, axis="y", alpha=0.0)
     return _save(fig, out)

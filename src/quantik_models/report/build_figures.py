@@ -92,10 +92,19 @@ def build(runs: Path, out: Path, eval_dir: str, oracle_dir: Path | None = None) 
             for run in summary["runs"]:
                 board = fg.load_leaderboard(oracle_dir / run["name"] / "games.json")
                 per_run[run["name"]] = {r["agent"]: r["win_rate"] for r in board}
-            oracle = max(summary["pooled"], key=lambda r: r["games"])["agent"]
+            oracle = summary.get("oracle") or max(
+                summary["pooled"], key=lambda r: r["games"]
+            )["agent"]
+            depths = {r.get("start_plies") for r in summary["runs"]}
+            depth = f"start ply {depths.pop()}" if len(depths) == 1 else "mixed start depths"
+            games = sum(r["games"] for r in summary["runs"])
             written.append(
                 fg.oracle_benchmark(
-                    summary["pooled"], per_run, out / "oracle-benchmark.svg", oracle=oracle
+                    summary["pooled"],
+                    per_run,
+                    out / "oracle-benchmark.svg",
+                    oracle=oracle,
+                    subtitle=f"{depth}, {games:,} games, {len(summary['runs'])} seeds",
                 )
             )
         else:
