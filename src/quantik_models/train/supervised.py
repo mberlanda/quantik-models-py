@@ -42,6 +42,7 @@ from ..export.checkpoint import export_checkpoint
 from ..model import registry
 from ..model.policy_value_net import masked_log_softmax, parameter_count
 from . import freezing
+from .convergence import epochs_since_best
 from .alphazero import resolve_device
 
 
@@ -53,7 +54,17 @@ class SupervisedConfig:
     preset: str = "small"
     channels: int | None = None
     blocks: int | None = None
+    # A cap, not a budget, once `patience` is set. A *shared* epoch count is
+    # not equal treatment for the same reason a shared learning rate was not:
+    # sixteen was chosen when the ResNet was the only architecture, and the
+    # attention encoder is still climbing when it runs out. See
+    # `docs/learning-rate-sweep.md` for how the same mistake played out on
+    # the rate.
     epochs: int = 30
+    # Stop when the combined validation loss has not improved for this many
+    # consecutive epochs. None keeps the fixed-length behaviour, so every
+    # published run still reproduces exactly.
+    patience: int | None = None
     batch_size: int = 1024
     # None means "ask the architecture". A shared default is not neutral —
     # 2e-3 was chosen for the ResNet, and every architecture added later
@@ -200,13 +211,21 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
         ply_sampling_weights(corpus["plies"][train_idx]) if config.balance_plies else None
     )
     steps_per_epoch = max(1, len(train_idx) // config.batch_size)
+    # T_max is the *cap*, not the epoch the run turns out to stop at — the
+    # schedule has to be fixed before the first step. So an early-stopped run
+    # ends part-way down the cosine and never reaches `min_lr`, which
+    # understates it slightly against a run that used its whole budget. That
+    # is an argument for a generous patience, not for rescaling the schedule
+    # to a length that is not known yet.
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=config.epochs * steps_per_epoch, eta_min=config.min_lr
     )
     source = "explicit" if config.lr is not None else f"{config.arch} default"
     print(
         f"{config.name}: {parameter_count(model):,} params on {device}, "
-        f"{config.epochs} epochs x {steps_per_epoch} steps, lr {lr:g} ({source})",
+        f"{config.epochs} epochs x {steps_per_epoch} steps"
+        + (f" (patience {config.patience})" if config.patience is not None else "")
+        + f", lr {lr:g} ({source})",
         flush=True,
     )
 
@@ -220,6 +239,8 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
         return boards, policy, corpus["policy_weight"][idx], corpus["value_target"][idx]
 
     best_val = float("inf")
+    val_history: list[float] = []
+    stopped_early = False
     for epoch in range(config.epochs):
         started = time.perf_counter()
         # Not `model.train()`: that recurses and puts frozen batch norms
@@ -307,7 +328,8 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
                 flush=True,
             )
 
-        combined = record["val_policy_loss"] + record["val_value_loss"]
+        combined = float(record["val_policy_loss"] + record["val_value_loss"])
+        val_history.append(combined)
         if combined < best_val:
             best_val = combined
             export_checkpoint(
@@ -316,11 +338,29 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
                 model_id=f"{config.name}-best",
                 training_report={"run": config.name, "epoch": epoch, "metrics": record},
             )
+        stale = epochs_since_best(val_history)
+        if config.patience is not None and stale >= config.patience:
+            stopped_early = True
+            print(
+                f"        stopping: no improvement for {stale} epochs "
+                f"(patience {config.patience}); best was epoch "
+                f"{epoch - stale}",
+                flush=True,
+            )
+            break
     export_checkpoint(
         model,
         out_dir=run_dir / "final",
         model_id=f"{config.name}-final",
-        training_report={"run": config.name, "epochs": config.epochs},
+        training_report={
+            "run": config.name,
+            # What actually ran, not what was asked for — a report saying 60
+            # epochs for a run that stopped at 22 describes a different run.
+            "epochs": len(val_history),
+            "epoch_cap": config.epochs,
+            "patience": config.patience,
+            "stopped_early": stopped_early,
+        },
     )
     return run_dir / "best"
 
