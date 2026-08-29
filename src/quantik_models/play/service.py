@@ -213,6 +213,18 @@ class PlayService:
             for opponent in self._opponents.values()
         ]
 
+    def opponent(self, opponent_id: str | None):
+        """The `Opponent` for an id, or None — never a raise.
+
+        Used when recording a finished game, where the opponent is
+        metadata rather than a subject: a game played against a model that
+        has since been unstaged is still a game, and losing it to a 404
+        would be worse than recording it with the model details blank.
+        """
+        if opponent_id is None:
+            return None
+        return self._opponents.get(opponent_id)
+
     def choose_move(self, opponent_id: str, request: Any) -> dict[str, Any]:
         qfen, side_to_move, claimed, config = validate_request(request)
 
