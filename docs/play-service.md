@@ -222,16 +222,73 @@ under `runs/`. A checkpoint can be retrained; a game somebody played
 cannot be replayed, and `runs/` is gitignored and routinely deleted
 wholesale.
 
+## Asking what the network thinks, without playing
+
+`POST /api/analyse/{opponent_id}` returns the network's read of a position
+and plays nothing. It is a separate route rather than a field on the move
+response for one reason: a player wants the evaluation of the position in
+front of *them*, and that is the one position a move request never produces
+— the move endpoint is only ever asked about positions the engine is about
+to play from.
+
+```json
+{
+  "schema": "quantik-play.analysis.v1",
+  "opponent_id": "cpool@128",
+  "side_to_move": 1,
+  "value_perspective": "side_to_move",
+  "value": -0.42,
+  "win_probability": 0.29,
+  "policy": [64 floats],
+  "top_moves": [{"action_index": 23, "shape": "B", "position": 7, "prior": 0.31}]
+}
+```
+
+**`value_perspective` is named, not implied.** The value head is trained
+from the mover's perspective, so reporting it without saying whose it is
+gets read backwards on every odd ply — the single most likely way for an
+evaluation bar to end up confidently upside down.
+
+**`win_probability` is the network's estimate, never the oracle's.**
+Quantik is solved: every position is a win or a loss under perfect play, so
+a number strictly between the two says something about the network's
+confidence and nothing about the game. Quantik also has no draws, which is
+what lets the value map onto a win probability with nothing left over —
+`(value + 1) / 2`, exactly.
+
+**An opponent with no network says so.** `minimax-d2` returns `null` for
+`value`, `win_probability` and `policy`, and an empty `top_moves`. A `0.0`
+there would draw an evaluation bar at dead level for a position that may be
+dead lost, which is a confident wrong answer rather than a missing one.
+`uniform-mcts128` is excluded for the same reason: it has an evaluator, but
+a flat prior and a constant zero describe no position in particular.
+
+`top_moves` is restricted to the legality set the request was verified
+against, so an unmasked prior that leaked onto an illegal action can never
+be drawn on the board as a suggestion. Each entry carries the `shape` and
+`position` decomposition of its `action_index`, so a client does not
+reimplement `shape * 16 + position` to draw an arrow.
+
+The refusals are the move endpoint's, for the move endpoint's reasons: a
+terminal position has no side to move whose prospects mean anything, and a
+client whose legality has drifted would otherwise be shown an analysis of a
+position neither side is playing.
+
 ### Routes
 
 ```
-GET  /api/opponents          the dropdown
-GET  /api/models             manifest detail: hashes, architecture, refusals
-POST /api/move/{opponent_id} a move
-POST /api/games              record a finished game
-GET  /api/games?player=      counts and head-to-head
-GET  /*                      the visualizer
+GET  /api                       the route index, so the rest is discoverable
+GET  /api/opponents             the dropdown
+GET  /api/models                manifest detail: hashes, architecture, refusals
+POST /api/move/{opponent_id}    a move
+POST /api/analyse/{opponent_id} value and policy, playing nothing
+POST /api/games                 record a finished game
+GET  /api/games?player=         counts and head-to-head
+GET  /*                         the visualizer
 ```
+
+`GET /api` exists because somebody with the URL should not have to read
+this file, or ask, to find out where the model list is.
 
 `POST /api/games` answers **201** when it wrote the game and **200** when
 the id was already present, so a page reload after the result screen is a

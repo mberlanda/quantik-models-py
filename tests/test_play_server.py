@@ -280,3 +280,29 @@ def test_the_printed_address_is_not_loopback():
     address = srv.lan_address(8000)
     assert address.startswith("http://")
     assert address.endswith(":8000")
+
+
+def test_the_api_index_lists_every_route_the_server_answers(live):
+    """A person with the URL should not have to read the source, or ask, to
+    find out where the model list lives."""
+    status, body, _ = get(live, "/api")
+    assert status == 200
+    listed = {(r["method"], r["path"].split("?")[0]) for r in json.loads(body)["routes"]}
+    assert ("GET", "/api/opponents") in listed
+    assert ("POST", "/api/analyse/{opponent_id}") in listed
+    assert ("POST", "/api/move/{opponent_id}") in listed
+    assert ("GET", "/api/games") in listed
+
+
+def test_analysis_is_served_and_refuses_an_unknown_opponent(live):
+    request = move_request("A.../..../..../....", side_to_move=1)
+    status, body = post(live, "/api/analyse/random", request)
+    assert status == 200
+    assert body["side_to_move"] == 1
+    assert body["value_perspective"] == "side_to_move"
+    # A classical opponent has no value head, and says so rather than
+    # reporting a level bar for a position it has no opinion about.
+    assert body["value"] is None and body["win_probability"] is None
+
+    status, body = post(live, "/api/analyse/nobody@128", request)
+    assert status == 404
