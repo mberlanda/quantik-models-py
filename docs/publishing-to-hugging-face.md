@@ -12,6 +12,10 @@
 > `learning-rate-sweep.md`. Regenerate everything with
 > `scripts/evaluate_lineup.sh`.
 
+A visual version of this document, organised around the fact that every
+mistake here publishes cleanly:
+<https://claude.ai/code/artifact/7f644a2a-24c3-4163-831b-747b422516a6>
+
 Nothing in this repository uploads anything. Staging and pushing are
 separate steps on purpose: a push is authenticated, public, and awkward to
 undo, and a function that both prepares and publishes makes the dry run
