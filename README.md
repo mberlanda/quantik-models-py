@@ -237,8 +237,16 @@ Why it first appeared to fail:
     # regenerate every published number
     scripts/evaluate_lineup.sh runs/eval/today cpool=runs/train/my-run/best
 
+    # stage one for the Hugging Face Hub (writes files; uploads nothing)
+    python -m quantik_models.export.huggingface \
+      runs/train/swept-cpool/best staging/quantik-cpool-c191-b6 \
+      --repo-id <your-org>/quantik-cpool-c191-b6 \
+      --shift runs/eval/swept-2026-08-30/shift.json
+
 Retraining and fine-tuning, including freezing part of a network:
-[`docs/retrain-and-finetune.md`](docs/retrain-and-finetune.md).
+[`docs/retrain-and-finetune.md`](docs/retrain-and-finetune.md). What a model
+repository needs, and what the Hub treats as structural rather than
+decorative: [`docs/publishing-to-hugging-face.md`](docs/publishing-to-hugging-face.md).
 
 ## Training and checkpoint export
 
