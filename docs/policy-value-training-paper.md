@@ -1,5 +1,18 @@
 # Distilling Search Into a Compact Policy/Value Network for Quantik: Design, Tradeoffs, and Cross-Domain Context
 
+> **About the numbers in this document.** Every measurement here comes from
+> a specific run of a specific checkpoint, and the checkpoints live under
+> `runs/`, which is gitignored — so nothing here can be verified from a
+> fresh clone alone. Two things are worth checking before trusting a figure:
+> **which learning rate it was measured at**, and **when**. Anything dated
+> before 2026-08-30 was measured at `--lr 2e-3`, a rate chosen for the
+> ResNet and inherited by every architecture added later; two of the four
+> were being trained at the wrong one, and correcting that reversed several
+> conclusions rather than merely shifting decimals. See
+> `learning-rate-sweep.md`. Regenerate everything with
+> `scripts/evaluate_lineup.sh`.
+
+
 *Technical report, quantik-models-py project — 2026-07. Status: design
 and infrastructure report; experimental sections describe planned and
 in-progress work, not completed results.*

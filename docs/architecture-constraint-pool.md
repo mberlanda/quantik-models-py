@@ -1,5 +1,18 @@
 # ConstraintPoolNet: wiring the rules into the network
 
+> **About the numbers in this document.** Every measurement here comes from
+> a specific run of a specific checkpoint, and the checkpoints live under
+> `runs/`, which is gitignored — so nothing here can be verified from a
+> fresh clone alone. Two things are worth checking before trusting a figure:
+> **which learning rate it was measured at**, and **when**. Anything dated
+> before 2026-08-30 was measured at `--lr 2e-3`, a rate chosen for the
+> ResNet and inherited by every architecture added later; two of the four
+> were being trained at the wrong one, and correcting that reversed several
+> conclusions rather than merely shifting decimals. See
+> `learning-rate-sweep.md`. Regenerate everything with
+> `scripts/evaluate_lineup.sh`.
+
+
 `cpool-c191-b6` — 1,780,253 parameters, matched to `resnet-c128-b6`'s
 1,786,823.
 

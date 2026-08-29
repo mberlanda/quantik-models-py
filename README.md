@@ -83,6 +83,149 @@ quantik-models-materialize \
   --output-npz /path/to/training-view-selfplay.npz
 ```
 
+## Models
+
+Four architectures, all answering the same question in a different way and
+all interchangeable because they agree on one contract:
+
+    input   (B, 9, 4, 4) float32      tensor-board.v1, mover-relative
+    output  (B, 64) policy logits     action_index = shape * 16 + position
+            (B,)    value in [-1, 1]  +1 = good for the side to move
+
+Legality masking is applied **outside** every model, by `masked_log_softmax`,
+using the same code path in training and at inference — so no engine here can
+return an illegal move.
+
+> **Current results, 2026-08-30.** `--preset medium`, ~1.79M parameters each,
+> matched within 1.2%. `cpool` and `attn` at `--lr 6e-4`; `resnet` and `mlp`
+> at `2e-3`. Those rates are swept, not inherited — see
+> [`docs/learning-rate-sweep.md`](docs/learning-rate-sweep.md).
+>
+> | model | IID top-1 | shift, plies 4-6 | shift, plies 7-12 | arena @ply3 |
+> |---|---|---|---|---|
+> | `cpool-c191-b6` | **0.9893** | **0.9295** | **0.9919** | **57.2%** |
+> | `attn-d192-b6` | 0.9879 | 0.9102 | 0.9914 | 54.2% |
+> | `resnet-c128-b6` | 0.9701 | 0.9126 | 0.9720 | 47.8% |
+> | `mlp-h455-b4` | 0.9516 | 0.8843 | 0.9578 | 40.8% |
+>
+> Three numbers, because they disagree: validation on the trained
+> distribution, accuracy on solved positions the corpus never saw
+> ([`docs/shift-evaluation.md`](docs/shift-evaluation.md)), and games played
+> ([`docs/autoplay.md`](docs/autoplay.md)). Which architectures were declined
+> and why is in
+> [`docs/decisions/0001-architecture-lineup.md`](docs/decisions/0001-architecture-lineup.md).
+
+### `resnet` — the incumbent
+
+Convolutional residual trunk. 99.2% of its parameters are the trunk; both
+heads together are 3,655.
+
+```mermaid
+flowchart LR
+  IN["board<br/>(B,9,4,4)"] --> STEM["stem<br/>Conv3x3 9→C · BN · ReLU"]
+  STEM --> TRUNK["trunk<br/>B × residual block<br/>Conv3x3 · BN · ReLU · Conv3x3 · BN · +skip"]
+  TRUNK --> PH["policy head<br/>Conv1x1 C→2 · flatten · Linear 32→64"]
+  TRUNK --> VH["value head<br/>Conv1x1 C→1 · flatten · Linear · tanh"]
+  PH --> POL["policy logits (B,64)"]
+  VH --> VAL["value (B,)"]
+```
+
+Design: [`docs/architecture-resnet.md`](docs/architecture-resnet.md) ·
+Training: [`docs/policy-value-training-paper.md`](docs/policy-value-training-paper.md)
+
+### `mlp` — the control
+
+Throws spatial structure away entirely: 144 flat features through dense
+residual blocks. It exists to make "convolution is worth having on a 4x4
+board" falsifiable rather than assumed. It loses, so the spatial prior is
+real.
+
+```mermaid
+flowchart LR
+  IN["board<br/>(B,9,4,4)"] --> FL["flatten → 144"]
+  FL --> STEM["Linear 144→H · BN · ReLU"]
+  STEM --> TRUNK["trunk<br/>B × dense residual block<br/>Linear · BN · ReLU · Linear · BN · +skip"]
+  TRUNK --> PH["policy head<br/>Linear H→64"]
+  TRUNK --> VH["value head<br/>Linear H→64 · ReLU · Linear→1 · tanh"]
+  PH --> POL["policy logits (B,64)"]
+  VH --> VAL["value (B,)"]
+```
+
+Design: [`docs/architecture-mlp.md`](docs/architecture-mlp.md)
+
+### `cpool` — the constraint model
+
+Quantik's rule is group-wise, not spatial: a shape may not go where the
+opponent already has that shape in the same row, column or 2x2 zone. Twelve
+overlapping groups, every cell in exactly three. Each block pools the sixteen
+cell tokens into those groups, transforms them there, and scatters back.
+
+```mermaid
+flowchart LR
+  IN["board<br/>(B,9,4,4)"] --> TOK["16 cell tokens<br/>Linear 9→C"]
+  TOK --> BLK
+  subgraph BLK["constraint block × B"]
+    direction LR
+    N["LayerNorm"] --> POOL["pool to 12 groups<br/>4 rows · 4 cols · 4 zones"]
+    POOL --> KIND["+ kind embedding<br/>line | zone"]
+    KIND --> GM["group MLP"]
+    GM --> SC["scatter to member cells"]
+    SC --> MG["merge with cell features<br/>+ FFN, residual"]
+  end
+  BLK --> PH["policy head<br/>Linear C→4 per cell<br/>transpose → 64"]
+  BLK --> VH["value head<br/>mean over cells · MLP · tanh"]
+  PH --> POL["policy logits (B,64)"]
+  VH --> VAL["value (B,)"]
+```
+
+Design: [`docs/architecture-constraint-pool.md`](docs/architecture-constraint-pool.md)
+
+### `attn` — the same bet without the prior
+
+Transformer encoder over the sixteen cells. It is told *nothing* about rows,
+columns or zones and has to discover them, which is what makes it the test of
+whether `cpool`'s explicit wiring was necessary. On policy accuracy it ties;
+on the value head it does not.
+
+```mermaid
+flowchart LR
+  IN["board<br/>(B,9,4,4)"] --> TOK["16 cell tokens<br/>Linear 9→D + learned position"]
+  TOK --> BLK
+  subgraph BLK["pre-norm encoder block × B"]
+    direction LR
+    N1["LayerNorm"] --> MHA["multi-head self-attention"]
+    MHA --> R1["+ residual"]
+    R1 --> N2["LayerNorm"] --> FF["FFN"] --> R2["+ residual"]
+  end
+  BLK --> PH["policy head<br/>Linear D→4 per cell<br/>transpose → 64"]
+  BLK --> VH["value head<br/>mean over cells · MLP · tanh"]
+  PH --> POL["policy logits (B,64)"]
+  VH --> VAL["value (B,)"]
+```
+
+Design: [`docs/architectures.md`](docs/architectures.md) ·
+Why it first appeared to fail:
+[`docs/attention-negative-result.md`](docs/attention-negative-result.md)
+
+### Working with them
+
+    # what is registered, and at what rate
+    python -c "from quantik_models.model import registry; \
+      print([(a, registry.default_lr(a)) for a in registry.architectures()])"
+
+    # check the assumptions before a long run (~1 min/arch)
+    python -m quantik_models.train.preflight --preset medium --epochs 16
+
+    # train
+    python -m quantik_models.train.supervised --arch cpool --preset medium \
+      --corpus runs/oracle/corpus/exact-sampled.npz --name my-run
+
+    # regenerate every published number
+    scripts/evaluate_lineup.sh runs/eval/today cpool=runs/train/my-run/best
+
+Retraining and fine-tuning, including freezing part of a network:
+[`docs/retrain-and-finetune.md`](docs/retrain-and-finetune.md).
+
 ## Training and checkpoint export
 
 Install the training extra and train the smoke preset on materialized
