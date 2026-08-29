@@ -18,12 +18,24 @@ import pytest
 
 DOCS = Path(__file__).resolve().parents[1] / "docs"
 REPO = DOCS.parent
-# This repo sits in a multi-repo workspace and its docs legitimately point
-# at siblings — `quantik-core-contracts/docs/policy-value-model-project.md`,
-# for instance. Resolving against the workspace root as well is what makes
-# this check correct rather than merely strict; a first version without it
-# flagged five valid references.
-WORKSPACE = REPO.parent
+
+# References this repo cannot verify, and must not pretend to.
+#
+# `runs/` is gitignored training output and `quantik-*/` are sibling repos
+# in the workspace. Both exist on a developer's machine and neither exists
+# on a runner, so resolving them against the filesystem makes the check
+# pass locally and fail in CI — which a first version of this file did,
+# and which is a worse failure than the one it was written to catch.
+#
+# The line is drawn at "is this a path into this repository": those are
+# checkable anywhere, and nothing else is.
+UNVERIFIABLE = ("runs/", "quantik-")
+
+# Dated design records and journals from past work. They describe what was
+# true when they were written, so a path that has since moved is part of the
+# record rather than a defect — correcting them would falsify the history
+# they exist to preserve. Live documentation is checked.
+ARCHIVAL = ("superpowers/", "nn-quest/")
 
 # `name.md` in backticks, or a markdown link target. Deliberately not a full
 # markdown parser: the failure mode is a stale filename, and a regex over
@@ -33,11 +45,6 @@ LINKED = re.compile(r"\]\(([A-Za-z0-9._/-]+\.md)\)")
 SOURCE_PATH = re.compile(r"`((?:src|tests|scripts)/[A-Za-z0-9._/-]+\.py)`")
 
 
-# Dated design records and journals from past work. They describe what was
-# true when they were written, so a path that has since moved is part of the
-# record rather than a defect — correcting them would falsify the history
-# they exist to preserve. Live documentation is checked.
-ARCHIVAL = ("superpowers/", "nn-quest/")
 
 
 def _markdown_files() -> list[Path]:
@@ -58,12 +65,13 @@ def test_referenced_documents_exist(doc: Path) -> None:
     text = doc.read_text()
     referenced = set(BACKTICKED.findall(text)) | set(LINKED.findall(text))
 
-    bases = (doc.parent, DOCS, REPO, WORKSPACE)
-    missing = [n for n in sorted(referenced) if not any((b / n).exists() for b in bases)]
+    checkable = [n for n in sorted(referenced) if not n.startswith(UNVERIFIABLE)]
+    bases = (doc.parent, DOCS, REPO)
+    missing = [n for n in checkable if not any((b / n).exists() for b in bases)]
 
     assert not missing, (
         f"{doc.relative_to(REPO)} references {missing}, which do not exist "
-        f"relative to the file, docs/, the repo root, or the workspace root"
+        f"relative to the file, docs/, or the repo root"
     )
 
 
@@ -80,3 +88,22 @@ def test_referenced_source_paths_exist(doc: Path) -> None:
         if not (REPO / path).exists()
     ]
     assert not missing, f"{doc.relative_to(REPO)} references missing files: {missing}"
+
+
+def test_the_skip_rule_does_not_swallow_the_check() -> None:
+    """Guard the guard.
+
+    `UNVERIFIABLE` exists so the check behaves the same on a runner as on a
+    developer's machine. A prefix list that grew until it matched
+    everything would achieve that by checking nothing.
+    """
+    referenced = set()
+    for doc in _markdown_files():
+        text = doc.read_text()
+        referenced |= set(BACKTICKED.findall(text)) | set(LINKED.findall(text))
+
+    checked = [n for n in referenced if not n.startswith(UNVERIFIABLE)]
+    assert len(checked) >= 10, (
+        f"only {len(checked)} of {len(referenced)} references are being "
+        "checked; the skip list has grown too broad"
+    )
