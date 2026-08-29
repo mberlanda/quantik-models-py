@@ -125,3 +125,73 @@ def test_pack_writes_a_gzipped_solver_queue_and_a_summary(tmp_path):
 def test_pack_refuses_a_directory_with_no_runs(tmp_path):
     with pytest.raises(ValueError, match="no arena runs"):
         pack.pack([tmp_path / "nothing"], tmp_path / "out")
+
+
+def games_json(root, name, seed, results, leaderboard):
+    d = root / name
+    d.mkdir(parents=True)
+    (d / "games.json").write_text(
+        json.dumps({"seed": seed, "games": len(results), "leaderboard": leaderboard, "results": results})
+    )
+    return d
+
+
+def test_head_to_head_splits_the_seats(tmp_path):
+    """The seat is not a detail: from a shallow start the mover wins most
+    games regardless of who is moving, so a pooled rate against a fixed
+    opponent mixes strength with the first-move advantage."""
+    results = (
+        [{"mover": "cpool", "responder": "orc", "winner": "cpool", "plies": 5, "actions": []}] * 8
+        + [{"mover": "cpool", "responder": "orc", "winner": "orc", "plies": 5, "actions": []}] * 2
+        + [{"mover": "orc", "responder": "cpool", "winner": "orc", "plies": 5, "actions": []}] * 8
+        + [{"mover": "orc", "responder": "cpool", "winner": "cpool", "plies": 5, "actions": []}] * 2
+    )
+    d = games_json(tmp_path, "s1", 1, results, [{"agent": "orc", "wins": 10, "games": 20, "win_rate": 0.5}])
+    row = pack.head_to_head([d], "orc")[0]
+    assert row["agent"] == "cpool"
+    assert row["as_mover"] == pytest.approx(0.8)
+    assert row["as_responder"] == pytest.approx(0.2)
+    assert row["win_rate"] == pytest.approx(0.5)
+    # 10/20 either way: the seats cancel and the pooled figure says nothing.
+    assert not row["beats_oracle"] and not row["loses_to_oracle"]
+
+
+def test_head_to_head_calls_a_verdict_only_when_the_interval_excludes_even(tmp_path):
+    results = [{"mover": "mlp", "responder": "orc", "winner": "orc", "plies": 5, "actions": []}] * 400
+    d = games_json(tmp_path, "s1", 1, results, [{"agent": "orc", "wins": 400, "games": 400, "win_rate": 1.0}])
+    row = pack.head_to_head([d], "orc")[0]
+    assert row["loses_to_oracle"] is True and row["beats_oracle"] is False
+
+
+def test_head_to_head_ignores_pairings_the_oracle_was_not_in(tmp_path):
+    results = [
+        {"mover": "cpool", "responder": "attn", "winner": "cpool", "plies": 5, "actions": []},
+        {"mover": "cpool", "responder": "orc", "winner": "cpool", "plies": 5, "actions": []},
+    ]
+    d = games_json(tmp_path, "s1", 1, results, [{"agent": "orc", "wins": 0, "games": 1, "win_rate": 0.0}])
+    rows = pack.head_to_head([d], "orc")
+    assert [r["agent"] for r in rows] == ["cpool"]
+    assert rows[0]["games"] == 1
+
+
+def test_pack_infers_the_oracle_from_the_game_counts(tmp_path):
+    """It played every pairing; each network played only its own."""
+    results = (
+        [{"mover": "cpool", "responder": "orc", "winner": "orc", "plies": 5, "actions": []}] * 4
+        + [{"mover": "mlp", "responder": "orc", "winner": "orc", "plies": 5, "actions": []}] * 4
+    )
+    d = games_json(
+        tmp_path / "runs",
+        "s1-p3",
+        1,
+        results,
+        [
+            {"agent": "orc", "wins": 8, "games": 8, "win_rate": 1.0},
+            {"agent": "cpool", "wins": 0, "games": 4, "win_rate": 0.0},
+            {"agent": "mlp", "wins": 0, "games": 4, "win_rate": 0.0},
+        ],
+    )
+    summary = pack.pack([d], tmp_path / "packed")
+    assert summary["oracle"] == "orc"
+    assert {r["agent"] for r in summary["head_to_head"]} == {"cpool", "mlp"}
+    assert "Head to head against `orc`" in (tmp_path / "packed" / "summary.md").read_text()

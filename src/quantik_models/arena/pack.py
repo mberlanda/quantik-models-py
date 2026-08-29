@@ -27,6 +27,7 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -100,6 +101,60 @@ def seed_spread(runs: list[RunSummary]) -> dict[str, float]:
     return spread
 
 
+def head_to_head(run_dirs: list[Path], oracle: str) -> list[dict]:
+    """Each agent's record against `oracle`, split by seat.
+
+    The leaderboard aggregates the seats away, and the seat is not a detail
+    here: from a ply-3 start the mover wins most games regardless of who is
+    moving, so a single pooled win rate against a fixed opponent mixes the
+    agent's strength with the first-move advantage. Splitting them is what
+    makes "does this network beat minimax" answerable.
+    """
+    seats: dict[str, dict[str, list[int]]] = defaultdict(
+        lambda: {"as_mover": [0, 0], "as_responder": [0, 0]}
+    )
+    for run_dir in run_dirs:
+        path = run_dir / "games.json"
+        if not path.exists():
+            continue
+        for game in json.loads(path.read_text())["results"]:
+            mover, responder = game["mover"], game["responder"]
+            if oracle not in (mover, responder):
+                continue
+            agent = responder if mover == oracle else mover
+            seat = "as_responder" if mover == oracle else "as_mover"
+            seats[agent][seat][1] += 1
+            if game["winner"] == agent:
+                seats[agent][seat][0] += 1
+
+    out = []
+    for agent, record in seats.items():
+        wins = record["as_mover"][0] + record["as_responder"][0]
+        games = record["as_mover"][1] + record["as_responder"][1]
+        low, high = wilson_ci(wins, games)
+        out.append(
+            {
+                "agent": agent,
+                "wins": wins,
+                "games": games,
+                "win_rate": wins / games if games else 0.0,
+                "ci_low": low,
+                "ci_high": high,
+                "as_mover": record["as_mover"][0] / record["as_mover"][1]
+                if record["as_mover"][1]
+                else 0.0,
+                "as_responder": record["as_responder"][0] / record["as_responder"][1]
+                if record["as_responder"][1]
+                else 0.0,
+                # Above 0.5 the agent is beating the oracle on that seat's
+                # own terms; the gap between the two is the seat advantage.
+                "beats_oracle": low > 0.5,
+                "loses_to_oracle": high < 0.5,
+            }
+        )
+    return sorted(out, key=lambda row: -row["win_rate"])
+
+
 def merge_qfens(run_dirs: list[Path]) -> list[str]:
     """Every run's `to-solve.qfen`, deduplicated up to symmetry."""
     lines: list[str] = []
@@ -124,7 +179,12 @@ def write_gzip(text: str, path: Path) -> Path:
     return path
 
 
-def summarise(runs: list[RunSummary], spread: dict[str, float]) -> str:
+def summarise(
+    runs: list[RunSummary],
+    spread: dict[str, float],
+    h2h: list[dict] | None = None,
+    oracle: str | None = None,
+) -> str:
     """The markdown table, so no number in the write-up is hand-typed."""
     lines = ["| agent | win rate | 95% CI | games | widest seed gap |", "|---|---|---|---|---|"]
     for row in pooled(runs):
@@ -145,15 +205,40 @@ def summarise(runs: list[RunSummary], spread: dict[str, float]) -> str:
             for a in header
         ]
         lines.append(f"| {run.name} | {run.seed} | " + " | ".join(cells) + " |")
+
+    if h2h and oracle:
+        lines += [
+            "",
+            f"Head to head against `{oracle}`, by seat:",
+            "",
+            "| agent | win rate | 95% CI | as mover | as responder | verdict |",
+            "|---|---|---|---|---|---|",
+        ]
+        for row in h2h:
+            if row["beats_oracle"]:
+                verdict = "beats it"
+            elif row["loses_to_oracle"]:
+                verdict = "loses to it"
+            else:
+                verdict = "indistinguishable"
+            lines.append(
+                f"| `{row['agent']}` | {row['win_rate']:.1%} | "
+                f"{row['ci_low']:.1%}–{row['ci_high']:.1%} | "
+                f"{row['as_mover']:.1%} | {row['as_responder']:.1%} | {verdict} |"
+            )
     return "\n".join(lines)
 
 
-def pack(run_dirs: list[Path], out: Path) -> dict:
+def pack(run_dirs: list[Path], out: Path, oracle: str | None = None) -> dict:
     """Write the pooled summary and the deduplicated position file."""
     runs = [read_run(d) for d in run_dirs if (d / "games.json").exists()]
     if not runs:
         raise ValueError(f"no arena runs with a games.json among {run_dirs}")
     spread = seed_spread(runs)
+    pooled_rows = pooled(runs)
+    # The opponent everything else played: it appears in every pairing and
+    # each other agent appears only in its own, so it has the most games.
+    oracle = oracle or max(pooled_rows, key=lambda row: row["games"])["agent"]
     qfens = merge_qfens(run_dirs)
 
     out.mkdir(parents=True, exist_ok=True)
@@ -163,14 +248,17 @@ def pack(run_dirs: list[Path], out: Path) -> dict:
         if games.exists():
             write_gzip(games.read_text(), out / f"games-{run_dir.name}.json.gz")
 
-    summary = {
+    h2h = head_to_head(run_dirs, oracle)
+    summary: dict[str, Any] = {
         "runs": [{"name": r.name, "seed": r.seed, "games": r.games} for r in runs],
-        "pooled": pooled(runs),
+        "oracle": oracle,
+        "pooled": pooled_rows,
+        "head_to_head": h2h,
         "seed_spread": spread,
         "positions_to_solve": len(qfens),
     }
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
-    (out / "summary.md").write_text(summarise(runs, spread) + "\n")
+    (out / "summary.md").write_text(summarise(runs, spread, h2h, oracle) + "\n")
     return summary
 
 
@@ -180,8 +268,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("out", type=Path)
     parser.add_argument("runs", type=Path, nargs="+")
+    parser.add_argument(
+        "--oracle",
+        default=None,
+        help="the fixed opponent; inferred from the game counts when omitted",
+    )
     args = parser.parse_args(argv)
-    summary = pack(args.runs, args.out)
+    summary = pack(args.runs, args.out, args.oracle)
     print((args.out / "summary.md").read_text())
     print(f"{summary['positions_to_solve']:,} positions to solve -> {args.out}")
     return 0
