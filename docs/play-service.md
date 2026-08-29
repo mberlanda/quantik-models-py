@@ -15,7 +15,10 @@ four pieces and no HTTP in three of them:
 | `registry.py` | which checkpoints on disk are playable, and why the others are not |
 | `opponents.py` | the roster — classical engines and neural ones, under the arena's own names |
 | `service.py` | validation, legality, the move itself |
+| `record.py` | replaying a submitted game, and refusing to take its word |
 | `store.py` | finished games |
+| `server.py` | the HTTP surface, the static app, the LAN address |
+| `__main__.py` | the CLI |
 
 `service.PlayService` takes a decoded request dict and returns a decoded
 response dict. It is transport-free on purpose: the rules are testable
@@ -43,10 +46,10 @@ service draws a fresh seed per request; a fixed default would make
 
 The opponent is chosen by the route, not the body: `POST
 /api/move/{opponent_id}`, where `opponent_id` comes from
-`GET /api/opponents`. **That route is not built yet** — this section
-records the shape the handler was written for; the server is a separate
-step, and `PlayService.choose_move(opponent_id, request)` is what it will
-call. That keeps `src/engines.js` in the visualizer
+`GET /api/opponents`. That keeps `src/engines.js` in the visualizer
+unchanged: it builds its POST body from a fixed literal with no hook for
+extra fields, so anything the server needs beyond the position has to ride
+in the URL. That keeps `src/engines.js` in the visualizer
 unchanged — it builds its POST body from a fixed literal with no hook for
 extra fields, so anything the server needs to know beyond the position has
 to ride in the URL.
@@ -145,6 +148,80 @@ two phones mid-game are two real threads. Serializing inference is not a
 performance decision; it is the only thing that makes the shared state
 safe. Static files and the listing routes stay responsive because they
 never take the lock.
+
+## Running it
+
+```bash
+.venv/bin/python -m quantik_models.play --models staging
+```
+
+Prints what it found and where it is:
+
+```
+quantik play service 0.1.0
+  models     staging  (4 ready of 5 found)
+    ok cpool-c191-b6
+    -- attn-c96-b4  (weights hash 3f9c... does not match manifest 'a12e...')
+  opponents  14
+  store      /Users/you/.local/share/quantik/games.db
+  app        /Users/you/Code/quantik-ns/quantik-qfen-visualizer
+
+  local      http://127.0.0.1:8000
+  this WiFi  http://192.168.4.27:8000
+```
+
+The second address is the one to type into a phone. It is resolved by
+opening a UDP socket toward TEST-NET-1 and reading back the local address
+the OS chose — nothing is sent. `gethostname` would be simpler and
+resolves to 127.0.0.1 on macOS: the answer that looks right and does not
+work from another device.
+
+A refused model is printed with its reason rather than omitted. Silence is
+the failure mode here — a model missing from the dropdown looks like one
+that was never trained.
+
+The store defaults to `~/.local/share/quantik/games.db`, deliberately not
+under `runs/`. A checkpoint can be retrained; a game somebody played
+cannot be replayed, and `runs/` is gitignored and routinely deleted
+wholesale.
+
+### Routes
+
+```
+GET  /api/opponents          the dropdown
+GET  /api/models             manifest detail: hashes, architecture, refusals
+POST /api/move/{opponent_id} a move
+POST /api/games              record a finished game
+GET  /api/games?player=      counts and head-to-head
+GET  /*                      the visualizer
+```
+
+`POST /api/games` answers **201** when it wrote the game and **200** when
+the id was already present, so a page reload after the result screen is a
+no-op rather than a duplicate. It always returns a `discrepancies` list,
+empty when the client's reading of the game matched the replay — a caller
+has to be able to tell "the two rule implementations agreed" from "this
+server does not report disagreements".
+
+### Why `http.server` and not a framework
+
+The base dependency of this package is numpy alone, with torch in an
+extra, and that posture is deliberate. The work a framework would do here
+is five routes, JSON in and out, and a static directory. The one thing it
+would genuinely buy — async concurrency — buys nothing, because inference
+is serialized behind a lock regardless: the evaluator and the MCTS state
+are shared.
+
+What does matter is that the server is *threading*. A 128-simulation move
+takes a second or more, and on a single-threaded server one player's move
+would freeze the board on every other device in the house.
+`ThreadingHTTPServer` keeps the static files and the listing routes
+answering while a move computes.
+
+One SQLite connection is opened per request rather than shared, because
+`sqlite3` connections are not safe to move between threads and this server
+has several. Opening one costs microseconds against a move that costs a
+second.
 
 ## Verifying it
 
