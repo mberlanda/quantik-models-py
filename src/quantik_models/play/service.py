@@ -32,6 +32,11 @@ from . import registry as reg
 
 REQUEST_SCHEMA = "quantik.engine-request.v1"
 RESPONSE_SCHEMA = "quantik.engine-response.v1"
+# Local to this service, and named so it cannot be mistaken for one of the
+# two above: `quantik-core-contracts` defines the request and response pair
+# for *playing*, and there is no contract for an analysis. Inventing a
+# `quantik.` name here would imply a schema the contracts repo does not have.
+ANALYSIS_SCHEMA = "quantik-play.analysis.v1"
 
 _WEIGHTS_NAME = "weights.safetensors"
 _SEED_BITS = 32
@@ -289,6 +294,62 @@ class PlayService:
         response.update(assessment)
         return response
 
+    def analyse(self, opponent_id: str, request: Any) -> dict[str, Any]:
+        """What one opponent's network makes of a position, without playing.
+
+        Deliberately not a field on the move response. A player wants the
+        evaluation of the position in front of *them*, which is the one
+        position no move request ever produces — the move endpoint is only
+        ever asked about positions the engine is about to play from.
+
+        The refusals are the move endpoint's, for the move endpoint's
+        reasons: a client whose legality has drifted would otherwise be
+        shown an analysis of a position neither side is playing, and a
+        terminal position has no side to move whose prospects mean
+        anything.
+
+        `value` is the network's own estimate, never the exact oracle's.
+        Quantik is solved and every position here is a win or a loss with
+        perfect play, so a number strictly between the two is a statement
+        about the network's confidence and nothing about the game. The
+        field names say `value` and `win_probability` rather than anything
+        implying certainty for that reason.
+        """
+        qfen, side_to_move, claimed, _ = validate_request(request)
+
+        opponent = self._opponents.get(opponent_id)
+        if opponent is None:
+            raise ServiceError(404, f"unknown opponent {opponent_id!r}")
+
+        position = resolve_position(qfen, side_to_move, claimed)
+
+        with self._lock:
+            agent = self._agent_for(opponent)
+            started = time.perf_counter()
+            assessment = self._assess(opponent, agent, position)
+            elapsed_ms = (time.perf_counter() - started) * 1000.0
+
+        policy = assessment.get("policy")
+        value = assessment.get("value")
+        return {
+            "schema": ANALYSIS_SCHEMA,
+            "opponent_id": opponent.opponent_id,
+            "engine_kind": opponent.kind,
+            "side_to_move": side_to_move,
+            # Named, not implied. The value head is trained from the mover's
+            # perspective, so reporting it without saying so is read
+            # backwards on every odd ply — the single most likely way for an
+            # evaluation bar to be confidently upside down.
+            "value_perspective": "side_to_move",
+            "value": value,
+            # Quantik has no draws, so the value maps onto a win probability
+            # for the side to move with nothing left over.
+            "win_probability": None if value is None else (value + 1.0) / 2.0,
+            "policy": policy,
+            "top_moves": _top_moves(policy, position),
+            "elapsed_ms": elapsed_ms,
+        }
+
     def _agent_for(self, opponent: op.Opponent):
         """Build or reuse the agent, refusing weights that changed on disk.
 
@@ -365,6 +426,34 @@ class PlayService:
             "policy": [float(p) for p in priors[0]],
             "value": float(values[0]),
         }
+
+
+def _top_moves(
+    policy: list[float] | None, position: _Position, limit: int = 8
+) -> list[dict[str, Any]]:
+    """The legal actions the network likes best, decoded for a board.
+
+    Restricted to `position.legal_indices` rather than trusting the priors
+    to be masked: an unmasked prior leaking onto an illegal action would
+    otherwise be drawn on the board as a suggestion, which is worse than
+    showing nothing.
+
+    `shape` and `position` are the decomposition of `action_index` that a
+    board actually renders, so a caller does not have to reimplement
+    `shape * 16 + position` to draw an arrow.
+    """
+    if policy is None:
+        return []
+    ranked = sorted(position.legal_indices, key=lambda a: -policy[a])[:limit]
+    return [
+        {
+            "action_index": int(action),
+            "shape": "ABCD"[int(action) // 16],
+            "position": int(action) % 16,
+            "prior": float(policy[action]),
+        }
+        for action in ranked
+    ]
 
 
 def _build(spec: dict[str, Any]):

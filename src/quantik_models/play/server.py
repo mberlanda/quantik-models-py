@@ -31,6 +31,28 @@ from . import store
 from . import CONTRACT_VERSION, SERVICE_VERSION
 from .service import PlayService, ServiceError
 
+# Served at `GET /api` so the routes are discoverable from the service
+# itself. A person who has the URL should not have to read this file — or
+# ask — to find out that the model list lives at `/api/opponents`.
+_API_INDEX = {
+    "service": "quantik play",
+    "version": SERVICE_VERSION,
+    "routes": [
+        {"method": "GET", "path": "/api/opponents",
+         "description": "every playable opponent: classical engines and each staged model at 0 and 128 simulations"},
+        {"method": "GET", "path": "/api/models",
+         "description": "the staged checkpoints, refused ones included, with architecture and weights hash"},
+        {"method": "GET", "path": "/api/games?player=NAME",
+         "description": "recorded games, split by seat"},
+        {"method": "POST", "path": "/api/move/{opponent_id}",
+         "description": "quantik.engine-request.v1 in, quantik.engine-response.v1 out"},
+        {"method": "POST", "path": "/api/analyse/{opponent_id}",
+         "description": "the network's value and policy for a position, without playing a move"},
+        {"method": "POST", "path": "/api/games",
+         "description": "record a finished game; idempotent on game_id"},
+    ],
+}
+
 _MAX_BODY = 1 << 20  # 1 MiB: a finished Quantik game is a few hundred bytes.
 
 _CONTENT_TYPES = {
@@ -136,7 +158,9 @@ class PlayHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
-        if path == "/api/opponents":
+        if path == "/api" or path == "/api/":
+            self._dispatch(lambda: (200, _API_INDEX))
+        elif path == "/api/opponents":
             self._dispatch(lambda: (200, {"opponents": self.service.list_opponents()}))
         elif path == "/api/models":
             self._dispatch(lambda: (200, {"models": self.service.list_models()}))
@@ -152,6 +176,9 @@ class PlayHandler(BaseHTTPRequestHandler):
         if path.startswith("/api/move/"):
             opponent_id = path[len("/api/move/") :]
             self._dispatch(lambda: self._handle_move(opponent_id))
+        elif path.startswith("/api/analyse/"):
+            opponent_id = path[len("/api/analyse/") :]
+            self._dispatch(lambda: self._handle_analysis(opponent_id))
         elif path == "/api/games":
             self._dispatch(self._handle_record)
         else:
@@ -161,6 +188,11 @@ class PlayHandler(BaseHTTPRequestHandler):
         from urllib.parse import unquote
 
         return 200, self.service.choose_move(unquote(opponent_id), self._read_json())
+
+    def _handle_analysis(self, opponent_id: str) -> tuple[int, Any]:
+        from urllib.parse import unquote
+
+        return 200, self.service.analyse(unquote(opponent_id), self._read_json())
 
     def _handle_record(self) -> tuple[int, Any]:
         payload = rec.validate_payload(self._read_json())
