@@ -115,6 +115,15 @@ return an illegal move.
 > and why is in
 > [`docs/decisions/0001-architecture-lineup.md`](docs/decisions/0001-architecture-lineup.md).
 
+![Validation top-1 per epoch for all six runs](docs/figures/training-curves.svg)
+
+The dashed lines are the same two architectures trained at `2e-3`, the rate
+the ResNet was tuned for and everything added later inherited. `attn` did
+not learn at all at that rate; `cpool` converged perfectly well, to a lower
+place. A single-rate run cannot tell either of those apart from "this
+architecture is worse". Every figure, and what each one does and does not
+establish: [`docs/benchmarks.md`](docs/benchmarks.md).
+
 ### `resnet` — the incumbent
 
 Convolutional residual trunk. 99.2% of its parameters are the trunk; both

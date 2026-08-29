@@ -43,6 +43,10 @@ ARCHIVAL = ("superpowers/", "nn-quest/")
 BACKTICKED = re.compile(r"`([A-Za-z0-9._/-]+\.md)`")
 LINKED = re.compile(r"\]\(([A-Za-z0-9._/-]+\.md)\)")
 SOURCE_PATH = re.compile(r"`((?:src|tests|scripts)/[A-Za-z0-9._/-]+\.py)`")
+# Embedded images. The figures are generated into `docs/figures/` and
+# committed, so a renamed figure breaks a document exactly the way a renamed
+# module does, and just as invisibly — the alt text still reads fine.
+IMAGE = re.compile(r"!\[[^\]]*\]\(([A-Za-z0-9._/-]+\.(?:svg|png))\)")
 
 
 
@@ -88,6 +92,23 @@ def test_referenced_source_paths_exist(doc: Path) -> None:
         if not (REPO / path).exists()
     ]
     assert not missing, f"{doc.relative_to(REPO)} references missing files: {missing}"
+
+
+@pytest.mark.parametrize("doc", _markdown_files(), ids=lambda p: p.name)
+def test_embedded_figures_exist(doc: Path) -> None:
+    """Every `![...](...)` target resolves.
+
+    A figure is generated output that happens to be committed, so it can go
+    missing in a way prose cannot: regenerate under a new name and the old
+    document still renders, just with a broken image where the evidence was.
+    """
+    bases = (doc.parent, DOCS, REPO)
+    missing = [
+        target
+        for target in sorted(set(IMAGE.findall(doc.read_text())))
+        if not any((base / target).exists() for base in bases)
+    ]
+    assert not missing, f"{doc.relative_to(REPO)} embeds missing figures: {missing}"
 
 
 def test_the_skip_rule_does_not_swallow_the_check() -> None:
