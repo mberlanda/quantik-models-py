@@ -24,7 +24,10 @@ OUT="$1"; shift
 PYTHON="${PYTHON:-.venv/bin/python}"
 # Both default inside the module; named here so a run is self-describing.
 NAMESPACE="${QUANTIK_HF_NAMESPACE:-brpoplpush}"
-LICENSE="${HF_LICENSE:-apache-2.0}"
+# Lowercase `mit`: the Hub takes its licence identifier from a fixed table,
+# and every licensed repository in this workspace is MIT. The module default
+# is the same value — repeated here only so a run is self-describing.
+LICENSE="${HF_LICENSE:-mit}"
 # The evaluation the model-index numbers are read from. Pointing this at a
 # stale directory is the one way to publish a card that describes a
 # checkpoint other than the one beside it.
