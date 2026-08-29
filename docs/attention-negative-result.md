@@ -1,7 +1,19 @@
-# The attention encoder does not train on this task
+# The attention encoder does not train at the lineup's learning rate
 
-**Status: unresolved.** This document records a failure and the
-diagnostics run against it. It does not claim to explain it.
+**Status: resolved — it is the learning rate.** An earlier version of this
+document called it unresolved and listed "learning rate alone" among the
+things ruled out. That was wrong, and it was wrong for an instructive
+reason: the claim rested on a single epoch. Given three, the picture
+reverses completely.
+
+| epochs at `--lr 3e-4` | 1 | 2 | 3 |
+|---|---|---|---|
+| val top-1 | 0.5380 | 0.6454 | **0.7271** |
+
+At 3e-4 the network learns steadily and was still climbing when the probe
+ended. At the lineup's shared 2e-3 it is flat at 0.51 for sixteen epochs.
+One epoch could not distinguish "marginally better" from "learning"; three
+could.
 
 `attn-d192-b6` was trained at `medium` on the same corpus, split, budget
 and seed as the other three architectures, per the methodology in
@@ -81,11 +93,10 @@ so the transpose trap is not in play.
 1, 5 and 64. The graph computes what the model computes; the model is the
 problem.
 
-**Learning rate alone.** A probe at `--lr 3e-4` — roughly seven times
-lower, and in the range usually recommended for transformers — reaches
-0.5380 validation top-1 after its first epoch, against 0.5031 at 2e-3.
-Better, and nowhere near the 0.90 the ResNet reaches in the same epoch. A
-further probe at 1e-4 is running.
+Not ruled out, and in fact the cause: **the learning rate**. See the
+correction at the top. 2e-3 is roughly seven times higher than the range
+usually recommended for transformers, and at 3e-4 the same network
+trains.
 
 ## An improvement that was tried and rejected
 
@@ -110,36 +121,47 @@ have blocked `cpool` first. The fixed-batch overfit test does not predict
 trainability across these architectures, so the preflight keeps its weak
 version, which at least catches a frozen trunk or a detached graph.
 
-## What this does and does not say about attention
+## The methodology was the problem, not the architecture
 
-**It does not say attention is a bad architecture for Quantik.** The
-lineup methodology gives every architecture the same optimizer, schedule
-and budget, deliberately, so that no architecture is quietly tuned harder
-than the others. That rule has a failure mode, and this is it: when one
-architecture needs different hyperparameters to train *at all*, holding
-them fixed produces a result about the hyperparameters rather than about
-the architecture.
+ADR 0001 requires every architecture to be trained with the same
+optimizer, schedule and budget, so that none is quietly tuned harder than
+the others. That is the right instinct and it was implemented the wrong
+way, which this failure makes visible.
 
-The honest claim is therefore narrow: **at the lineup's shared settings,
-and at 3e-4, this attention encoder does not learn the task, and the usual
-suspects have been ruled out.**
+**A shared learning-rate *value* is not equal treatment.** 2e-3 is the
+trainer's default, and it is the default because it was chosen for the
+ResNet — the only architecture that existed when the default was set. Every
+subsequent architecture has been evaluated at a learning rate tuned for a
+convolutional network. That does not privilege "no architecture"; it
+privileges the incumbent.
 
-## What to try next, in order
+The MLP and `ConstraintPoolNet` happened to tolerate it. The attention
+encoder does not, and would have been recorded as a failed architecture on
+the strength of a hyperparameter inherited from a different one.
 
-1. **Finish the learning-rate sweep** — 1e-4 is running; 3e-5 is the next
-   rung down.
-2. **Warmup.** Pre-norm blocks were chosen specifically so that no warmup
-   schedule would be needed, which is the standard justification. If a
-   linear warmup fixes this, that justification was wrong for this setting
-   and the module docstring needs correcting.
-3. **Exclude LayerNorm and the positional embedding from weight decay.**
-   Standard practice for transformers, not currently done — the trainer
-   passes every parameter to AdamW with `weight_decay=1e-4`. Small, but it
-   is free to test.
-4. **The `small` preset.** If `attn-d96-b4` trains and `attn-d192-b6` does
-   not, the problem is scale, not architecture.
-5. **Only then** conclude anything about attention on this task.
+**The fix is a shared protocol rather than a shared value.** Each
+architecture gets the same small learning-rate sweep and the same budget,
+and the best validation result is what enters the comparison. That is
+equal treatment — every architecture receives exactly the same tuning
+effort — and it removes the incumbent's advantage without letting anyone
+tune one model harder than the rest.
 
-Until one of those lands, `attn` stays registered and out of every
-comparison table. A number produced by a model that did not train is worse
-than no number.
+## What follows
+
+1. **Train `attn` to completion at 3e-4** and report it.
+2. **Sweep the other three at the same grid.** Not optional, and not a
+   courtesy to attention: if `cpool` or the ResNet also improves at a
+   different learning rate, then every comparison in
+   `shift-evaluation.md` and `autoplay.md` is a comparison at *the
+   ResNet's* preferred setting, and their margins need restating.
+3. Only then is there a defensible claim about attention on this task.
+
+Until step 1 lands, `attn` stays registered and out of every comparison
+table.
+
+## Things that were ruled out and stay ruled out
+
+Vanishing gradients, dead parameters, the action layout, and the ONNX
+export are all genuinely clear — those diagnostics were sound. The error
+was stopping the learning-rate probe after one epoch and writing the
+conclusion from it.

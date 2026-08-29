@@ -250,24 +250,33 @@ are different failures and the record should not have conflated them.
 
 `attn-d192-b6` was added once the "if the first three land cleanly"
 trigger was met, and trained at the shared settings. It reached **0.5130**
-validation top-1 against the ResNet's 0.9701, with a loss curve flat from
-the first epoch — a model that did not learn the task, not a weaker one.
+validation top-1 against the ResNet's 0.9701, flat from the first epoch.
 
-The diagnostics rule out the usual suspects (gradients are marginally
-*larger* than `cpool`'s at every layer; no dead parameters; the export
-agrees with torch), and a learning rate seven times lower helps
-marginally. `attention-negative-result.md` has the detail.
+At `--lr 3e-4` the same network climbs 0.5380 → 0.6454 → 0.7271 over three
+epochs and is still rising. **The learning rate was the whole problem.**
 
-This exposes a real limit of the rule stated above. **"Same optimizer,
-same schedule, same budget" prevents one architecture being tuned harder
-than the others — and, when an architecture needs different
-hyperparameters to train at all, converts a question about architecture
-into a question about hyperparameters.** The rule is still right for the
-three that train; it simply cannot support a conclusion about the fourth.
+That exposes an error in the rule stated above, and it is worth being
+precise about what the error is. The rule's *instinct* — no architecture
+gets tuned harder than the others — is right. Its *implementation* was not:
+a shared learning-rate **value** is not equal treatment, because 2e-3 is
+the trainer's default and that default was chosen for the ResNet, the only
+architecture that existed at the time. Every architecture added since has
+been evaluated at a convolutional network's preferred setting. That does
+not privilege nobody; it privileges the incumbent.
 
-So `attn` is registered, documented, and **excluded from every comparison
-table** until it trains. Recording a 0.5130 beside the others would
-present a hyperparameter failure as an architectural finding.
+The MLP and `ConstraintPoolNet` tolerated it. Attention did not, and on
+the first reading was about to be recorded as a failed architecture on the
+strength of a hyperparameter inherited from a different one.
+
+**The rule is therefore amended: a shared protocol, not a shared value.**
+Every architecture gets the same small learning-rate sweep at the same
+budget, and its best validation result enters the comparison. Same tuning
+effort for everyone, no incumbent advantage.
+
+This has a consequence that is not optional. Every margin in
+`shift-evaluation.md` and `autoplay.md` was measured at 2e-3, so **until
+the other three are swept on the same grid, they are comparisons at the
+ResNet's preferred setting** and their margins may need restating.
 
 ## What would change this decision
 
