@@ -125,6 +125,11 @@ def _new_axes(width: float, height: float):
 
     matplotlib.use("Agg")
     matplotlib.rcParams["svg.fonttype"] = "none"
+    # Without a fixed hashsalt, matplotlib derives its element ids from a
+    # per-process random seed, so regenerating an unchanged figure rewrites
+    # every clip-path id. Committed figures then churn on every run and a
+    # reviewer cannot see a real change in the diff.
+    matplotlib.rcParams["svg.hashsalt"] = "quantik-models"
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(width, height))
@@ -142,7 +147,16 @@ def _new_axes(width: float, height: float):
 
 def _save(fig, out: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, format="svg", bbox_inches="tight", facecolor=GROUND)
+    fig.savefig(
+        out,
+        format="svg",
+        bbox_inches="tight",
+        facecolor=GROUND,
+        # The default metadata embeds a creation timestamp, which is the
+        # other half of the churn: it changes on every regeneration and says
+        # nothing the git history does not already record.
+        metadata={"Date": None},
+    )
     import matplotlib.pyplot as plt
 
     plt.close(fig)

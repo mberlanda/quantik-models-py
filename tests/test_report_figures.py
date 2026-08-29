@@ -288,3 +288,17 @@ def test_build_skips_the_oracle_figure_when_nothing_is_packed(tmp_path, capsys):
 
     build_figures.build(tmp_path / "runs", tmp_path / "out", "none", tmp_path / "oracle")
     assert "packed/summary.json" in capsys.readouterr().out
+
+
+def test_regenerating_an_unchanged_figure_produces_identical_bytes(tmp_path):
+    """Committed figures must only change when the data or the code does.
+
+    matplotlib seeds its element ids from a per-process random value and
+    embeds a creation timestamp, so without both fixed, every regeneration
+    rewrites every clip-path id and the date line — and a reviewer cannot
+    find a real change in the diff.
+    """
+    runs = [fg.load_training_run(write_run(tmp_path, "swept-cpool", [0.90, 0.94, 0.96]))]
+    first = fg.training_curves(runs, tmp_path / "a.svg").read_bytes()
+    second = fg.training_curves(runs, tmp_path / "b.svg").read_bytes()
+    assert first == second
