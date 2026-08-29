@@ -49,7 +49,7 @@ In the order the measurements get harder to fool.
 These are the documents to read if you want to know how much to trust the rest.
 
 - [`learning-rate-sweep.md`](learning-rate-sweep.md) — a rate chosen for one architecture and inherited by silence. It reversed three published conclusions.
-- [`corpus-v3.md`](corpus-v3.md) — a corpus change that moved play strength a great deal and held-out accuracy not at all. The document that puts a question mark over the metric everything above ranks with.
+- [`corpus-v3.md`](corpus-v3.md) — a corpus change that moved play strength a great deal and held-out accuracy not at all, and the longer training run that showed the change was compensating for an epoch budget rather than adding information. The document that puts a question mark over the metric everything above ranks with.
 
 ## Pipeline and operations
 
