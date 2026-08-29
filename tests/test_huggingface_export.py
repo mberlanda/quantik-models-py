@@ -281,7 +281,14 @@ def test_the_card_carries_the_architecture_diagram():
 
 def test_every_registered_architecture_has_a_diagram_and_a_summary():
     """A new architecture must not be able to ship a card that silently
-    omits its own diagram."""
+    omits its own diagram.
+
+    Needs torch only because `model.registry` imports it to build the
+    networks; the diagrams themselves are plain strings. The torch-free
+    install is a tested configuration here, so this guards rather than
+    failing collection for the whole job.
+    """
+    pytest.importorskip("torch")
     from quantik_models.export import cards
     from quantik_models.model import registry
 
