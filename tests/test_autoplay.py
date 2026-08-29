@@ -132,3 +132,40 @@ def test_run_plays_every_ordered_pairing() -> None:
     assert len(games) == 2 * 1 * 3
     seats = {(g.mover, g.responder) for g in games}
     assert seats == {("r1", "r2"), ("r2", "r1")}
+
+
+def test_pairings_against_an_oracle_keeps_only_that_agents_games() -> None:
+    """Measuring a field against one oracle is not a round robin.
+
+    With four networks and one oracle, 12 of the 20 ordered pairings are
+    network-versus-network and already measured; running them again to
+    extract the oracle's eight spends most of the budget on nothing.
+    """
+    names = ["cpool", "attn", "resnet", "mlp", "minimax-d2"]
+    schedule = autoplay.pairings(names, against="minimax-d2")
+    assert len(schedule) == 8
+    assert all("minimax-d2" in pair for pair in schedule)
+    # Both seats, for every opponent: the oracle moves first four times and
+    # second four times, or the first-move advantage lands on it.
+    assert sum(1 for mover, _ in schedule if mover == "minimax-d2") == 4
+
+
+def test_pairings_without_an_oracle_is_the_full_round_robin() -> None:
+    assert len(autoplay.pairings(["a", "b", "c"])) == 6
+
+
+def test_pairings_refuses_an_unknown_opponent() -> None:
+    """A typo would otherwise play zero games and report a clean empty run."""
+    with pytest.raises(ValueError, match="no agent named"):
+        autoplay.pairings(["a", "b"], against="minmax")
+
+
+def test_run_against_restricts_the_schedule() -> None:
+    specs = [
+        {"kind": "random", "name": "r1"},
+        {"kind": "random", "name": "r2"},
+        {"kind": "random", "name": "r3"},
+    ]
+    games = autoplay.run(specs, games_per_pairing=2, seed=0, against="r3")
+    assert len(games) == 4 * 2
+    assert all("r3" in (g.mover, g.responder) for g in games)

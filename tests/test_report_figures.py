@@ -214,3 +214,91 @@ def test_the_figures_read_a_real_trainer_run(tmp_path):
 
     written = build_figures.build(tmp_path / "runs", tmp_path / "figures", eval_dir="none")
     assert [p.name for p in written] == ["training-curves.svg"]
+
+
+def test_oracle_benchmark_draws_a_tick_per_run_and_omits_the_oracle(tmp_path):
+    pooled = [
+        {"agent": "minimax-d2", "win_rate": 0.58, "ci_low": 0.57, "ci_high": 0.59},
+        {"agent": "cpool", "win_rate": 0.46, "ci_low": 0.44, "ci_high": 0.48},
+        {"agent": "mlp", "win_rate": 0.38, "ci_low": 0.36, "ci_high": 0.40},
+    ]
+    per_run = {
+        "s1-p3": {"cpool": 0.45, "mlp": 0.37},
+        "s2-p3": {"cpool": 0.47, "mlp": 0.39},
+    }
+    out = fg.oracle_benchmark(pooled, per_run, tmp_path / "oracle.svg", oracle="minimax-d2")
+    body = out.read_text()
+    # The oracle is the axis, not a bar on it: its own win rate is just
+    # one minus the field's and would double the figure's height for nothing.
+    assert "cpool" in body and "mlp" in body
+    assert ">minimax-d2<" not in body
+
+
+def test_build_draws_the_oracle_figure_from_a_packed_summary(tmp_path, capsys):
+    """The oracle is picked as the agent with the most games.
+
+    It played every pairing and each network played only its own, so the game
+    count identifies it without the caller having to name it — and a wrong
+    guess would silently draw the oracle as one more bar in the field.
+    """
+    import json
+
+    from quantik_models.report import build_figures
+
+    oracle = tmp_path / "oracle"
+    for name, cpool in (("s1-p3", 0.45), ("s2-p3", 0.47)):
+        d = oracle / name
+        d.mkdir(parents=True)
+        (d / "games.json").write_text(
+            json.dumps(
+                {
+                    "seed": 1,
+                    "games": 100,
+                    "leaderboard": [
+                        {"agent": "minimax-d2", "wins": 55, "games": 200, "win_rate": 0.55},
+                        {"agent": "cpool", "wins": 45, "games": 100, "win_rate": cpool},
+                    ],
+                    "results": [],
+                }
+            )
+        )
+    packed = oracle / "packed"
+    packed.mkdir()
+    (packed / "summary.json").write_text(
+        json.dumps(
+            {
+                "runs": [{"name": "s1-p3", "seed": 1, "games": 100}, {"name": "s2-p3", "seed": 2, "games": 100}],
+                "pooled": [
+                    {"agent": "minimax-d2", "wins": 110, "games": 400, "win_rate": 0.55, "ci_low": 0.50, "ci_high": 0.60},
+                    {"agent": "cpool", "wins": 92, "games": 200, "win_rate": 0.46, "ci_low": 0.39, "ci_high": 0.53},
+                ],
+                "seed_spread": {"cpool": 0.02},
+                "positions_to_solve": 0,
+            }
+        )
+    )
+    written = build_figures.build(tmp_path / "runs", tmp_path / "out", "none", oracle)
+    assert [p.name for p in written] == ["oracle-benchmark.svg"]
+    body = (tmp_path / "out" / "oracle-benchmark.svg").read_text()
+    assert "cpool" in body
+
+
+def test_build_skips_the_oracle_figure_when_nothing_is_packed(tmp_path, capsys):
+    from quantik_models.report import build_figures
+
+    build_figures.build(tmp_path / "runs", tmp_path / "out", "none", tmp_path / "oracle")
+    assert "packed/summary.json" in capsys.readouterr().out
+
+
+def test_regenerating_an_unchanged_figure_produces_identical_bytes(tmp_path):
+    """Committed figures must only change when the data or the code does.
+
+    matplotlib seeds its element ids from a per-process random value and
+    embeds a creation timestamp, so without both fixed, every regeneration
+    rewrites every clip-path id and the date line — and a reviewer cannot
+    find a real change in the diff.
+    """
+    runs = [fg.load_training_run(write_run(tmp_path, "swept-cpool", [0.90, 0.94, 0.96]))]
+    first = fg.training_curves(runs, tmp_path / "a.svg").read_bytes()
+    second = fg.training_curves(runs, tmp_path / "b.svg").read_bytes()
+    assert first == second

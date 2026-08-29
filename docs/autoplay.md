@@ -130,6 +130,11 @@ conflating the two would make both unreadable.
 
 ## The arena result
 
+These are all *relative* results — network against network. For the same
+models against a fixed classical opponent, see `oracle-benchmark.md`: the
+ranking is the same and the margins are wider.
+
+
 3,600 games per start depth, every ordered pairing, seed 20260830 — chosen
 to differ from every training seed so that seed-linked bias would show
 rather than hide.

@@ -101,17 +101,22 @@ return an illegal move.
 > at `2e-3`. Those rates are swept, not inherited — see
 > [`docs/learning-rate-sweep.md`](docs/learning-rate-sweep.md).
 >
-> | model | IID top-1 | shift, plies 4-6 | shift, plies 7-12 | arena @ply3 |
-> |---|---|---|---|---|
-> | `cpool-c191-b6` | **0.9893** | **0.9295** | **0.9919** | **57.2%** |
-> | `attn-d192-b6` | 0.9879 | 0.9102 | 0.9914 | 54.2% |
-> | `resnet-c128-b6` | 0.9701 | 0.9126 | 0.9720 | 47.8% |
-> | `mlp-h455-b4` | 0.9516 | 0.8843 | 0.9578 | 40.8% |
+> | model | IID top-1 | shift, plies 4-6 | shift, plies 7-12 | arena @ply3 | vs `minimax-d2` |
+> |---|---|---|---|---|---|
+> | `cpool-c191-b6` | **0.9893** | **0.9295** | **0.9919** | **57.2%** | **49.4%** |
+> | `attn-d192-b6` | 0.9879 | 0.9102 | 0.9914 | 54.2% | 43.1% |
+> | `resnet-c128-b6` | 0.9701 | 0.9126 | 0.9720 | 47.8% | 36.5% |
+> | `mlp-h455-b4` | 0.9516 | 0.8843 | 0.9578 | 40.8% | 31.9% |
 >
-> Three numbers, because they disagree: validation on the trained
+> Four numbers, because they disagree: validation on the trained
 > distribution, accuracy on solved positions the corpus never saw
-> ([`docs/shift-evaluation.md`](docs/shift-evaluation.md)), and games played
-> ([`docs/autoplay.md`](docs/autoplay.md)). Which architectures were declined
+> ([`docs/shift-evaluation.md`](docs/shift-evaluation.md)), games against the
+> other networks ([`docs/autoplay.md`](docs/autoplay.md)), and games against a
+> fixed classical opponent
+> ([`docs/oracle-benchmark.md`](docs/oracle-benchmark.md)) — the only column
+> whose floor does not move with the field. `cpool` playing raw policy, one
+> forward pass a move, is even with a two-ply alpha-beta search; the other
+> three lose to it. Which architectures were declined
 > and why is in
 > [`docs/decisions/0001-architecture-lineup.md`](docs/decisions/0001-architecture-lineup.md).
 

@@ -15,6 +15,7 @@ behaviour is to say so, not to crash.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from . import figures as fg
@@ -34,7 +35,7 @@ SUPERSEDED: dict[str, str] = {
 }
 
 
-def build(runs: Path, out: Path, eval_dir: str) -> list[Path]:
+def build(runs: Path, out: Path, eval_dir: str, oracle_dir: Path | None = None) -> list[Path]:
     """Write every figure that has its inputs; return the paths written."""
     written: list[Path] = []
     skipped: list[str] = []
@@ -83,6 +84,32 @@ def build(runs: Path, out: Path, eval_dir: str) -> list[Path]:
         if boards:
             written.append(fg.arena_by_depth(boards, out / f"arena-{prefix}.svg", title=title))
 
+    if oracle_dir is not None:
+        summary_path = oracle_dir / "packed" / "summary.json"
+        if summary_path.exists():
+            summary = json.loads(summary_path.read_text())
+            per_run = {}
+            for run in summary["runs"]:
+                board = fg.load_leaderboard(oracle_dir / run["name"] / "games.json")
+                per_run[run["name"]] = {r["agent"]: r["win_rate"] for r in board}
+            oracle = summary.get("oracle") or max(
+                summary["pooled"], key=lambda r: r["games"]
+            )["agent"]
+            depths = {r.get("start_plies") for r in summary["runs"]}
+            depth = f"start ply {depths.pop()}" if len(depths) == 1 else "mixed start depths"
+            games = sum(r["games"] for r in summary["runs"])
+            written.append(
+                fg.oracle_benchmark(
+                    summary["pooled"],
+                    per_run,
+                    out / "oracle-benchmark.svg",
+                    oracle=oracle,
+                    subtitle=f"{depth}, {games:,} games, {len(summary['runs'])} seeds",
+                )
+            )
+        else:
+            skipped.append(str(summary_path))
+
     for missing in skipped:
         print(f"skipped (missing): {missing}")
     for figure in written:
@@ -95,12 +122,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs", type=Path, default=Path("runs"))
     parser.add_argument("--out", type=Path, default=Path("docs/figures"))
     parser.add_argument(
+        "--oracle-dir",
+        type=Path,
+        default=None,
+        help="a runs/eval/oracle-* directory holding per-seed runs and packed/",
+    )
+    parser.add_argument(
         "--eval-dir",
         default="swept-2026-08-30",
         help="subdirectory of runs/eval holding the evaluation to plot",
     )
     args = parser.parse_args(argv)
-    written = build(args.runs, args.out, args.eval_dir)
+    written = build(args.runs, args.out, args.eval_dir, args.oracle_dir)
     if not written:
         print("nothing written — is runs/ populated?")
         return 1

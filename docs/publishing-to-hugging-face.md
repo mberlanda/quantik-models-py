@@ -108,12 +108,32 @@ invents its own scheme breaks the one property that makes the lockstep
 useful: being able to read a version and know which schema the artifact
 speaks.
 
-**One repo per architecture, not one per run.** `swept-cpool` and
-`lineup-cpool` are the same architecture at two learning rates. They belong
-in one repo as two revisions with the story in between, not in two repos
-that a reader has to know to compare. Which is exactly what this project
-learned the hard way: the superseded run is not noise, it is the evidence
-for the methodology fix.
+**One repo per architecture.** Two axes, and they go opposite ways.
+
+*Runs collapse into one repo.* `swept-cpool` and `lineup-cpool` are the same
+architecture at two learning rates; they belong in one repo as two revisions
+with the story in between, not in two repos a reader has to know to compare.
+The superseded run is not noise, it is the evidence for the methodology fix.
+
+*Architectures do not.* An earlier plan here was one repo,
+`quantik-policy-value`, with a subfolder per model. It is mechanically fine —
+`hf_hub_download(repo_id, filename, subfolder=...)` works, and the whole
+lineup is under 60 MB. It is rejected because **`model-index` is per
+repository**. Four models in one repo means one card claiming one set of
+metrics, and whatever goes there is wrong for three of them — wrong in Hub
+*search*, which is what indexes it. Two smaller reasons point the same way:
+download counts and likes are per repo, so a monorepo cannot tell you which
+architecture anyone actually uses, and the "what it is bad at" section
+genuinely differs between models.
+
+What the split costs is real: four tags to keep in lockstep instead of one,
+against a workspace convention of a single version number. Stage and tag all
+four in one scripted pass. For the side-by-side reading the subfolder layout
+was reaching for, a Hub **collection** groups repos without merging them.
+
+The subfolder layout is not wrong in general — it is right for one model's
+shards, or for a serving path that fetches `subfolder/weights.safetensors` by
+route segment. It just does not survive the metrics argument.
 
 ## What the documentation has to say
 

@@ -26,7 +26,16 @@ from the run directories, never edited:
 ```bash
 pip install -e '.[viz]'
 python -m quantik_models.report.build_figures --runs runs --out docs/figures
+
+# the oracle figure needs its run directory named, since there is one per
+# benchmark rather than one canonical location
+python -m quantik_models.report.build_figures --runs runs --out docs/figures \
+  --oracle-dir runs/eval/oracle-2026-08-29
 ```
+
+Regenerating an unchanged figure produces byte-identical output — the SVG
+element ids are salted from a fixed string and the creation timestamp is
+suppressed — so a diff in `docs/figures/` means the data or the code moved.
 
 ## How training went
 
@@ -141,10 +150,12 @@ when it stops. `attn`'s 0.9879 is a floor, and a shared epoch budget is not
 equal treatment for the same reason a shared learning rate was not — it was
 chosen when the ResNet was the only architecture. This is unfixed.
 
-**No classical baseline.** Every win rate on this page is against another
-network or against the uniform control. Nothing here says these models beat
-`quantik-core`'s own minimax or beam search — a different and harder
-question, and still unmeasured.
+**No classical baseline on *this* page.** Every win rate above is against
+another network or against the uniform control. The fixed-opponent
+measurement is in `oracle-benchmark.md`, and it is the one that says whether
+any of this is good rather than which of it is better: against
+`minimax-d2` at ply 3, `cpool` is even (49.4%) and the other three lose,
+`mlp` by seventeen points. Beam search remains unmeasured.
 
 **Nothing trained on `exact-sampled-v2.npz`.** The corpus with plies 3-6
 filled exists and no figure on this page uses it. Training on it would
