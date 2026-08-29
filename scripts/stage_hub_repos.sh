@@ -30,25 +30,52 @@ LICENSE="${HF_LICENSE:-apache-2.0}"
 # checkpoint other than the one beside it.
 EVAL="${EVAL_DIR:-runs/eval/swept-2026-08-30}"
 
+# Source links every card carries. Verified rather than assumed: a card
+# pointing at a repository that does not exist is worse than a card with no
+# link, because the reader cannot tell a typo from a private repo.
+LINKS=(
+  "Model code and training=https://github.com/mberlanda/quantik-models-py"
+  "Rules engine (Python)=https://github.com/mberlanda/quantik-core-py"
+  "Rules engine (Rust)=https://github.com/mberlanda/quantik-core-rust"
+  "Shared schemas=https://github.com/mberlanda/quantik-core-contracts"
+)
+
 for required in "$EVAL/shift.json" "$EVAL/policy-p3/games.json"; do
   [ -f "$required" ] || { echo "no such evaluation artifact: $required" >&2; exit 1; }
 done
 
 mkdir -p "$OUT"
-staged=()
 
+# Two passes. Every card links the rest of the family, so the full set of
+# repo ids has to be known before the first card is written — a card that
+# lists only the models staged before it is a card whose "other models"
+# section depends on argument order.
+names=()
+archs=()
 for checkpoint in "$@"; do
   [ -d "$checkpoint" ] || { echo "no such checkpoint: $checkpoint" >&2; exit 1; }
   arch=$("$PYTHON" -c "import json,sys; print(json.load(open(sys.argv[1]))['architecture'])" \
     "$checkpoint/manifest.json")
-  name=$("$PYTHON" -c "from quantik_models.export.huggingface import repo_name_for; \
-    print(repo_name_for('$arch'))")
+  archs+=("$arch")
+  names+=("$("$PYTHON" -c "from quantik_models.export.huggingface import repo_name_for; \
+    print(repo_name_for('$arch'))")")
+done
 
+sibling_args=()
+for name in "${names[@]}"; do sibling_args+=(--sibling "$NAMESPACE/$name"); done
+
+link_args=()
+for entry in "${LINKS[@]}"; do link_args+=(--link "$entry"); done
+
+staged=()
+i=0
+for checkpoint in "$@"; do
+  arch="${archs[$i]}"; name="${names[$i]}"; i=$((i + 1))
   echo "== $arch -> $NAMESPACE/$name =="
   "$PYTHON" -m quantik_models.export.huggingface "$checkpoint" "$OUT/$name" \
     --namespace "$NAMESPACE" --license "$LICENSE" \
     --shift "$EVAL/shift.json" --arena "$EVAL/policy-p3/games.json" \
-    --agent "${arch%%-*}"
+    --agent "${arch%%-*}" "${sibling_args[@]}" "${link_args[@]}"
   staged+=("$OUT/$name")
 done
 

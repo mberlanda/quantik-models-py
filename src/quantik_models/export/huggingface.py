@@ -36,6 +36,7 @@ from .digest import file_digest
 
 __all__ = [
     "CARD_FILES",
+    "DEFAULT_LICENSE",
     "DEFAULT_NAMESPACE",
     "LFS_PATTERNS",
     "repo_id_for",
@@ -46,6 +47,7 @@ __all__ = [
     "model_card",
     "stage",
     "card_metrics",
+    "run_config",
     "verify_staged",
 ]
 
@@ -69,6 +71,12 @@ DEFAULT_NAMESPACE = "brpoplpush"
 # does, and it groups the family alphabetically for free.
 REPO_PREFIX = "quantik"
 
+# The Hub's `license:` field takes an identifier from a fixed table and it is
+# lowercase — `mit`, not `MIT`. Every licensed repository in this workspace is
+# MIT, and a card asserting a licence the source tree does not carry is worse
+# than no card at all.
+DEFAULT_LICENSE = "mit"
+
 
 def repo_name_for(architecture: str, prefix: str = REPO_PREFIX) -> str:
     """`cpool-c191-b6` -> `quantik-cpool-c191-b6`.
@@ -80,11 +88,12 @@ def repo_name_for(architecture: str, prefix: str = REPO_PREFIX) -> str:
     if not architecture:
         raise ValueError("architecture is empty; cannot derive a repo name")
     name = architecture if architecture.startswith(f"{prefix}-") else f"{prefix}-{architecture}"
-    # The Hub allows alphanumerics, hyphens, underscores and dots, and treats
-    # names case-insensitively for collisions. Everything the registry
-    # produces is already lowercase alphanumeric-and-hyphen; this refuses
-    # anything else rather than silently publishing a name that does not
-    # match what the docs say.
+    # `huggingface_hub`'s own REPO_ID_REGEX allows word characters, `-` and
+    # `.`, with the repo name 1-96 characters, and rejects `--`, `..` and a
+    # trailing `.git`. That validator is the only authoritative constraint
+    # found — the Hub docs state no naming rules — so this mirrors it rather
+    # than inventing a stricter one. Everything the registry produces is
+    # already lowercase alphanumeric-and-hyphen.
     if not all(c.isalnum() or c in "-_." for c in name):
         raise ValueError(f"{name!r} is not a usable Hub repo name")
     return name
@@ -178,33 +187,249 @@ def _front_matter(
     return "\n".join(lines)
 
 
+def _results_table(metrics: list[dict[str, Any]]) -> list[str]:
+    if not metrics:
+        return []
+    lines = ["| metric | value |", "|---|---|"]
+    for metric in metrics:
+        value = metric["value"]
+        shown = f"{value:.1%}" if metric["type"] == "win_rate" else f"{value:.4f}"
+        lines.append(f"| {metric['name']} | **{shown}** |")
+    return lines
+
+
+def _training_section(config: dict[str, Any] | None) -> list[str]:
+    """Hyperparameters, read from the run's own `config.json`.
+
+    Only the fields that change an outcome. A card listing every field of a
+    dataclass is not more reproducible, it is less readable, and the full
+    record travels in `training-report.json` anyway.
+    """
+    if not config:
+        return []
+    lines = [
+        "## How it was trained",
+        "",
+        "| | |",
+        "|---|---|",
+        f"| corpus | `{Path(str(config.get('corpus', '?'))).name}` |",
+        f"| architecture preset | `{config.get('preset')}` |",
+        f"| epochs | {config.get('epochs')} |",
+        f"| batch size | {config.get('batch_size')} |",
+        f"| learning rate | {config.get('lr')} (cosine to {config.get('min_lr')}) |",
+        f"| weight decay | {config.get('weight_decay')} |",
+        f"| seed | {config.get('seed')} |",
+        f"| symmetry augmentation | {'yes' if config.get('augment') else 'no'} |",
+        f"| ply-balanced sampling | {'yes' if config.get('balance_plies') else 'no'} |",
+        "",
+        "Labels are **exact**, not bootstrapped: every training target comes "
+        "from a solved position, so the network is fitting ground truth "
+        "rather than its own earlier opinions.",
+        "",
+        "The learning rate is a property of the architecture rather than a "
+        "project-wide default. A single shared rate is not equal treatment "
+        "between architectures — it privileges whichever one it was chosen "
+        "for — and correcting that in this project reversed several "
+        "conclusions rather than merely shifting decimals.",
+        "",
+    ]
+    if config.get("balance_plies"):
+        lines[-1:] = [
+            "Ply-balanced sampling gives every game stage equal attention "
+            "instead of attention proportional to how many positions it "
+            "happens to contribute. The corpus is dominated by late "
+            "positions; the match is decided early.",
+            "",
+        ]
+    return lines
+
+
+def _limitations_section(shift: list[dict] | None, architecture: str) -> list[str]:
+    """What the model is worst at, taken from the held-out evaluation.
+
+    A card that reports one pooled accuracy hides the only region where the
+    model is genuinely uncertain. This reports the weakest ply explicitly.
+    """
+    lines = [
+        "## Limitations",
+        "",
+        "**Accuracy is not uniform across the game.** Deep positions are "
+        "nearly forced and every model in this family is close to perfect "
+        "there; the shallow openings are where they differ and where they "
+        "are weakest.",
+        "",
+    ]
+    record = None
+    if shift:
+        record = next((r for r in shift if r["architecture"] == architecture), None)
+    if record:
+        by_ply = record["by_ply"]
+        plies = sorted(int(p) for p in by_ply)
+        worst = min(plies, key=lambda p: by_ply[str(p)]["accuracy"])
+        best = max(plies, key=lambda p: by_ply[str(p)]["accuracy"])
+        lines += [
+            "| ply | accuracy on provably won positions |",
+            "|---|---|",
+        ]
+        lines += [f"| {p} | {by_ply[str(p)]['accuracy']:.4f} |" for p in plies]
+        lines += [
+            "",
+            f"Weakest at ply {worst} ({by_ply[str(worst)]['accuracy']:.1%}), "
+            f"strongest at ply {best} ({by_ply[str(best)]['accuracy']:.1%}).",
+            "",
+        ]
+    lines += [
+        "**The evaluation is against solved positions and other engines, not "
+        "against people.** Nothing here says how it plays against a human.",
+        "",
+        "**One training seed.** Every number on this card comes from a single "
+        "run of this architecture.",
+        "",
+    ]
+    return lines
+
+
+def _usage_section(
+    repo_id: str, manifest: dict[str, Any], links: dict[str, str]
+) -> list[str]:
+    """Two paths: the Python package, and the ONNX graph with neither.
+
+    Both snippets are meant to be pasted and run, so every name they use is
+    either imported in the snippet or defined in it. A snippet with an
+    undefined variable is a snippet that has never been run.
+    """
+    lines = [
+        "## Usage",
+        "",
+        "There is no `AutoModel` for this architecture — the Hub cannot "
+        "reconstruct it from weights alone. Two supported paths.",
+        "",
+        "### With `quantik-models`",
+        "",
+        "Reads `manifest.json` and rebuilds the network from "
+        "`architecture_spec`, and gives you the legality masking for free.",
+        "",
+        "```bash",
+        "# quantik-models is not on PyPI yet; install it from source.",
+        "pip install 'quantik-models[torch] @ "
+        "git+https://github.com/mberlanda/quantik-models-py'",
+        "pip install huggingface_hub",
+        "```",
+        "",
+        "```python",
+        "from huggingface_hub import snapshot_download",
+        "from quantik_models.arena.registry import load_evaluator",
+        "from quantik_models.env import fastboard as fb",
+        "",
+        f'evaluator = load_evaluator(snapshot_download("{repo_id}"), "cpu")',
+        "",
+        "boards = fb.empty_boards(1)                    # (1, 8) uint16",
+        "policy, value = evaluator.evaluate(boards)     # masking applied",
+        "```",
+        "",
+    ]
+    if manifest.get("onnx_export"):
+        lines += [
+            "### With ONNX Runtime, and neither torch nor this package",
+            "",
+            "```bash",
+            "pip install onnxruntime numpy huggingface_hub",
+            "```",
+            "",
+            "```python",
+            "import numpy as np, onnxruntime as ort",
+            "from huggingface_hub import hf_hub_download",
+            "",
+            f'path = hf_hub_download("{repo_id}", "model.onnx")',
+            "session = ort.InferenceSession(path)",
+            "",
+            "# (B, 9, 4, 4) float32, mover-relative — see the contract above.",
+            "tensors = np.zeros((1, 9, 4, 4), dtype=np.float32)",
+            'policy, value = session.run(None, {"board": tensors})',
+            "",
+            "# The mask is yours to apply. `legal` is a (B, 64) bool array;",
+            "# quantik_models.env.fastboard.legal_masks computes it, and so",
+            "# does quantik-core in Rust.",
+            "# policy = np.where(legal, policy, -np.inf)",
+            "```",
+            "",
+        ]
+    lines += [
+        "### The rules engine",
+        "",
+        "Legality, symmetry and the exact solver live in `quantik-core`, "
+        "which is published for both languages and is what generated the "
+        "training labels.",
+        "",
+        "```bash",
+        "pip install quantik-core     # Python, >=3.12",
+        "cargo add quantik-core       # Rust, 2021 edition",
+        "```",
+        "",
+    ]
+    return lines
+
+
 def model_card(
     manifest: dict[str, Any],
     *,
     repo_id: str | None = None,
-    license_id: str = "apache-2.0",
+    license_id: str = DEFAULT_LICENSE,
     metrics: list[dict[str, Any]] | None = None,
     base_model: str | None = None,
+    config: dict[str, Any] | None = None,
+    shift: list[dict] | None = None,
+    siblings: list[str] | None = None,
+    links: dict[str, str] | None = None,
     body: str = "",
 ) -> str:
-    """`README.md`: Hub metadata, then whatever prose the caller supplies.
+    """`README.md`: Hub metadata, then the card.
 
-    The generated part is only the part that has to be exact — the hashes,
-    the shapes, the contract, the masking requirement. The argument for a
-    model, and what it is not good at, is written by a person.
+    Everything generated here is derived from a file — the manifest, the
+    run's config, the held-out evaluation. Prose that is an argument rather
+    than a fact belongs in `body`, written by a person.
     """
     metrics = metrics or []
+    links = links or {}
     # Derived, not a placeholder. A card that ships `<your-org>` teaches the
     # reader to edit the snippet before running it, and most will not.
     repo_id = repo_id or repo_id_for(manifest["architecture"])
+    architecture = manifest["architecture"]
     header = _front_matter(manifest, license_id, metrics, base_model)
-    facts = [
+
+    lines = [
         "",
-        f"# {manifest['architecture']}",
+        f"# {architecture}",
         "",
-        f"A Quantik policy/value network, {manifest['parameter_count']:,} parameters.",
+        "A policy/value network for **Quantik**, "
+        f"{manifest['parameter_count']:,} parameters.",
         "",
-        "## The contract",
+        "Quantik is a two-player game on a 4x4 board with four piece shapes. "
+        "A player may not place a shape in a row, column or 2x2 zone where "
+        "that shape already appears, whoever played it — so a move can be "
+        "blocked by your own piece. The first player to complete a line or "
+        "zone holding all four distinct shapes wins. There are no draws.",
+        "",
+        "This model predicts, for a given position, which move an exact "
+        "solver would play (policy) and who is winning (value).",
+        "",
+    ]
+
+    if metrics:
+        lines += ["## Results", ""] + _results_table(metrics) + [""]
+        lines += [
+            "Held-out accuracy is measured on exactly solved positions "
+            "sharing no canonical key with the training corpus, up to the "
+            "192 board symmetries — so it measures generalisation, not "
+            "recall. It is reported split rather than pooled because the "
+            "corpus contains nothing at the shallowest plies, and a pooled "
+            "figure is dominated by deep positions where every model is "
+            "near perfect.",
+            "",
+        ]
+
+    lines += [
+        "## Input and output contract",
         "",
         "```",
         "input   (B, 9, 4, 4) float32      tensor-board.v1, mover-relative",
@@ -212,56 +437,64 @@ def model_card(
         "        (B,)    value in [-1, 1]  +1 = good for the side to move",
         "```",
         "",
-        "**Legality masking happens outside this model.** It emits logits over "
-        "all 64 actions, including illegal ones, and applying the legal-move "
-        "mask before the softmax is the caller's job. The rules are exact in "
-        "`quantik-core`, so the network is never asked to approximate them — "
-        "an unmasked argmax from this model will play illegal moves.",
+        "Planes 0-3 are the side to move, 4-7 the opponent, 8 a ply "
+        "indicator. `position = row * 4 + col`.",
         "",
-        "## Files",
+        "### Legality masking happens outside this model",
         "",
-        f"- `model.safetensors` — `{manifest['weights_hash']}`",
+        "It emits logits over all 64 actions, including illegal ones. "
+        "Applying the legal-move mask before the softmax is the caller's "
+        "job. **An unmasked `argmax` from this model will play illegal "
+        "moves** — silently, because an illegal move looks like a bad move "
+        "rather than like a bug.",
+        "",
+        "This is by design. Quantik's rules are exact and cheap to compute "
+        "in `quantik-core`, so the network is never asked to approximate "
+        "them and never spends capacity on legality.",
+        "",
     ]
+
+    lines += _usage_section(repo_id, manifest, links)
+    lines += _training_section(config)
+    lines += _limitations_section(shift, architecture)
+
+    lines += ["## Files", ""]
+    lines.append(f"- `model.safetensors` — `{manifest['weights_hash']}`")
     if manifest.get("onnx_export"):
-        facts.append(
+        lines.append(
             f"- `model.onnx` — opset {manifest.get('onnx_opset')}, "
             f"`{manifest['onnx_hash']}`, dynamic batch dimension"
         )
-    facts += [
+    lines += [
+        "- `config.json` — the architecture spec, readable without loading anything",
         "- `manifest.json` — the `model-checkpoint.v1` record this repo was staged from",
+        "- `training-report.json` — the epoch that produced these weights, and its metrics",
         "",
-        f"Contract version `{manifest['contract_version']}`. Exported "
-        f"{manifest['created_at']}.",
-        "",
-        "## Using it",
-        "",
-        "There is no `AutoModel` for this architecture. Load the weights "
-        "through `quantik-models`, which reads `manifest.json` and rebuilds "
-        "the network from `architecture_spec`:",
-        "",
-        "```python",
-        "from huggingface_hub import snapshot_download",
-        "from quantik_models.arena.registry import load_evaluator",
-        "",
-        f'evaluator = load_evaluator(snapshot_download("{repo_id}"), "cpu")',
-        "```",
+        f"Contract version `{manifest['contract_version']}`. "
+        f"Exported {manifest['created_at'][:10]}.",
         "",
     ]
-    if manifest.get("onnx_export"):
-        facts += [
-            "Or run the ONNX graph, which needs neither this package nor torch:",
-            "",
-            "```python",
-            "import numpy as np, onnxruntime as ort",
-            "from huggingface_hub import hf_hub_download",
-            "",
-            f'session = ort.InferenceSession(hf_hub_download("{repo_id}", "model.onnx"))',
-            'policy, value = session.run(None, {"board": tensors.astype(np.float32)})',
-            "# then mask: policy[~legal] = -inf before any softmax or argmax",
-            "```",
-            "",
-        ]
-    return header + "\n".join(facts) + ("\n" + body.strip() + "\n" if body.strip() else "")
+
+    if siblings:
+        others = [s for s in siblings if s != repo_id]
+        if others:
+            lines += [
+                "## Other models in this family",
+                "",
+                "Same contract, same corpus, same training protocol — "
+                "interchangeable at the interface, so they can be compared "
+                "directly.",
+                "",
+            ]
+            lines += [f"- [`{s}`](https://huggingface.co/{s})" for s in others]
+            lines.append("")
+
+    if links:
+        lines += ["## Source", ""]
+        lines += [f"- {label}: {url}" for label, url in links.items()]
+        lines.append("")
+
+    return header + "\n".join(lines) + ("\n" + body.strip() + "\n" if body.strip() else "")
 
 
 def verify_staged(out_dir: Path) -> dict[str, str]:
@@ -339,15 +572,30 @@ def card_metrics(
     return metrics
 
 
+def run_config(checkpoint_dir: Path) -> dict[str, Any] | None:
+    """The training run's `config.json`, which sits one level up.
+
+    A checkpoint is `runs/train/<name>/best`; the config that produced it is
+    `runs/train/<name>/config.json`. Returning None rather than raising is
+    deliberate — a checkpoint copied out of its run directory is still worth
+    publishing, just with a thinner card.
+    """
+    path = checkpoint_dir.parent / "config.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
 def stage(
     checkpoint_dir: Path,
     out_dir: Path,
     *,
     repo_id: str | None = None,
     namespace: str | None = None,
-    license_id: str = "apache-2.0",
+    license_id: str = DEFAULT_LICENSE,
     metrics: list[dict[str, Any]] | None = None,
     base_model: str | None = None,
+    shift: list[dict] | None = None,
+    siblings: list[str] | None = None,
+    links: dict[str, str] | None = None,
     body: str = "",
 ) -> Path:
     """Write a Hub-ready directory. Copies, never moves, and never uploads."""
@@ -373,6 +621,10 @@ def stage(
             license_id=license_id,
             metrics=metrics,
             base_model=base_model,
+            config=run_config(checkpoint_dir),
+            shift=shift,
+            siblings=siblings,
+            links=links,
             body=body,
         )
     )
@@ -396,7 +648,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"Hub account (default: $QUANTIK_HF_NAMESPACE, else {DEFAULT_NAMESPACE})",
     )
-    parser.add_argument("--license", default="apache-2.0")
+    parser.add_argument("--license", default=DEFAULT_LICENSE)
     parser.add_argument("--base-model", default=None)
     parser.add_argument(
         "--metrics",
@@ -422,6 +674,19 @@ def main(argv: list[str] | None = None) -> int:
         help="the agent name this checkpoint played under in --arena",
     )
     parser.add_argument(
+        "--sibling",
+        action="append",
+        default=None,
+        help="another repo id in this family; repeatable",
+    )
+    parser.add_argument(
+        "--link",
+        action="append",
+        default=None,
+        metavar="LABEL=URL",
+        help="a source link for the card; repeatable",
+    )
+    parser.add_argument(
         "--body",
         type=Path,
         default=None,
@@ -442,6 +707,13 @@ def main(argv: list[str] | None = None) -> int:
             args.agent or manifest["architecture"].split("-")[0],
         )
 
+    links = {}
+    for entry in args.link or []:
+        label, _, url = entry.partition("=")
+        if not url:
+            raise SystemExit(f"--link expects LABEL=URL, got {entry!r}")
+        links[label] = url
+
     out = stage(
         args.checkpoint,
         args.out,
@@ -449,6 +721,9 @@ def main(argv: list[str] | None = None) -> int:
         namespace=args.namespace,
         license_id=args.license,
         metrics=metrics,
+        shift=json.loads(args.shift.read_text()) if args.shift else None,
+        siblings=args.sibling,
+        links=links,
         base_model=args.base_model,
         body=args.body.read_text() if args.body else "",
     )

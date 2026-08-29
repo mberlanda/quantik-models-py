@@ -87,10 +87,23 @@ def test_the_card_front_matter_carries_the_metadata_the_hub_indexes():
     )
     assert card.startswith("---\n")
     head = card.split("---", 2)[1]
-    assert "license: apache-2.0" in head
+    # `mit`, lowercase: the Hub's license table is a fixed set of lowercase
+    # identifiers, and every licensed repo in this workspace is MIT.
+    assert "license: mit" in head
     assert "pipeline_tag: reinforcement-learning" in head
     assert "model-index:" in head and "0.9893" in head
     assert "  - cpool" in head
+
+
+def test_the_card_does_not_tell_the_reader_to_pip_install_something_unpublished():
+    """`quantik-models` is not on PyPI. A card whose first step is a 404 is
+    the worst kind of wrong here — it fails for the reader, not for us."""
+    card = hf.model_card(MANIFEST)
+    assert "pip install quantik-models" not in card
+    assert "git+https://github.com/mberlanda/quantik-models-py" in card
+    # `quantik-core` *is* published, on both registries.
+    assert "pip install quantik-core" in card
+    assert "cargo add quantik-core" in card
 
 
 def test_the_card_says_the_mask_is_the_callers_job():
