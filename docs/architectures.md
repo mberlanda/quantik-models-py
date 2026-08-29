@@ -290,3 +290,12 @@ prior was doing real work.
 Pre-norm blocks specifically, because post-norm transformers need a warmup
 schedule and the trainer's cosine schedule is shared across the lineup. A
 model needing its own schedule would not be comparable to the others.
+
+> **This architecture does not train at the lineup's learning rate.** At
+> the shared 2e-3 it is flat at 0.5130 validation top-1 for sixteen
+> epochs. At 3e-4 the same network climbs 0.5380 → 0.6454 → 0.7271 over
+> three. The shared learning rate is the trainer's default, and that
+> default was chosen for the ResNet — so every architecture since has been
+> evaluated at a convolutional network's preferred setting. See
+> `attention-negative-result.md`. **It is excluded from every comparison
+> table until it is retrained at a learning rate that works.**
