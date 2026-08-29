@@ -247,6 +247,11 @@ Why it first appeared to fail:
       runs/train/swept-cpool/best runs/train/swept-attn/best \
       runs/train/lineup-resnet/best runs/train/lineup-mlp/best
 
+**Twenty-two documents live in [`docs/`](docs/). Start with
+[`docs/README.md`](docs/README.md)** — it gives the reading order, says which
+numbers are superseded and why the old ones are kept, and names the two
+documents to read if you want to know how much to trust the rest.
+
 Retraining and fine-tuning, including freezing part of a network:
 [`docs/retrain-and-finetune.md`](docs/retrain-and-finetune.md). What a model
 repository needs, and what the Hub treats as structural rather than
