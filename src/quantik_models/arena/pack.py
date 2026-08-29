@@ -109,7 +109,9 @@ def merge_qfens(run_dirs: list[Path]) -> list[str]:
             lines.extend(line for line in path.read_text().splitlines() if line.strip())
     if not lines:
         return []
-    boards = np.array([fb.from_qfen(line) for line in lines], dtype=np.uint16)
+    # `from_qfen` returns a (1, 8) batch of one board, so concatenate rather
+    # than stack — np.array over the list would give (n, 1, 8).
+    boards = np.concatenate([fb.from_qfen(line) for line in lines]).astype(np.uint16)
     keys = fb.canonical_keys(boards)
     _, first = np.unique(keys, return_index=True)
     return [lines[i] for i in sorted(first.tolist())]
