@@ -1,5 +1,17 @@
 # 1. Which architectures to train, and which to only write down
 
+> **About the numbers in this document.** Every measurement comes from a
+> specific run of a specific checkpoint, and the checkpoints live under
+> `runs/`, which is gitignored — so nothing here can be verified from a
+> fresh clone alone. Check **which learning rate** a figure was measured at
+> and **when**: anything dated before 2026-08-30 used `--lr 2e-3`, a rate
+> chosen for the ResNet and inherited by every architecture added later.
+> Two of the four were trained at the wrong one, and correcting that
+> reversed several conclusions rather than merely shifting decimals. See
+> `../learning-rate-sweep.md`. Regenerate with
+> `scripts/evaluate_lineup.sh`.
+
+
 **Status:** accepted, 2026-08-28
 **Supersedes:** nothing. The ResNet was never chosen against alternatives; it
 was the first thing that worked.

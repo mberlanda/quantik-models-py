@@ -1,5 +1,18 @@
 # The attention encoder does not train at the lineup's learning rate
 
+> **About the numbers in this document.** Every measurement here comes from
+> a specific run of a specific checkpoint, and the checkpoints live under
+> `runs/`, which is gitignored — so nothing here can be verified from a
+> fresh clone alone. Two things are worth checking before trusting a figure:
+> **which learning rate it was measured at**, and **when**. Anything dated
+> before 2026-08-30 was measured at `--lr 2e-3`, a rate chosen for the
+> ResNet and inherited by every architecture added later; two of the four
+> were being trained at the wrong one, and correcting that reversed several
+> conclusions rather than merely shifting decimals. See
+> `learning-rate-sweep.md`. Regenerate everything with
+> `scripts/evaluate_lineup.sh`.
+
+
 **Status: resolved — it is the learning rate.** An earlier version of this
 document called it unresolved and listed "learning rate alone" among the
 things ruled out. That was wrong, and it was wrong for an instructive
