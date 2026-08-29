@@ -183,8 +183,19 @@ def head_to_head(run_dirs: list[Path], oracle: str) -> list[dict]:
     return sorted(out, key=lambda row: -row["win_rate"])
 
 
-def merge_qfens(run_dirs: list[Path]) -> list[str]:
-    """Every run's `to-solve.qfen`, deduplicated up to symmetry."""
+def merge_qfens(run_dirs: list[Path], corpus: Path | None = None) -> list[str]:
+    """Every run's `to-solve.qfen`, deduplicated up to symmetry.
+
+    `corpus` re-filters the result **at pack time**, which is not the same as
+    the filtering `autoplay` already did. The arena filters against whatever
+    corpus it was pointed at while the games were being played, and that
+    corpus can be superseded before anyone spends the queue on a solver.
+    That is exactly what happened here: the first oracle runs filtered
+    against `exact-sampled.npz` while `exact-sampled-v2.npz` already existed,
+    and 35% of the resulting 26,157-position queue was already labelled —
+    about twelve hours of solver time. Filtering later is strictly better,
+    because later is when the queue is actually spent.
+    """
     lines: list[str] = []
     for run_dir in run_dirs:
         path = run_dir / "to-solve.qfen"
@@ -197,7 +208,15 @@ def merge_qfens(run_dirs: list[Path]) -> list[str]:
     boards = np.concatenate([fb.from_qfen(line) for line in lines]).astype(np.uint16)
     keys = fb.canonical_keys(boards)
     _, first = np.unique(keys, return_index=True)
-    return [lines[i] for i in sorted(first.tolist())]
+    kept = sorted(first.tolist())
+
+    if corpus is not None:
+        from ..data.exact_corpus import ExactCorpus
+
+        known = fb.canonical_keys(ExactCorpus.load(corpus).boards)
+        keep = ~np.isin(keys[kept], known)
+        kept = [i for i, k in zip(kept, keep.tolist()) if k]
+    return [lines[i] for i in kept]
 
 
 def write_gzip(text: str, path: Path) -> Path:
@@ -263,7 +282,12 @@ def summarise(
     return "\n".join(lines)
 
 
-def pack(run_dirs: list[Path], out: Path, oracle: str | None = None) -> dict:
+def pack(
+    run_dirs: list[Path],
+    out: Path,
+    oracle: str | None = None,
+    corpus: Path | None = None,
+) -> dict:
     """Write the pooled summary and the deduplicated position file."""
     runs = [read_run(d) for d in run_dirs if (d / "games.json").exists()]
     if not runs:
@@ -273,7 +297,7 @@ def pack(run_dirs: list[Path], out: Path, oracle: str | None = None) -> dict:
     # The opponent everything else played: it appears in every pairing and
     # each other agent appears only in its own, so it has the most games.
     oracle = oracle or max(pooled_rows, key=lambda row: row["games"])["agent"]
-    qfens = merge_qfens(run_dirs)
+    qfens = merge_qfens(run_dirs, corpus)
 
     out.mkdir(parents=True, exist_ok=True)
     write_gzip("\n".join(qfens) + "\n", out / "to-solve.qfen.gz")
@@ -293,6 +317,7 @@ def pack(run_dirs: list[Path], out: Path, oracle: str | None = None) -> dict:
         "head_to_head": h2h,
         "seed_spread": spread,
         "positions_to_solve": len(qfens),
+        "filtered_against": str(corpus) if corpus else None,
     }
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     (out / "summary.md").write_text(summarise(runs, spread, h2h, oracle) + "\n")
@@ -306,12 +331,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("out", type=Path)
     parser.add_argument("runs", type=Path, nargs="+")
     parser.add_argument(
+        "--corpus",
+        type=Path,
+        default=None,
+        help="re-filter the solver queue against this corpus, at pack time",
+    )
+    parser.add_argument(
         "--oracle",
         default=None,
         help="the fixed opponent; inferred from the game counts when omitted",
     )
     args = parser.parse_args(argv)
-    summary = pack(args.runs, args.out, args.oracle)
+    summary = pack(args.runs, args.out, args.oracle, args.corpus)
     print((args.out / "summary.md").read_text())
     print(f"{summary['positions_to_solve']:,} positions to solve -> {args.out}")
     return 0

@@ -177,21 +177,46 @@ that number means very little and the run has not been costed properly.
 
 ## What comes out of it, besides the numbers
 
-The four runs visited **26,157 distinct positions at plies ≤ 6 that the
-training corpus does not contain**, deduplicated up to the 192 symmetries.
-Games against a different kind of opponent go to different places than
-self-play does, which is the second reason to run this.
+The four runs visited **26,157 distinct positions at plies ≤ 6**,
+deduplicated up to the 192 symmetries. Games against a different kind of
+opponent go to different places than self-play does, which is the second
+reason to run this.
 
-`arena.pack` writes them gzipped and ready for the exact solver:
+**9,095 of them were already labelled**, and that is a mistake worth
+recording. `autoplay --corpus` defaults to `exact-sampled.npz`, so the runs
+filtered against a corpus that `exact-sampled-v2.npz` had already
+superseded. Nothing failed; the queue was simply 35% larger than it needed
+to be — about twelve hours of solver time, spent on positions the corpus
+already contained.
+
+The fix is not a better default. **Filtering belongs at pack time, not at
+arena time**, because the arena filters when the games are played and the
+queue is spent much later, by which point any corpus can have moved:
+
+```bash
+python -m quantik_models.arena.pack runs/eval/oracle-2026-08-29/packed   --corpus runs/oracle/corpus/exact-sampled-v2.npz   runs/eval/oracle-2026-08-29/s*-p3 runs/eval/oracle-2026-08-29/s*-p6
+```
+
+That leaves **17,062 genuinely novel positions**, and the ply distribution
+says where the value is:
+
+| ply | visited | novel vs v2 |
+|---|---|---|
+| 3 | 726 | 62 |
+| 4 | 3,074 | 366 |
+| 5 | 6,632 | 3,251 |
+| 6 | 15,725 | 13,383 |
+
+Plies 3 and 4 are all but covered; almost everything new is at plies 5-6.
 
 ```
 runs/eval/oracle-2026-08-29/packed/
-  to-solve.qfen.gz          26,157 positions, symmetry-deduplicated
+  to-solve.qfen.gz          17,062 positions, symmetry-deduplicated
   games-*.json.gz           every game, ~25x smaller than the raw JSON
   summary.json  summary.md  pooled, per-seed, and head-to-head by seat
 ```
 
-Solving them and folding the labels into the corpus is the next step, and a
-large one: the previous batch of 5,226 positions took 6h50m and yielded
-118,053 labelled rows once children were counted. This batch is five times
-larger.
+Solving them and folding the labels in is the next step, and a large one:
+the previous batch of 5,226 positions took 6h50m and yielded 118,053
+labelled rows once children were counted. At that rate this batch is roughly
+22 hours.

@@ -248,3 +248,40 @@ def test_read_run_reports_an_unknown_depth_rather_than_guessing(tmp_path):
         json.dumps({"seed": 1, "games": 10, "leaderboard": [], "results": []})
     )
     assert pack.read_run(d).start_plies is None
+
+
+def test_merge_qfens_refilters_against_a_corpus_at_pack_time(tmp_path):
+    """The arena's own filtering can be stale by the time the queue is spent.
+
+    `autoplay` filters against whatever corpus it was pointed at while the
+    games were played. The first oracle runs filtered against v1 while v2
+    already existed, and 35% of the resulting queue was already labelled —
+    about twelve hours of solver time. Filtering here happens later, which
+    is when it matters.
+    """
+    from quantik_models.data.exact_corpus import ExactCorpus
+    from quantik_models.arena.match import sample_start_positions
+
+    boards = sample_start_positions(6, 4, seed=21)
+    qfens = [fb.to_qfen(b) for b in boards]
+    d = write_arena(tmp_path, "s1", 1, [{"agent": "x", "wins": 1, "games": 2}], qfens)
+
+    corpus_path = tmp_path / "corpus.npz"
+    covered = boards[:4]
+    ExactCorpus(
+        boards=covered,
+        optimal_mask=np.zeros(len(covered), dtype=np.uint64),
+        value_target=np.zeros(len(covered), dtype=np.float32),
+        plies=np.full(len(covered), 4, dtype=np.int16),
+    ).save(corpus_path)
+
+    assert len(pack.merge_qfens([d])) == 6
+    assert len(pack.merge_qfens([d], corpus_path)) == 2
+
+
+def test_pack_records_what_it_filtered_against(tmp_path):
+    """A queue whose provenance is unrecorded is a queue nobody can trust."""
+    d = write_arena(
+        tmp_path / "runs", "s1-p3", 1, [{"agent": "x", "wins": 1, "games": 2, "win_rate": 0.5}]
+    )
+    assert pack.pack([d], tmp_path / "out")["filtered_against"] is None
