@@ -278,7 +278,17 @@ the frontier for exactly this reason: measuring model+search on
 positions *inside* the book would reward memorizing labels the system
 already has for free.
 
-## 5. Planned evaluation
+## 5. Evaluation
+
+> **Status, 2026-08-29.** This section was written as *planned* evaluation
+> and closed with "no results are claimed in this revision". Three of the
+> four gates have since been measured and one is still open; each is
+> annotated below, and the detail lives in `shift-evaluation.md` and
+> `autoplay.md`.
+>
+> One caveat applies to every number referenced here: they were all
+> measured at `--lr 2e-3`, a rate chosen for this architecture. See
+> `attention-negative-result.md`.
 
 The acceptance gates (from the contracts model-project document) map to
 four measurements:
@@ -287,18 +297,46 @@ four measurements:
    MCTS with model priors/values versus vanilla MCTS, minimax, and
    beam, on held-out (test-shard) positions with solver references:
    move-agreement with optimal sets and value sign accuracy.
+
+   **Partially measured.** At 128 simulations, network-guided PUCT beats
+   the *same* search with uniform priors and a zero value by 99.2-99.5%
+   from ply-3 starts — seven games lost out of 1,200. The network is worth
+   nearly the entire game. **Still open:** no comparison against minimax
+   or beam, so this is measured against a floor rather than against the
+   project's incumbent engines.
 2. **Book-frontier H2H.** Round-robin from positions at and just past
    book depth: model+search versus book-only and search-only players,
    using the existing `game-result.v1` H2H machinery.
+
+   **Partially measured.** Round-robin between the trained architectures
+   at start plies 3, 6 and 9, both seats, 2,400 games at the deepest run.
+   The finding is that the ranking *depends on start depth* — the ResNet
+   leads from ply 3, `cpool` from ply 6, nothing is significant from ply 9.
+   **Still open:** no book-only player, so "at and just past book depth" is
+   approximated by random-move starts rather than by book positions.
 3. **Legality.** Post-mask illegal probability mass must be ~0 by
    construction; pre-mask mass is tracked as a learning diagnostic.
+
+   **Measured, and asserted rather than reported.** `eval.shift` raises if
+   a masked argmax is ever illegal, over all 7,800 probe positions and
+   every checkpoint; the preflight makes the same assertion on a single
+   position before any long run. It has never fired.
 4. **Calibration.** Reliability of the value head against exact labels
    on the test shard, recorded in the checkpoint's training report (the
    manifest's `calibration_report` pointer).
 
-No results are claimed in this revision; the smoke pipeline validates
-plumbing (loss decreases, export validates, splits deterministic), not
-strength.
+   **Partially measured.** Value MAE and sign accuracy against exact
+   outcomes, broken out per ply, on positions sharing no canonical key
+   with the corpus: 0.1148 MAE and 0.9559 sign for `resnet-c128-b6`,
+   ranging from 0.2307 at ply 4 to 0.0217 at ply 12. **Still open:** a
+   reliability curve — MAE and sign are summary statistics, not
+   calibration, and a model can have both while being systematically
+   overconfident.
+
+The original revision claimed no results. Three gates now have them, with
+the gaps named above; the fourth measurement in each case is a real
+absence rather than an oversight, and the largest of them is the missing
+minimax and beam baseline.
 
 ## 6. AlphaZero-style distillation beyond board games
 
