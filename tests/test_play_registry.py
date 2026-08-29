@@ -5,13 +5,21 @@ missing": a model that fails to load should still appear, greyed out with a
 reason, and every opponent spec has to actually build and move — a spec
 that merely looks like what `build_agent` expects is not the same as one
 that is.
+
+`build_agent` is imported inside the one test that needs it rather than at
+module scope. It reaches `model.registry`, which imports torch — and the
+torch-free install is a tested configuration here, so a module-scope import
+would fail collection for this whole file instead of skipping the single
+test that needs a network. Both registries under test are themselves
+torch-free and stay covered in that job.
 """
 
 from __future__ import annotations
 
 import json
 
-from quantik_models.arena.registry import build_agent
+import pytest
+
 from quantik_models.env import fastboard as fb
 from quantik_models.export.digest import file_digest
 from quantik_models.play import opponents as op
@@ -118,6 +126,9 @@ def test_no_architecture_spec_and_non_resnet_architecture_is_refused(tmp_path):
 def test_every_classical_spec_builds_and_returns_a_legal_move():
     """Proves the specs are right, not merely plausible: each one must
     actually construct through `build_agent` and choose a legal action."""
+    pytest.importorskip("torch")
+    from quantik_models.arena.registry import build_agent
+
     boards = fb.empty_boards(1)
     legal = fb.legal_masks(boards)[0]
     for opponent in op.CLASSICAL:
