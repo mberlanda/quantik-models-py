@@ -144,8 +144,10 @@ Significant head-to-heads (Wilson 95%): `cpool` beats the ResNet 58.5% at
 ply 3 and 54.7% at ply 9; `attn` beats the ResNet 54.8% at ply 3 and 54.3%
 at ply 6; both beat the MLP everywhere.
 
-**The ResNet is now third at every depth.** `cpool` and `attn` trade the
-lead between them, and the ResNet is not in the argument.
+**On raw policy the ResNet is now third at every depth.** `cpool` and
+`attn` trade the lead between them, and the ResNet is not in the argument.
+The scope of that sentence matters: under search it comes *second* at both
+depths, for the reason given below.
 
 ## Under search, the differences are real
 

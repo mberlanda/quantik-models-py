@@ -106,6 +106,22 @@ def play_game(mover, responder, board: Board, seed: int) -> tuple[int, int]:
         plies += 1
 
 
+def wilson_ci(wins: int, games: int, z: float = 1.959963984540054) -> tuple[float, float]:
+    """95% Wilson score interval on `wins / games`.
+
+    A free function rather than only a `MatchResult` property because the
+    figures read win counts back out of a written `games.json`, where the
+    match objects no longer exist.
+    """
+    if games == 0:
+        return (0.0, 0.0)
+    p = wins / games
+    denom = 1.0 + z * z / games
+    centre = (p + z * z / (2 * games)) / denom
+    margin = z * ((p * (1 - p) / games + z * z / (4 * games * games)) ** 0.5) / denom
+    return (max(0.0, centre - margin), min(1.0, centre + margin))
+
+
 @dataclass
 class MatchResult:
     agent_a: str
@@ -127,15 +143,7 @@ class MatchResult:
     @property
     def wilson_ci(self) -> tuple[float, float]:
         """95% Wilson score interval on A's win rate."""
-        n = self.games
-        if n == 0:
-            return (0.0, 0.0)
-        z = 1.959963984540054
-        p = self.score_a
-        denom = 1.0 + z * z / n
-        centre = (p + z * z / (2 * n)) / denom
-        margin = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
-        return (max(0.0, centre - margin), min(1.0, centre + margin))
+        return wilson_ci(self.wins_a, self.games)
 
     def summary(self) -> str:
         low, high = self.wilson_ci

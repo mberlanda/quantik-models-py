@@ -33,13 +33,19 @@ onnx = [
   # produced: onnxruntime backs the torch-vs-ONNX agreement test.
   "onnxruntime>=1.18",
 ]
+viz = [
+  # The benchmark figures. Kept out of the default install because nothing
+  # in training, evaluation or export plots anything — only the report does.
+  "matplotlib>=3.8",
+]
 all = [
-  "quantik-models[dev,arrow,torch,onnx]",
+  "quantik-models[dev,arrow,torch,onnx,viz]",
 ]
 
 [project.scripts]
 quantik-models-materialize = "quantik_models.data.materialize:main"
 quantik-models-train = "quantik_models.train.trainer:main"
+quantik-models-figures = "quantik_models.report.build_figures:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
