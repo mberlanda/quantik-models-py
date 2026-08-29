@@ -21,13 +21,34 @@ separate steps on purpose: a push is authenticated, public, and awkward to
 undo, and a function that both prepares and publishes makes the dry run
 impossible.
 
+Stage the whole family in one pass:
+
+```bash
+scripts/stage_hub_repos.sh staging \
+  runs/train/swept-cpool/best runs/train/swept-attn/best \
+  runs/train/lineup-resnet/best runs/train/lineup-mlp/best
+```
+
+or one model at a time:
+
 ```bash
 python -m quantik_models.export.huggingface \
   runs/train/swept-cpool/best staging/quantik-cpool-c191-b6 \
-  --repo-id <your-org>/quantik-cpool-c191-b6 \
   --shift runs/eval/swept-2026-08-30/shift.json \
   --arena runs/eval/swept-2026-08-30/policy-p3/games.json
 ```
+
+**The repo id is derived, not typed.** `<namespace>/quantik-<architecture>`,
+with the namespace taken from `--namespace`, then `$QUANTIK_HF_NAMESPACE`,
+then the project default. An id assembled by hand on each invocation is how
+one model in a family ends up under a different account than the rest — and a
+Hub repo cannot be renamed without breaking every link and download already
+pointing at it.
+
+The project prefix is not decoration either. On the Hub a repo name sits alone
+in search with no directory around it, so `cpool-c191-b6` says nothing about
+what it is; `quantik-cpool-c191-b6` does, and groups the family alphabetically
+for free.
 
 That writes a directory. The `model-index` numbers come out of the
 evaluation artifacts rather than being typed onto the card, which is how a
@@ -39,6 +60,12 @@ What happens to the directory afterwards is below.
 A Hugging Face repo is a git repo with three files the Hub treats as
 **structural rather than decorative**. Getting them wrong does not produce
 an error; it produces a model page that works and that nobody finds.
+
+**A `license:` the source tree actually carries.** The field takes a
+lowercase identifier from the Hub's fixed table — `mit`, not `MIT`, and
+`other` requires a `LICENSE` file in the repo plus a `license_name`. Publishing
+a licence that no file in the source backs is the quietest of the failures on
+this page: it is legally meaningless and looks completely normal.
 
 **`README.md` with YAML front matter.** On the Hub the front matter is
 metadata, not documentation. `license` gates the download button —
@@ -73,6 +100,14 @@ directory writes both patterns.
 | `manifest.json` | the `model-checkpoint.v1` record, carried over unchanged |
 | `training-report.json` | the epoch that produced these weights, and its metrics |
 | `config.json`, `README.md`, `.gitattributes` | generated |
+
+Every install line on a generated card points at something verified to exist.
+`quantik-core` is published at 1.2.0 on **PyPI** and **crates.io**;
+`quantik-models` is **not on PyPI**, so the card installs it from the GitHub
+source. A card whose first instruction is a 404 fails for the reader rather
+than for you, which is why this is checked rather than assumed — note that
+`https://pypi.org/project/<name>/` returns HTTP 200 with a challenge page for
+packages that do not exist, so check `https://pypi.org/pypi/<name>/json`.
 
 The manifest travels with the model because it is the only file that says
 which contract version the weights speak, and a checkpoint whose contract
@@ -162,11 +197,15 @@ belongs on the card, not only in `benchmarks.md`.
 Nothing here does this for you.
 
 ```bash
-pip install huggingface_hub
-huggingface-cli login
-huggingface-cli upload <your-org>/quantik-cpool-c191-b6 \
-  staging/quantik-cpool-c191-b6 . --commit-message "cpool-c191-b6 at 6e-4"
+pip install -U huggingface_hub
+hf auth login
+hf upload brpoplpush/quantik-cpool-c191-b6 \
+  staging/quantik-cpool-c191-b6 . \
+  --repo-type model --commit-message "cpool-c191-b6 at 6e-4"
 ```
+
+The CLI is `hf` from `huggingface_hub` 1.x; `huggingface-cli` is the older
+name and still works, but the docs have moved.
 
 Check the rendered card before tagging: front matter that fails to parse is
 displayed as body text rather than rejected, so a malformed `model-index`

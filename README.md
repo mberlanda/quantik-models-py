@@ -242,11 +242,10 @@ Why it first appeared to fail:
     # regenerate every published number
     scripts/evaluate_lineup.sh runs/eval/today cpool=runs/train/my-run/best
 
-    # stage one for the Hugging Face Hub (writes files; uploads nothing)
-    python -m quantik_models.export.huggingface \
-      runs/train/swept-cpool/best staging/quantik-cpool-c191-b6 \
-      --repo-id <your-org>/quantik-cpool-c191-b6 \
-      --shift runs/eval/swept-2026-08-30/shift.json
+    # stage the family for the Hugging Face Hub (writes files; uploads nothing)
+    scripts/stage_hub_repos.sh staging \
+      runs/train/swept-cpool/best runs/train/swept-attn/best \
+      runs/train/lineup-resnet/best runs/train/lineup-mlp/best
 
 Retraining and fine-tuning, including freezing part of a network:
 [`docs/retrain-and-finetune.md`](docs/retrain-and-finetune.md). What a model
