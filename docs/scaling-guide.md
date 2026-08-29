@@ -10,11 +10,16 @@ the model is the data.
 | --- | --- | --- | --- | --- | --- |
 | `smoke` | 16 | 2 | 13,991 | ~0.1 MiB | CI, examples, plumbing checks |
 | `small` | 64 | 4 | 304,711 | ~1.2 MiB | Laptop baselines, ablations |
+| `medium` | 128 | 6 | 1,786,823 | ~6.8 MiB | The published model; the lineup size |
 | `target` | 256 | 13 | 15,374,023 | ~58.6 MiB | The 50-100 MB contract model |
 
-(Exact parameter counts are asserted by `tests/test_policy_value_net.py`;
-the `target` preset must land inside the 50-100 MB envelope from
-quantik-core-contracts `docs/policy-value-model-project.md`.)
+(Exact parameter counts are asserted by `tests/test_policy_value_net.py`
+and `tests/test_parameter_matching.py`; the `target` preset must land
+inside the 50-100 MB envelope from
+`quantik-core-contracts/docs/policy-value-model-project.md`.)
+
+This table is the ResNet's. Every other architecture matches its `small`
+and `medium` counts to within 1.2% — see `architectures.md`.
 
 ## What changes when you scale
 
