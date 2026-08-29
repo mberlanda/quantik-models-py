@@ -43,7 +43,10 @@ service draws a fresh seed per request; a fixed default would make
 
 The opponent is chosen by the route, not the body: `POST
 /api/move/{opponent_id}`, where `opponent_id` comes from
-`GET /api/opponents`. That keeps `src/engines.js` in the visualizer
+`GET /api/opponents`. **That route is not built yet** — this section
+records the shape the handler was written for; the server is a separate
+step, and `PlayService.choose_move(opponent_id, request)` is what it will
+call. That keeps `src/engines.js` in the visualizer
 unchanged — it builds its POST body from a fixed literal with no hook for
 extra fields, so anything the server needs to know beyond the position has
 to ride in the URL.
