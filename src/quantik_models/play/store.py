@@ -81,6 +81,15 @@ META_COLUMNS = (
     "final_qfen",
     "client_winner",
     "client_terminal_reason",
+    # The opening temperature the served network played at. `cpool@128`
+    # names the same opponent in this store and in the arena's
+    # `runs/eval/*/games.json`, and `play.opponents` justifies reusing the
+    # arena's names on the grounds that the rows then pool. A sampled
+    # opening breaks that — same name, different player — so the setting
+    # belongs on the row rather than in the operator's memory of which
+    # flags the service was started with.
+    "opening_temperature",
+    "opening_plies",
 )
 
 _SCHEMA = """
@@ -127,7 +136,9 @@ CREATE TABLE IF NOT EXISTS game_meta (
     initial_qfen                 TEXT,
     final_qfen                   TEXT,
     client_winner                INTEGER,
-    client_terminal_reason       TEXT
+    client_terminal_reason       TEXT,
+    opening_temperature          REAL,
+    opening_plies                INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_game_meta_player_opponent
@@ -164,8 +175,40 @@ def connect(path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.executescript(_SCHEMA)
+    _add_missing_meta_columns(conn)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# The `game_meta` columns this module knows how to create on a table that
+# already exists. `games` is deliberately absent: it mirrors
+# `game-result.v1` column for column, so a change there is a contract
+# change that deserves a considered migration rather than a silent
+# `ALTER TABLE`. `game_meta` is this service's own annotation space, where
+# a new nullable column costs nothing and losing one costs a game.
+_META_COLUMN_TYPES = {
+    "opening_temperature": "REAL",
+    "opening_plies": "INTEGER",
+}
+
+
+def _add_missing_meta_columns(conn: sqlite3.Connection) -> None:
+    """Bring an existing `game_meta` forward to the current column set.
+
+    `CREATE TABLE IF NOT EXISTS` does nothing at all to a table that is
+    already there, so a database written before a column existed keeps its
+    old shape and every insert naming the new column fails with "table
+    game_meta has no column named ..." — at the end of somebody's game,
+    which is the worst moment to discover it. These columns are all
+    nullable with no default, which is what makes adding them safe.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(game_meta)")}
+    if not existing:
+        return
+    with conn:
+        for column, sql_type in _META_COLUMN_TYPES.items():
+            if column not in existing:
+                conn.execute(f"ALTER TABLE game_meta ADD COLUMN {column} {sql_type}")
 
 
 def record_game(

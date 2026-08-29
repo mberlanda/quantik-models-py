@@ -10,6 +10,8 @@ head-to-head number downstream.
 
 from __future__ import annotations
 
+import re
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -232,3 +234,50 @@ def test_a_nonsense_human_seat_is_still_refused(tmp_path: Path) -> None:
             make_meta(game_id="bad-seat", human_seat=7),
             make_positions("bad-seat"),
         )
+
+
+def test_the_store_records_the_temperature_a_game_was_played_at(tmp_path):
+    """`p1_engine_version` is `cpool@128` in both the arena's `games.json`
+    and this store, and `play.opponents` justifies that on the grounds that
+    the two are then the same player and their rows pool. An opening
+    temperature breaks exactly that: same name, different player. The
+    setting has to be on the row, or the claim quietly stops being true."""
+    conn = store.connect(tmp_path / "games.db")
+    assert "opening_temperature" in store.META_COLUMNS
+    assert "opening_plies" in store.META_COLUMNS
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(game_meta)")}
+    assert {"opening_temperature", "opening_plies"} <= columns
+
+
+def test_an_older_store_gains_the_new_meta_columns(tmp_path):
+    """`CREATE TABLE IF NOT EXISTS` does nothing to a table that already
+    exists, so a database written before a column was added keeps the old
+    shape and every insert naming the new column fails. Opening it has to
+    bring it forward."""
+    path = tmp_path / "games.db"
+    # The real schema with the newest columns cut out, rather than a
+    # stripped-down stand-in: the migration has to survive the database
+    # that actually exists on disk, indexes and constraints included.
+    previous = store._SCHEMA
+    for column in store._META_COLUMN_TYPES:
+        previous = re.sub(rf"\n\s*{column}\s+\w+,?", "", previous)
+    previous = previous.replace("client_terminal_reason       TEXT,", "client_terminal_reason       TEXT")
+    old = sqlite3.connect(str(path))
+    old.executescript(previous)
+    old.commit()
+    old.close()
+
+    before = {row[1] for row in sqlite3.connect(str(path)).execute("PRAGMA table_info(game_meta)")}
+    assert not before & set(store._META_COLUMN_TYPES)
+
+    conn = store.connect(path)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(game_meta)")}
+    assert set(store.META_COLUMNS) <= columns
+
+    # And it still takes a row, which is the only thing the migration is for.
+    game = make_game()
+    meta = {"recorded_at": "2026-08-29T12:00:00+00:00",
+            "opening_temperature": 1.0, "opening_plies": 4}
+    assert store.record_game(conn, game, meta, [])
+    row = conn.execute("SELECT * FROM game_meta").fetchone()
+    assert row["opening_temperature"] == 1.0 and row["opening_plies"] == 4

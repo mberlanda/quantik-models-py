@@ -206,6 +206,10 @@ def rows_for(
         "final_qfen": result.final_qfen,
         "client_winner": payload.get("winner"),
         "client_terminal_reason": _client_reason(payload.get("terminal_reason")),
+        # A classical opponent has neither, and a `None` here is the right
+        # answer for it: `minimax-d2` has no temperature to record.
+        "opening_temperature": getattr(opponent, "temperature", None),
+        "opening_plies": getattr(opponent, "temperature_plies", None),
     }
     return game, meta, result.positions
 

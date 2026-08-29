@@ -30,6 +30,26 @@ _NET_MCTS_PARAMS = {
     "dirichlet_weight": 0.0,
 }
 
+# Opening temperature, and the number of plies it applies to.
+#
+# Without it a network is a deterministic function of the position: the
+# same opponent from the same start replays one game, every game. That is
+# the right default for the arena, where the question is how a fixed player
+# performs, and the wrong one here, where two people watching engine-vs-
+# engine see the same game twice and a human who finds one winning line
+# wins with it forever.
+#
+# It is bounded to the opening because that is where it is nearly free.
+# The corpus spans plies 6-13, so the policy head was never trained on the
+# first few plies and has no opinion there — measured, `cpool` on the empty
+# board puts 0.0167 on each legal action, which is 1/60 to three places.
+# An `argmax` over that is not a considered choice; it is whichever action
+# index sorts first. Sampling it is the more honest reading of a flat
+# distribution, and the network still plays its best move from ply 4 on,
+# which is where its training starts to bite.
+DEFAULT_OPENING_TEMPERATURE = 1.0
+DEFAULT_OPENING_PLIES = 4
+
 
 @dataclass(frozen=True)
 class Opponent:
@@ -39,6 +59,12 @@ class Opponent:
     spec: dict[str, Any]
     model_id: str | None
     simulations: int | None
+    # Explicit fields rather than a `spec.get`, because these end up on a
+    # recorded game's row: a reader of `game_meta` should not have to know
+    # the shape of an `arena.registry` spec to find out what it was played
+    # against.
+    temperature: float = 0.0
+    temperature_plies: int | None = None
 
 
 CLASSICAL: tuple[Opponent, ...] = (
@@ -110,7 +136,12 @@ CLASSICAL: tuple[Opponent, ...] = (
 )
 
 
-def neural_opponents(models: list[PlayModel]) -> list[Opponent]:
+def neural_opponents(
+    models: list[PlayModel],
+    *,
+    temperature: float = DEFAULT_OPENING_TEMPERATURE,
+    temperature_plies: int = DEFAULT_OPENING_PLIES,
+) -> list[Opponent]:
     """Two opponents per `ready` model: the bare policy head, and a search.
 
     A refused model is skipped entirely — it has no weights to trust, so
@@ -133,9 +164,13 @@ def neural_opponents(models: list[PlayModel]) -> list[Opponent]:
                     "checkpoint": checkpoint,
                     "device": "cpu",
                     "name": policy_id,
+                    "temperature": temperature,
+                    "temperature_plies": temperature_plies,
                 },
                 model_id=model.model_id,
                 simulations=0,
+                temperature=temperature,
+                temperature_plies=temperature_plies,
             )
         )
         mcts_id = f"{model.model_id}@{_NET_MCTS_SIMULATIONS}"
@@ -149,15 +184,26 @@ def neural_opponents(models: list[PlayModel]) -> list[Opponent]:
                     "checkpoint": checkpoint,
                     "device": "cpu",
                     "name": mcts_id,
+                    "temperature": temperature,
+                    "temperature_plies": temperature_plies,
                     "params": dict(_NET_MCTS_PARAMS),
                 },
                 model_id=model.model_id,
                 simulations=_NET_MCTS_SIMULATIONS,
+                temperature=temperature,
+                temperature_plies=temperature_plies,
             )
         )
     return out
 
 
-def roster(models: list[PlayModel]) -> list[Opponent]:
+def roster(
+    models: list[PlayModel],
+    *,
+    temperature: float = DEFAULT_OPENING_TEMPERATURE,
+    temperature_plies: int = DEFAULT_OPENING_PLIES,
+) -> list[Opponent]:
     """The classical table followed by every ready model's two opponents."""
-    return list(CLASSICAL) + neural_opponents(models)
+    return list(CLASSICAL) + neural_opponents(
+        models, temperature=temperature, temperature_plies=temperature_plies
+    )

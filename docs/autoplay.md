@@ -88,6 +88,101 @@ of which 5,226 were both shallow and novel. The cost is that plies 0-2 are
 never visited; a run from the empty board is still the right way to see
 what the engines actually open with.
 
+### The seed was doing nothing at all (2026-08-29)
+
+The paragraph above understated the problem, and the understatement lasted
+until somebody watched two models play in the browser and noticed every
+game opening the same way.
+
+Every agent takes `select(board, seed)`, and `arena.match`, `arena.autoplay`
+and the play service all thread a varying seed through it. For the
+network-backed agents that seed decided **nothing**:
+
+- `PolicyAgent` defaults to `temperature=0.0`, which is an argmax over the
+  priors.
+- `NetMCTSAgent` returned `visits.argmax()`, and the only consumer of its
+  RNG inside `BatchedMCTS` is the root Dirichlet noise — which every arena
+  spec disables with `dirichlet_weight: 0.0`.
+
+So `uniform-mcts128` returns action 0 from an empty board for each of six
+different seeds, and `--start-plies 0 --games N` produced N byte-identical
+games per pairing. Not "roughly two distinct games": exactly one.
+
+**What this cost the published numbers.** Nothing was invalidated, because
+every lineup run used `--start-plies 3`, `6` or `9`, and the random starts
+carried the variation. What it cost is *effective sample size*, which no
+output reported. Counting distinct action sequences per ordered pairing in
+`runs/eval/lineup-2026-08-29`:
+
+- at `--start-plies 3`, 298-300 of 300 games were distinct;
+- at `--start-plies 6`, **263-272 of 300**.
+
+`run` samples start positions with replacement, so a pairing gets fewer
+distinct openings than it asked for, and a repeated opening between two
+deterministic agents is a repeated *game*. The ply-6 intervals in
+`arena.pack` divide by 300 and should divide by something nearer 265. The
+effect is small — roughly a 6% understatement of the interval width — but
+it was invisible, which is the part worth fixing.
+
+`autoplay` now prints the distinct-game count beside the leaderboard,
+writes it into `games.json` per pairing, and warns when the worst pairing
+falls below half. It reports the shortfall rather than silently correcting
+the intervals; what the effective sample size *is* under repeated openings
+is a separate argument.
+
+### The fix, and the three alternatives
+
+`NetMCTSAgent` and `PolicyAgent` now take `temperature` and
+`temperature_plies`. At a non-zero temperature the move is **sampled from
+the MCTS visit counts** (or the priors, for the policy agent) instead of
+taken as an argmax, and `temperature_plies` bounds that to the opening. The
+default is `0.0` — unchanged, deterministic, which is what every published
+margin was measured at.
+
+Sampling the **visit counts** rather than the priors, because the visits
+are what the search converged on: a temperature there trades strength for
+variety along the search's own ranking, instead of discarding the search.
+
+Three alternatives, and why not:
+
+- **Random tie-breaking on the argmax.** Nearly free and strictly
+  harmless, and it buys nothing — measured, `uniform-mcts128` from an
+  empty board has exactly one action at its maximum, and `cpool@128` has
+  102 visits on its best action against 1-2 on nineteen others. There are
+  no ties to break.
+- **Root Dirichlet noise**, which already exists and is already disabled.
+  It is AlphaZero's own diversity mechanism, and it would fix the case
+  temperature does not (see below). It was not chosen as the primary
+  mechanism because it perturbs the priors the whole tree is built on, so
+  its cost is spread through every simulation rather than landing on one
+  choice — harder to reason about, and harder to bound to the opening.
+- **Randomised starts only**, the status quo. It cannot reach plies 0-2 at
+  all, and the pre-plies are uniformly random rather than plausible, so the
+  positions it reaches are drawn from a wider distribution than real play —
+  a caveat this document already carries at the bottom.
+
+### A thing found on the way: the uniform control barely searches
+
+`uniform-mcts128` is the control that separates "the network is good" from
+"the search is doing the work". With uniform priors *and* a flat zero
+value, PUCT is degenerate: the first child visited sits at `Q = 0` while
+every unvisited sibling sits at `-fpu_reduction`, and at `c_puct = 1.5`
+with a prior of 1/64 the exploration bonus never closes that gap.
+
+Measured at 64 simulations with `fpu_reduction=0.2`: **all 64 visits land
+on one action**. At 128 simulations, 113 of 128 on one action across 12
+actions total. A trained checkpoint spreads much further — `cpool` at 128
+simulations puts 102 on its best and touches 20 actions.
+
+The control is therefore weaker than "the same search without a network"
+suggests; it is closer to "the same search, collapsed onto its first
+descent". That does not invalidate its use as a floor, but it does mean the
+gap between a network and `uniform-mcts128` overstates the network's
+contribution relative to a search that actually explores. Setting
+`fpu_reduction: 0.0` in its spec makes it fan out to 25 actions. **Not
+changed here** — doing so would change what the published control means,
+and restating that comparison is its own piece of work.
+
 ## What the first full cycle produced
 
 Run on 2026-08-29: 2,400 games from ply-3 starts, 5,226 novel shallow
