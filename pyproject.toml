@@ -7,6 +7,12 @@ name = "quantik-models"
 version = "0.1.0"
 description = "Training and model tooling for Quantik policy/value checkpoints"
 readme = "README.md"
+# MIT, matching quantik-core-py and quantik-core-rust. Stated here as well as
+# in LICENSE because the Hugging Face model cards this repo generates publish
+# a `license:` field, and a card asserting a licence the source tree does not
+# carry is worse than a card with none.
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
   "numpy>=2.0,<3",
