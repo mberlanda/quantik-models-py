@@ -139,6 +139,43 @@ The freshness check runs **before** the agent is built, which has a useful
 side effect: a tampered checkpoint is refused without anything trying to
 load it, so the guard is covered in the torch-free CI job.
 
+## The networks vary their opening, on purpose
+
+A network at the arena's default temperature is a deterministic function of
+the position, so the same opponent from the same start replays one game
+forever. Two people watching engine-versus-engine see the same game twice,
+and a human who finds one winning line wins with it every time. That is the
+right default for the arena, where the question is how a fixed player
+performs, and the wrong one here.
+
+Served opponents therefore sample their first four plies:
+`--opening-temperature 1.0`, `--opening-plies 4`. Setting the temperature
+to `0` restores the arena's exact behaviour.
+
+**Why the opening is where this is nearly free.** The corpus spans plies
+6-13, so the policy head was never trained on the first few plies and holds
+no opinion there — measured, `cpool` on an empty board puts `0.0167` on
+each legal action, which is 1/60 to three places. An argmax over that is
+not a considered choice; it is whichever action index sorts first. Sampling
+is the more honest reading of a flat distribution. The board also has only
+**three distinct canonical positions** after any first move, so the variety
+costs less than the move count suggests. From ply 4 the network plays its
+best move, which is where its training starts to bite.
+
+**What it costs, stated plainly.** `cpool@128` names the same opponent here
+and in the arena's `runs/eval/*/games.json`, and the roster reuses the
+arena's names precisely so the rows pool into one dataset. A sampled
+opening breaks that — same name, different player. `game_meta` therefore
+carries `opening_temperature` and `opening_plies` on every row, so a later
+analysis can separate the two rather than discover the difference by
+noticing the numbers do not fit. A classical opponent stores `NULL` for
+both; `minimax-d2` has no temperature to record.
+
+`uniform-mcts128` is the one opponent the temperature does not help. Its
+search is degenerate — uniform priors and a flat zero value put nearly
+every visit on one action — so there is no visit distribution to sample
+from. See `autoplay.md`, "the uniform control barely searches".
+
 ## Concurrency
 
 One `threading.Lock` covers agent construction and `select`. The agents,
