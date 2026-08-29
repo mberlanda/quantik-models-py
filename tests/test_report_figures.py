@@ -232,3 +232,59 @@ def test_oracle_benchmark_draws_a_tick_per_run_and_omits_the_oracle(tmp_path):
     # one minus the field's and would double the figure's height for nothing.
     assert "cpool" in body and "mlp" in body
     assert ">minimax-d2<" not in body
+
+
+def test_build_draws_the_oracle_figure_from_a_packed_summary(tmp_path, capsys):
+    """The oracle is picked as the agent with the most games.
+
+    It played every pairing and each network played only its own, so the game
+    count identifies it without the caller having to name it — and a wrong
+    guess would silently draw the oracle as one more bar in the field.
+    """
+    import json
+
+    from quantik_models.report import build_figures
+
+    oracle = tmp_path / "oracle"
+    for name, cpool in (("s1-p3", 0.45), ("s2-p3", 0.47)):
+        d = oracle / name
+        d.mkdir(parents=True)
+        (d / "games.json").write_text(
+            json.dumps(
+                {
+                    "seed": 1,
+                    "games": 100,
+                    "leaderboard": [
+                        {"agent": "minimax-d2", "wins": 55, "games": 200, "win_rate": 0.55},
+                        {"agent": "cpool", "wins": 45, "games": 100, "win_rate": cpool},
+                    ],
+                    "results": [],
+                }
+            )
+        )
+    packed = oracle / "packed"
+    packed.mkdir()
+    (packed / "summary.json").write_text(
+        json.dumps(
+            {
+                "runs": [{"name": "s1-p3", "seed": 1, "games": 100}, {"name": "s2-p3", "seed": 2, "games": 100}],
+                "pooled": [
+                    {"agent": "minimax-d2", "wins": 110, "games": 400, "win_rate": 0.55, "ci_low": 0.50, "ci_high": 0.60},
+                    {"agent": "cpool", "wins": 92, "games": 200, "win_rate": 0.46, "ci_low": 0.39, "ci_high": 0.53},
+                ],
+                "seed_spread": {"cpool": 0.02},
+                "positions_to_solve": 0,
+            }
+        )
+    )
+    written = build_figures.build(tmp_path / "runs", tmp_path / "out", "none", oracle)
+    assert [p.name for p in written] == ["oracle-benchmark.svg"]
+    body = (tmp_path / "out" / "oracle-benchmark.svg").read_text()
+    assert "cpool" in body
+
+
+def test_build_skips_the_oracle_figure_when_nothing_is_packed(tmp_path, capsys):
+    from quantik_models.report import build_figures
+
+    build_figures.build(tmp_path / "runs", tmp_path / "out", "none", tmp_path / "oracle")
+    assert "packed/summary.json" in capsys.readouterr().out
