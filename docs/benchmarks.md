@@ -157,6 +157,7 @@ any of this is good rather than which of it is better: against
 `minimax-d2` at ply 3, `cpool` is even (49.4%) and the other three lose,
 `mlp` by seventeen points. Beam search remains unmeasured.
 
-**Nothing trained on `exact-sampled-v2.npz`.** The corpus with plies 3-6
-filled exists and no figure on this page uses it. Training on it would
-measure a better corpus, not a better architecture.
+**No figure here uses `exact-sampled-v3.npz`.** A model trained on it exists
+and beats everything on this page from ply-3 starts while being no better
+from ply 6 — see `corpus-v3.md`. It is a corpus result, not an architecture
+result, and mixing the two would make both unreadable.

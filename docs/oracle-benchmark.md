@@ -216,7 +216,11 @@ runs/eval/oracle-2026-08-29/packed/
   summary.json  summary.md  pooled, per-seed, and head-to-head by seat
 ```
 
-Solving them and folding the labels in is the next step, and a large one:
+**Done, and the result is in `corpus-v3.md`** — the short version is that
+retraining on them changed play strength a lot and held-out policy accuracy
+not at all.
+
+Solving them and folding the labels in was the next step, and a large one:
 the previous batch of 5,226 positions took 6h50m and yielded 118,053
 labelled rows once children were counted. At that rate this batch is roughly
 22 hours.
