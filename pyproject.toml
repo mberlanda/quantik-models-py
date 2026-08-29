@@ -46,6 +46,7 @@ all = [
 quantik-models-materialize = "quantik_models.data.materialize:main"
 quantik-models-train = "quantik_models.train.trainer:main"
 quantik-models-figures = "quantik_models.report.build_figures:main"
+quantik-models-hf-stage = "quantik_models.export.huggingface:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

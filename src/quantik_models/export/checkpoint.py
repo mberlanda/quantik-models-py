@@ -22,7 +22,6 @@ ran the ONNX would be describing something other than what it serves.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +33,7 @@ from torch import nn
 from torch.export import Dim
 
 from ..model import registry
+from .digest import file_digest
 from ..model.policy_value_net import parameter_count
 from ..model.spec import BOARD_SIZE, INPUT_PLANES
 
@@ -73,14 +73,6 @@ def _supported_contract_version() -> str:
             "explicit contract_version="
         ) from exc
     return str(SUPPORTED_CONTRACTS_RELEASE)
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return f"sha256:{digest.hexdigest()}"
 
 
 def export_onnx(model: nn.Module, path: Path) -> None:
@@ -174,7 +166,7 @@ def export_checkpoint(
         "input_contracts": ["tensor-board.v1", "bitboard.v1", "action-index.v1"],
         "output_contract": "policy-logits-64+value-tanh",
         "weights_format": "safetensors",
-        "weights_hash": _sha256(weights_path),
+        "weights_hash": file_digest(weights_path),
         "size_bytes": weights_path.stat().st_size,
         "training_data_manifest": _REPORT_NAME,
         "calibration_report": _REPORT_NAME,
@@ -204,7 +196,7 @@ def export_checkpoint(
         # ONNX artifact is recorded beside it with its own hash so a runtime
         # can verify whichever one it actually loads.
         manifest["onnx_export"] = _ONNX_NAME
-        manifest["onnx_hash"] = _sha256(onnx_path)
+        manifest["onnx_hash"] = file_digest(onnx_path)
         manifest["onnx_opset"] = onnx_opset(onnx_path)
         manifest["onnx_size_bytes"] = onnx_path.stat().st_size
 
