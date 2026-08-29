@@ -36,7 +36,10 @@ from .digest import file_digest
 
 __all__ = [
     "CARD_FILES",
+    "DEFAULT_NAMESPACE",
     "LFS_PATTERNS",
+    "repo_id_for",
+    "repo_name_for",
     "file_digest",
     "gitattributes",
     "hf_config",
@@ -52,6 +55,51 @@ __all__ = [
 LFS_PATTERNS = ("*.safetensors", "*.onnx", "*.npz")
 
 CARD_FILES = ("README.md", "config.json", ".gitattributes")
+
+# The Hub account these models are published under. Overridable per call and
+# by QUANTIK_HF_NAMESPACE, but a default matters: a repo id assembled by hand
+# on each invocation is how one model ends up under a different account than
+# the rest of its family, and a Hub repo cannot be renamed without breaking
+# every link and download that already points at it.
+DEFAULT_NAMESPACE = "brpoplpush"
+
+# Every model in this family carries the project prefix. On the Hub a repo
+# name sits alone in search results with no directory around it, so
+# `cpool-c191-b6` says nothing about what it is; `quantik-cpool-c191-b6`
+# does, and it groups the family alphabetically for free.
+REPO_PREFIX = "quantik"
+
+
+def repo_name_for(architecture: str, prefix: str = REPO_PREFIX) -> str:
+    """`cpool-c191-b6` -> `quantik-cpool-c191-b6`.
+
+    Derived rather than chosen per model: the architecture string is already
+    the thing that distinguishes these checkpoints, and a hand-written name
+    is one more place for `c191` and `c192` to diverge.
+    """
+    if not architecture:
+        raise ValueError("architecture is empty; cannot derive a repo name")
+    name = architecture if architecture.startswith(f"{prefix}-") else f"{prefix}-{architecture}"
+    # The Hub allows alphanumerics, hyphens, underscores and dots, and treats
+    # names case-insensitively for collisions. Everything the registry
+    # produces is already lowercase alphanumeric-and-hyphen; this refuses
+    # anything else rather than silently publishing a name that does not
+    # match what the docs say.
+    if not all(c.isalnum() or c in "-_." for c in name):
+        raise ValueError(f"{name!r} is not a usable Hub repo name")
+    return name
+
+
+def repo_id_for(
+    architecture: str, namespace: str | None = None, prefix: str = REPO_PREFIX
+) -> str:
+    """`<namespace>/<repo name>`, e.g. `brpoplpush/quantik-cpool-c191-b6`."""
+    import os
+
+    namespace = namespace or os.environ.get("QUANTIK_HF_NAMESPACE") or DEFAULT_NAMESPACE
+    if "/" in namespace:
+        raise ValueError(f"namespace {namespace!r} must not contain a slash")
+    return f"{namespace}/{repo_name_for(architecture, prefix)}"
 
 
 def gitattributes(patterns: tuple[str, ...] = LFS_PATTERNS) -> str:
@@ -146,9 +194,9 @@ def model_card(
     model, and what it is not good at, is written by a person.
     """
     metrics = metrics or []
-    # The snippets are meant to be copied and run, so the placeholder has to
-    # look like a placeholder rather than like a repo that exists.
-    repo_id = repo_id or f"<your-org>/{manifest['architecture']}"
+    # Derived, not a placeholder. A card that ships `<your-org>` teaches the
+    # reader to edit the snippet before running it, and most will not.
+    repo_id = repo_id or repo_id_for(manifest["architecture"])
     header = _front_matter(manifest, license_id, metrics, base_model)
     facts = [
         "",
@@ -296,6 +344,7 @@ def stage(
     out_dir: Path,
     *,
     repo_id: str | None = None,
+    namespace: str | None = None,
     license_id: str = "apache-2.0",
     metrics: list[dict[str, Any]] | None = None,
     base_model: str | None = None,
@@ -303,6 +352,7 @@ def stage(
 ) -> Path:
     """Write a Hub-ready directory. Copies, never moves, and never uploads."""
     manifest = json.loads((checkpoint_dir / "manifest.json").read_text())
+    repo_id = repo_id or repo_id_for(manifest["architecture"], namespace)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # `weights.safetensors` -> `model.safetensors`: the Hub's viewers and
@@ -336,7 +386,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("checkpoint", type=Path, help="a runs/train/*/best directory")
     parser.add_argument("out", type=Path, help="directory to stage into")
-    parser.add_argument("--repo-id", default=None, help="e.g. mberlanda/quantik-cpool-c191-b6")
+    parser.add_argument(
+        "--repo-id",
+        default=None,
+        help="full id; derived from the manifest and --namespace when omitted",
+    )
+    parser.add_argument(
+        "--namespace",
+        default=None,
+        help=f"Hub account (default: $QUANTIK_HF_NAMESPACE, else {DEFAULT_NAMESPACE})",
+    )
     parser.add_argument("--license", default="apache-2.0")
     parser.add_argument("--base-model", default=None)
     parser.add_argument(
@@ -387,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         args.checkpoint,
         args.out,
         repo_id=args.repo_id,
+        namespace=args.namespace,
         license_id=args.license,
         metrics=metrics,
         base_model=args.base_model,
@@ -395,7 +455,9 @@ def main(argv: list[str] | None = None) -> int:
     for path in sorted(out.iterdir()):
         print(f"  {path.name}  {path.stat().st_size:,} bytes")
     print("\nhashes verified against the manifest")
+    manifest = json.loads((args.checkpoint / "manifest.json").read_text())
     print(f"\nstaged {out}")
+    print(f"  repo id: {args.repo_id or repo_id_for(manifest['architecture'], args.namespace)}")
     print("nothing has been uploaded; see docs/publishing-to-hugging-face.md")
     return 0
 

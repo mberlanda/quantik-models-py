@@ -100,11 +100,6 @@ def test_the_card_says_the_mask_is_the_callers_job():
     assert "illegal moves" in card
 
 
-def test_the_card_uses_a_placeholder_that_looks_like_one():
-    card = hf.model_card(MANIFEST)
-    assert "<your-org>/cpool-c191-b6" in card
-
-
 def test_stage_writes_a_hub_ready_directory(tmp_path):
     checkpoint = write_checkpoint(tmp_path)
     out = hf.stage(checkpoint, tmp_path / "hub", repo_id="me/quantik-cpool")
@@ -198,3 +193,55 @@ def test_card_metrics_refuses_an_architecture_the_evaluation_does_not_cover():
     """Silently publishing another model's accuracy is the failure to avoid."""
     with pytest.raises(ValueError, match="attn-d192-b6"):
         hf.card_metrics(SHIFT, [], "attn-d192-b6", "attn")
+
+
+def test_repo_name_carries_the_project_prefix():
+    """On the Hub a repo name sits alone in search, with no directory around it."""
+    assert hf.repo_name_for("cpool-c191-b6") == "quantik-cpool-c191-b6"
+    assert hf.repo_name_for("mlp-h455-b4") == "quantik-mlp-h455-b4"
+
+
+def test_repo_name_is_not_prefixed_twice():
+    assert hf.repo_name_for("quantik-attn-d192-b6") == "quantik-attn-d192-b6"
+
+
+def test_repo_name_refuses_something_the_hub_would_not_take():
+    with pytest.raises(ValueError, match="not a usable"):
+        hf.repo_name_for("cpool c191")
+    with pytest.raises(ValueError, match="cannot derive"):
+        hf.repo_name_for("")
+
+
+def test_repo_id_defaults_to_the_project_namespace(monkeypatch):
+    """A repo id assembled by hand each time is how one model in a family
+    ends up under a different account than the rest — and a Hub repo cannot
+    be renamed without breaking every link that already points at it."""
+    monkeypatch.delenv("QUANTIK_HF_NAMESPACE", raising=False)
+    assert hf.repo_id_for("cpool-c191-b6") == f"{hf.DEFAULT_NAMESPACE}/quantik-cpool-c191-b6"
+
+
+def test_repo_id_honours_the_environment_then_the_argument(monkeypatch):
+    monkeypatch.setenv("QUANTIK_HF_NAMESPACE", "from-env")
+    assert hf.repo_id_for("mlp-h455-b4") == "from-env/quantik-mlp-h455-b4"
+    assert hf.repo_id_for("mlp-h455-b4", "explicit") == "explicit/quantik-mlp-h455-b4"
+
+
+def test_repo_id_refuses_a_namespace_containing_a_slash():
+    with pytest.raises(ValueError, match="must not contain a slash"):
+        hf.repo_id_for("cpool-c191-b6", "org/extra")
+
+
+def test_the_card_ships_a_real_repo_id_not_a_placeholder(monkeypatch):
+    """A card carrying `<your-org>` teaches the reader to edit the snippet
+    before running it, and most will not."""
+    monkeypatch.delenv("QUANTIK_HF_NAMESPACE", raising=False)
+    card = hf.model_card(MANIFEST)
+    assert "<your-org>" not in card
+    assert f"{hf.DEFAULT_NAMESPACE}/quantik-cpool-c191-b6" in card
+
+
+def test_stage_derives_the_repo_id_from_the_namespace(tmp_path, monkeypatch):
+    monkeypatch.delenv("QUANTIK_HF_NAMESPACE", raising=False)
+    checkpoint = write_checkpoint(tmp_path)
+    out = hf.stage(checkpoint, tmp_path / "hub", namespace="an-org")
+    assert "an-org/quantik-cpool-c191-b6" in (out / "README.md").read_text()
