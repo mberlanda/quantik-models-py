@@ -59,6 +59,12 @@ class Opponent:
     spec: dict[str, Any]
     model_id: str | None
     simulations: int | None
+    # Explicit fields rather than a `spec.get`, because these end up on a
+    # recorded game's row: a reader of `game_meta` should not have to know
+    # the shape of an `arena.registry` spec to find out what it was played
+    # against.
+    temperature: float = 0.0
+    temperature_plies: int | None = None
 
 
 CLASSICAL: tuple[Opponent, ...] = (
@@ -163,6 +169,8 @@ def neural_opponents(
                 },
                 model_id=model.model_id,
                 simulations=0,
+                temperature=temperature,
+                temperature_plies=temperature_plies,
             )
         )
         mcts_id = f"{model.model_id}@{_NET_MCTS_SIMULATIONS}"
@@ -182,6 +190,8 @@ def neural_opponents(
                 },
                 model_id=model.model_id,
                 simulations=_NET_MCTS_SIMULATIONS,
+                temperature=temperature,
+                temperature_plies=temperature_plies,
             )
         )
     return out
