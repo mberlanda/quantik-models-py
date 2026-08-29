@@ -1,0 +1,425 @@
+{
+ "note": "Real exact_oracle output, extracted from exact-sampled-v3.npz. Small enough to commit so the puzzle tests do not need the gitignored corpus.",
+ "positions": [
+  {
+   "qfen": "dC../dAB./..cb/.C..",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": "..../B.A./.bD./D.cb",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": "Dcb./.caD/C.ab/AA.C",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 12
+  },
+  {
+   "qfen": "...D/dca./.d../BBD.",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": "...d/.a../A..b/DC.C",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": "..a./D.c./AA../cB..",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": ".C.B/C.../.b.d/.Acd",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": "...D/.AC./dd.b/.ADb",
+   "value": 1.0,
+   "optimal_mask": "17596481011712",
+   "ply": 9
+  },
+  {
+   "qfen": "a..D/CdA./..../..dB",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": "..bA/b.D./D.C./c...",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": "CDA./.bAd/D.b./Ca.a",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 11
+  },
+  {
+   "qfen": "C.DB/.a.a/Dc../..Ac",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 9
+  },
+  {
+   "qfen": "..C./BAAd/.c../d.Ba",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 9
+  },
+  {
+   "qfen": "a.../B.d./D.ab/DC..",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": "..BC/bd.a/.dC./..D.",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": "BCA./..d./c.bb/D...",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": ".C../.A.c/c.../a.CB",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": "d.Bd/bA../..../...C",
+   "value": 1.0,
+   "optimal_mask": "0",
+   "ply": 6
+  },
+  {
+   "qfen": "C.D./.b../d..C/.b.A",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": ".A.c/b.b./.DCA/.cD.",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 9
+  },
+  {
+   "qfen": ".d.A/.BC./Bc../..ac",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": ".D../A.Cb/c.aD/.bCa",
+   "value": -1.0,
+   "optimal_mask": "65569",
+   "ply": 10
+  },
+  {
+   "qfen": "A.d./A..B/.D../..ad",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": "B..D/.dA./CaC./ad..",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 9
+  },
+  {
+   "qfen": "CAbb/ddC./..../..DA",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 9
+  },
+  {
+   "qfen": "AD../.c.B/D.c./..a.",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 7
+  },
+  {
+   "qfen": ".Cb./.D../..AD/.bc.",
+   "value": -1.0,
+   "optimal_mask": "1153081758426599577",
+   "ply": 7
+  },
+  {
+   "qfen": "...B/c..d/.DAB/bb..",
+   "value": -1.0,
+   "optimal_mask": "0",
+   "ply": 8
+  },
+  {
+   "qfen": "B.B./..D./a..b/.c..",
+   "value": 1.0,
+   "optimal_mask": "32768",
+   "ply": 6
+  },
+  {
+   "qfen": "B.../...D/..ac/.A..",
+   "value": 1.0,
+   "optimal_mask": "1152921504606846976",
+   "ply": 5
+  },
+  {
+   "qfen": "B.d./...C/.cd./A.A.",
+   "value": 1.0,
+   "optimal_mask": "4194304",
+   "ply": 7
+  },
+  {
+   "qfen": "BA../..Dc/..../..a.",
+   "value": 1.0,
+   "optimal_mask": "67108864",
+   "ply": 5
+  },
+  {
+   "qfen": "Cd../...d/...c/.BB.",
+   "value": 1.0,
+   "optimal_mask": "512",
+   "ply": 6
+  },
+  {
+   "qfen": "...d/.B.C/AAcd/BCaa",
+   "value": 1.0,
+   "optimal_mask": "262144",
+   "ply": 11
+  },
+  {
+   "qfen": "b..C/..C./.D../b..a",
+   "value": 1.0,
+   "optimal_mask": "4",
+   "ply": 6
+  },
+  {
+   "qfen": "D.aD/.ca./.A.B/B..c",
+   "value": 1.0,
+   "optimal_mask": "131072",
+   "ply": 9
+  },
+  {
+   "qfen": "b.../.Cd./A.../.BBd",
+   "value": 1.0,
+   "optimal_mask": "128",
+   "ply": 7
+  },
+  {
+   "qfen": "d.../a.C./bbA./.DC.",
+   "value": 1.0,
+   "optimal_mask": "576460752303423488",
+   "ply": 8
+  },
+  {
+   "qfen": "...B/.d../Bad./.C.C",
+   "value": 1.0,
+   "optimal_mask": "4096",
+   "ply": 7
+  },
+  {
+   "qfen": "..../d.C./.a.D/.Db.",
+   "value": 1.0,
+   "optimal_mask": "131072",
+   "ply": 6
+  },
+  {
+   "qfen": "A.c./..../.C.D/dd.B",
+   "value": 1.0,
+   "optimal_mask": "128",
+   "ply": 7
+  },
+  {
+   "qfen": ".b.D/Ca../A..D/..b.",
+   "value": 1.0,
+   "optimal_mask": "2199023255552",
+   "ply": 7
+  },
+  {
+   "qfen": "..Dc/.b../..CB/a...",
+   "value": 1.0,
+   "optimal_mask": "64",
+   "ply": 6
+  },
+  {
+   "qfen": ".b.a/d.../.D.C/..A.",
+   "value": 1.0,
+   "optimal_mask": "16777216",
+   "ply": 6
+  },
+  {
+   "qfen": "...b/AD.D/..Cb/d.a.",
+   "value": 1.0,
+   "optimal_mask": "536870912",
+   "ply": 8
+  },
+  {
+   "qfen": "AA.b/D.Db/.c../..Cd",
+   "value": 1.0,
+   "optimal_mask": "2305843009213693952",
+   "ply": 9
+  },
+  {
+   "qfen": "C.../...C/d..B/.cd.",
+   "value": 1.0,
+   "optimal_mask": "4",
+   "ply": 6
+  },
+  {
+   "qfen": "B.CB/...a/...d/.dC.",
+   "value": 1.0,
+   "optimal_mask": "64",
+   "ply": 7
+  },
+  {
+   "qfen": ".bbA/C.D./..../d..C",
+   "value": 1.0,
+   "optimal_mask": "32",
+   "ply": 7
+  },
+  {
+   "qfen": "..c./ad../D..D/.C..",
+   "value": 1.0,
+   "optimal_mask": "65536",
+   "ply": 6
+  },
+  {
+   "qfen": "..a./aC../..cB/CA..",
+   "value": 1.0,
+   "optimal_mask": "2251799813685248",
+   "ply": 7
+  },
+  {
+   "qfen": "b.../.Ac./.DA./..c.",
+   "value": 1.0,
+   "optimal_mask": "536870912",
+   "ply": 6
+  },
+  {
+   "qfen": ".Cd./a..C/.Bd./...A",
+   "value": 1.0,
+   "optimal_mask": "524288",
+   "ply": 7
+  },
+  {
+   "qfen": "...D/C..a/.A.c/.b..",
+   "value": 1.0,
+   "optimal_mask": "9223372036854775808",
+   "ply": 6
+  },
+  {
+   "qfen": "C.../.B.c/..D./.abD",
+   "value": 1.0,
+   "optimal_mask": "2199023255552",
+   "ply": 7
+  },
+  {
+   "qfen": "a.C./..db/.B.D/.Ba.",
+   "value": 1.0,
+   "optimal_mask": "17592186044416",
+   "ply": 8
+  },
+  {
+   "qfen": "...b/..c./B..D/.C..",
+   "value": 1.0,
+   "optimal_mask": "32768",
+   "ply": 5
+  },
+  {
+   "qfen": "C.d./a..b/.B.D/..bD",
+   "value": 1.0,
+   "optimal_mask": "8192",
+   "ply": 8
+  },
+  {
+   "qfen": "cAD./dc../BA.C/.Dbb",
+   "value": 1.0,
+   "optimal_mask": "128",
+   "ply": 11
+  },
+  {
+   "qfen": "ACC./..Db/.D.b/ca..",
+   "value": 1.0,
+   "optimal_mask": "32768",
+   "ply": 9
+  },
+  {
+   "qfen": ".C../b.cb/CD../..Da",
+   "value": 1.0,
+   "optimal_mask": "1",
+   "ply": 8
+  },
+  {
+   "qfen": "B..C/.DaD/d.dB/c.a.",
+   "value": 1.0,
+   "optimal_mask": "8589934592",
+   "ply": 10
+  },
+  {
+   "qfen": ".dBC/Ca../D.Db/..a.",
+   "value": 1.0,
+   "optimal_mask": "268435456",
+   "ply": 9
+  },
+  {
+   "qfen": "ddA./.ADD/B.c./Bc.a",
+   "value": 1.0,
+   "optimal_mask": "524288",
+   "ply": 11
+  },
+  {
+   "qfen": "bCb./..c./...d/AB.A",
+   "value": 1.0,
+   "optimal_mask": "9007199254740992",
+   "ply": 8
+  },
+  {
+   "qfen": "B..D/..CB/caa./.dC.",
+   "value": 1.0,
+   "optimal_mask": "4503599627370496",
+   "ply": 9
+  },
+  {
+   "qfen": ".cd./D..a/B.c./.B.D",
+   "value": 1.0,
+   "optimal_mask": "512",
+   "ply": 8
+  },
+  {
+   "qfen": "aba./.bcD/B.BA/.D..",
+   "value": 1.0,
+   "optimal_mask": "17592186044416",
+   "ply": 10
+  },
+  {
+   "qfen": "cD.a/Bc.B/.DA./.ad.",
+   "value": 1.0,
+   "optimal_mask": "140737488355328",
+   "ply": 10
+  },
+  {
+   "qfen": "d.Cd/AB../..Cb/.cbA",
+   "value": 1.0,
+   "optimal_mask": "144115188075855872",
+   "ply": 10
+  }
+ ]
+}
