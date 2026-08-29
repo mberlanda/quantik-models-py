@@ -225,9 +225,14 @@ Why it first appeared to fail:
     # check the assumptions before a long run (~1 min/arch)
     python -m quantik_models.train.preflight --preset medium --epochs 16
 
-    # train
+    # train to a fixed budget, as every published run did
     python -m quantik_models.train.supervised --arch cpool --preset medium \
-      --corpus runs/oracle/corpus/exact-sampled.npz --name my-run
+      --corpus runs/oracle/corpus/exact-sampled.npz --name my-run --epochs 16
+
+    # or train to convergence: --epochs becomes a cap, --patience the rule
+    python -m quantik_models.train.supervised --arch attn --preset medium \
+      --corpus runs/oracle/corpus/exact-sampled.npz --name my-run \
+      --epochs 60 --patience 5
 
     # regenerate every published number
     scripts/evaluate_lineup.sh runs/eval/today cpool=runs/train/my-run/best

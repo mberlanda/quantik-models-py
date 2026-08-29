@@ -227,9 +227,30 @@ for it**, exactly as 0.9851 was a floor for `cpool` at the wrong rate.
 
 The rule should be a budget defined by convergence — train until validation
 stops improving, with a generous cap — rather than by a fixed epoch count
-inherited from whichever architecture happened to be first. That is not
-done yet, and until it is, any architecture that converges slowly is
-understated here.
+inherited from whichever architecture happened to be first.
+
+**The mechanism now exists**: `--patience N` stops when the combined
+validation loss has not improved for N consecutive epochs, and `--epochs`
+becomes the cap. It defaults to off, so every run published above still
+reproduces exactly; **the numbers in this ADR are still fixed-budget
+numbers** and re-running the lineup under the new protocol is a separate
+piece of work.
+
+Two things about it are worth stating rather than discovering later.
+
+**A tie does not buy more epochs.** `best/` is only rewritten on a strict
+decrease, so an epoch that merely equals the best did not produce the
+weights on disk and must not extend the run either. The stopping rule uses
+the same comparison as the checkpoint rule; a looser one would keep a
+converged run alive on a checkpoint it never wrote.
+
+**An early-stopped run ends part-way down the cosine.** `T_max` has to be
+fixed before the first step, so it is the cap, and a run that stops at 22
+of 60 never reaches `min_lr`. That understates it slightly against a run
+that used its whole budget — an argument for a generous patience, not for
+rescaling a schedule to a length that is not known yet. It also means
+`--epochs 60 --patience 5` and `--epochs 22` are *different runs*, and the
+recorded `epoch_cap` is what distinguishes them.
 
 ## Outcome, 2026-08-28 (superseded — measured at the ResNet's learning rate)
 
