@@ -176,20 +176,105 @@ runs a batch of four against a graph traced with a batch of one, which is
 what caught it — a round-trip test at the traced batch size would have
 passed.
 
-## What would falsify the hypothesis
+> **Provenance.** Everything below was measured at `--lr 2e-3`, the
+> trainer's old global default — chosen for the ResNet, the only
+> architecture that existed when it was set. Until the learning-rate sweep
+> finishes these are comparisons at *the ResNet's* preferred setting. See
+> `attention-negative-result.md`.
 
-- **ConstraintPoolNet ties the MLP.** Then the group structure is not
-  buying anything the network could not infer from 144 flat features, and
-  the whole line of reasoning in this document is decoration.
-- **ConstraintPoolNet ties the ResNet.** Weaker evidence: it would mean the
-  convolutional trunk already approximates the group predicates well
-  enough at this corpus size, which is a statement about the corpus as much
-  as about the architectures.
-- **It wins on the IID holdout but not on the shallow probes.** The most
-  interesting failure. Plies 0-5 carry no training positions at all, so
-  that pattern would say the group wiring helps memorise the trained
-  distribution rather than generalise the rule — the opposite of what an
-  inductive bias is supposed to do.
+## What happened
+
+The three falsification conditions this section used to list in the future
+tense have all been tested.
+
+| | IID top-1 | shift 4-6 | shift 7-12 | arena @ply3 | arena @ply6 |
+|---|---|---|---|---|---|
+| `resnet-c128-b6` | 0.9701 | **0.9126** | 0.9720 | **53.7%** | 48.8% |
+| `mlp-h455-b4` | 0.9516 | 0.8843 | 0.9578 | 46.4% | 47.2% |
+| `cpool-c191-b6` | **0.9851** | 0.9092 | **0.9883** | 49.9% | **53.9%** |
+
+**It did not tie the MLP.** The gap is 3.4 points of IID top-1 and more
+than double on the value head, so the group structure is buying something
+144 flat features do not give.
+
+**It did not tie the ResNet either — it beat it, on the deep probes.**
+1.63 points on held-out positions at trained plies, with less than half the
+value error at ply 6 and deeper.
+
+**And the third condition happened**, which is the interesting one: it wins
+the IID holdout and the deep probes and **loses the shallow ones**. The
+explanation attached to that prediction — that the wiring helps memorise
+rather than generalise — turns out to be wrong. `cpool` generalises *better*
+to unseen positions; the deep probes are entirely held out and it wins them
+clearly. What it fails at is extrapolating to unseen **plies**. Those are
+different failures and only the second is happening.
+
+## Where the shallow deficit actually lives
+
+The original explanation for that deficit was that sparse groups carry no
+signal, and it named the check: the advantage should track group occupancy
+rather than ply.
+
+Group occupancy is how many of the twelve groups hold at least one piece.
+At a fixed ply it measures concentration inversely — every piece belongs to
+three groups, so `3 x ply` memberships spread across more groups leaves
+fewer pieces in each. Four pieces touching all twelve leaves one per group;
+four pieces touching five leaves nearly two and a half.
+
+Splitting each ply at its own median occupancy and comparing against the
+ResNet with an exact McNemar test — paired, because only the positions where
+the two disagree carry information:
+
+| ply | bucket | n | `resnet` | `cpool` | difference | p |
+|---|---|---|---|---|---|---|
+| 4 | occ<=9 | 687 | 0.8967 | 0.8908 | -0.0058 | 0.74 |
+| 4 | **occ>9** | 231 | 0.8268 | 0.7273 | **-0.0996** | **0.0006** |
+| 5 | occ<=10 | 690 | 0.9232 | 0.9275 | +0.0043 | 0.79 |
+| 5 | **occ>10** | 301 | 0.9037 | 0.8439 | **-0.0598** | **0.0064** |
+| 6 | occ<=11 | 728 | 0.9547 | 0.9698 | +0.0151 | 0.09 |
+| 6 | **occ>11** | 258 | 0.8953 | 0.9767 | **+0.0814** | **<0.0001** |
+| 7 | occ<=11 | 544 | 0.9669 | 0.9908 | **+0.0239** | **0.0023** |
+| 7 | occ>11 | 512 | 0.9414 | 0.9727 | **+0.0312** | **0.0052** |
+
+**Occupancy is a strong moderator**, much stronger than the per-ply numbers
+suggested. Within ply 4, `cpool` is statistically tied with the ResNet on
+low-occupancy positions and loses by ten points on high-occupancy ones. The
+ply-4 deficit is not spread across ply 4; it is concentrated in a quarter
+of it.
+
+**But the direction is not constant.** The prediction was that thin pooled
+summaries hurt `cpool` — the high-occupancy case at fixed ply — and that
+holds at plies 4 and 5. It *reverses* by ply 6, where `cpool`'s advantage is
+largest precisely on high-occupancy positions. No single "sparse groups
+carry no signal" story produces both signs, so the one-line explanation was
+too simple.
+
+**The useful part survives: the shallow weakness is not general.** `cpool`
+is not worse in the opening. It is worse in a specific, identifiable kind of
+opening position — four or five pieces scattered thin, roughly one to a
+group. Those are also the positions every model finds hardest, since the
+ResNet drops from 0.8967 to 0.8268 across the same split. `cpool` degrades
+faster there and is otherwise its equal.
+
+What explains the sign flip is not established. One untested possibility: at
+ply 6 a thinly populated group still holds 1.5 pieces on average against 1.0
+at ply 4, so there may be a threshold below which a pooled summary carries
+nothing. That is a story, not a finding, and it is recorded only to say what
+has not been ruled out.
+
+```bash
+python -m quantik_models.eval.shift --checkpoint runs/train/lineup-cpool/best
+# occupancy_split() in the same module produces the table above
+```
+
+## Under search, none of this survives
+
+At 128 MCTS simulations the `cpool`-versus-`resnet` difference disappears
+entirely — 51.8% from ply-6 starts, not significant, against a significant
+54.7% without search. The network still matters enormously (the same
+search with uniform priors loses 99.5% of games), but the *margin between
+these architectures* is below what search can resolve. See `autoplay.md`.
+
 
 ## Training it
 
