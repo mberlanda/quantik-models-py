@@ -184,6 +184,14 @@ def check_architecture(
     # learn at all. It says nothing about generalisation and is not meant to
     # — it catches a frozen trunk, a detached graph, or an learning rate
     # that is wrong by orders of magnitude.
+    #
+    # It deliberately stays weak. Strengthening it to "reduce the loss by
+    # at least X% over 120 steps" was tried after this check passed an
+    # architecture that then failed to train, and measured: mlp 69.9%,
+    # resnet 65.6%, attn 36.8%, cpool 26.4%. The best model in the lineup
+    # overfits a fixed batch least, so any threshold that flagged the
+    # failure would have blocked the winner first. See
+    # `docs/attention-negative-result.md`.
     checks.append(
         Check(
             f"{arch}: loss falls on a fixed batch",

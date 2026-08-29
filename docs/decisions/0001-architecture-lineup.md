@@ -246,6 +246,29 @@ trained distribution rather than generalise the rule" — is wrong as stated:
 probes are. What it does not do is extrapolate to **unseen plies**. Those
 are different failures and the record should not have conflated them.
 
+## The fourth architecture, and a limit of this methodology
+
+`attn-d192-b6` was added once the "if the first three land cleanly"
+trigger was met, and trained at the shared settings. It reached **0.5130**
+validation top-1 against the ResNet's 0.9701, with a loss curve flat from
+the first epoch — a model that did not learn the task, not a weaker one.
+
+The diagnostics rule out the usual suspects (gradients are marginally
+*larger* than `cpool`'s at every layer; no dead parameters; the export
+agrees with torch), and a learning rate seven times lower helps
+marginally. `attention-negative-result.md` has the detail.
+
+This exposes a real limit of the rule stated above. **"Same optimizer,
+same schedule, same budget" prevents one architecture being tuned harder
+than the others — and, when an architecture needs different
+hyperparameters to train at all, converts a question about architecture
+into a question about hyperparameters.** The rule is still right for the
+three that train; it simply cannot support a conclusion about the fourth.
+
+So `attn` is registered, documented, and **excluded from every comparison
+table** until it trains. Recording a 0.5130 beside the others would
+present a hyperparameter failure as an architectural finding.
+
 ## What would change this decision
 
 If the MLP matches the ResNet, the spatial prior is worth nothing here and

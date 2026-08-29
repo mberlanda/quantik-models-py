@@ -290,3 +290,13 @@ prior was doing real work.
 Pre-norm blocks specifically, because post-norm transformers need a warmup
 schedule and the trainer's cosine schedule is shared across the lineup. A
 model needing its own schedule would not be comparable to the others.
+
+> **This architecture does not currently train.** At the lineup's shared
+> settings it reaches 0.5130 validation top-1 against 0.9701 for the
+> ResNet, with a loss curve flat from the first epoch. Vanishing
+> gradients, dead parameters, the action-layout transpose and the ONNX
+> export have all been ruled out; a lower learning rate helps marginally
+> and nowhere near enough. See `attention-negative-result.md` for the
+> diagnostics and what to try next. **It is excluded from every comparison
+> table until it trains** — a number produced by a model that did not
+> train is worse than no number.
