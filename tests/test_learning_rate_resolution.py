@@ -91,3 +91,21 @@ def test_the_written_config_records_the_rate_actually_used(tmp_path) -> None:
     train(config, tmp_path / "out")
     written = json.loads((tmp_path / "out" / "lr-record" / "config.json").read_text())
     assert written["lr"] == registry.default_lr("attn")
+
+
+def test_the_preflight_uses_the_resolved_rate(tmp_path) -> None:
+    """The regression this fix introduced, caught by the suite.
+
+    `preflight` passed `config.lr` straight to AdamW. Once that field
+    became None-by-default, the preflight raised a TypeError — and had it
+    silently defaulted instead, it would have been checking a learning rate
+    the real run never uses, which is worse: the fixed-batch check is
+    precisely a check on the learning rate.
+    """
+    import inspect
+
+    from quantik_models.train import preflight
+
+    source = inspect.getsource(preflight.check_architecture)
+    assert "config.resolved_lr()" in source
+    assert "lr=config.lr" not in source

@@ -147,7 +147,12 @@ def check_architecture(
     params = parameter_count(model)
     checks.append(Check(f"{arch}: builds", True, f"{model.architecture}, {params:,} params"))
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.lr)
+    # `resolved_lr`, not `config.lr`: the latter is None unless explicitly
+    # set, because the rate now belongs to the architecture. Preflighting
+    # at a different rate than the run would use is worse than useless —
+    # the "loss falls on a fixed batch" check is precisely a check on the
+    # learning rate.
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.resolved_lr())
     batch = _sample_batch(corpus, rng, config.batch_size)
 
     # One backward pass before timing anything: lazy kernel compilation and
@@ -196,7 +201,8 @@ def check_architecture(
         Check(
             f"{arch}: loss falls on a fixed batch",
             losses[-1] < losses[0],
-            f"{losses[0]:.4f} -> {losses[-1]:.4f} over {_STEPS} steps",
+            f"{losses[0]:.4f} -> {losses[-1]:.4f} over {_STEPS} steps "
+            f"at lr {config.resolved_lr():g}",
         )
     )
 
