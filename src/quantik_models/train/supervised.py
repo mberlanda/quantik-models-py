@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import get_args, get_type_hints
@@ -43,21 +42,8 @@ from ..export.checkpoint import export_checkpoint
 from ..model import registry
 from ..model.policy_value_net import masked_log_softmax, parameter_count
 from . import freezing
+from .convergence import epochs_since_best
 from .alphazero import resolve_device
-
-
-def epochs_since_best(history: Sequence[float]) -> int:
-    """How many epochs have passed since the lowest value in `history`.
-
-    Ties count as "no improvement", matching the checkpoint rule one line
-    away: `best` is only rewritten on a strict decrease, so an epoch that
-    merely equals the best did not produce the weights on disk and should
-    not buy more epochs either.
-    """
-    if not history:
-        return 0
-    best = min(range(len(history)), key=history.__getitem__)
-    return len(history) - 1 - best
 
 
 @dataclass

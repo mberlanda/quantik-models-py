@@ -13,11 +13,7 @@ import json
 import numpy as np
 import pytest
 
-from quantik_models.train.supervised import (
-    SupervisedConfig,
-    build_parser,
-    epochs_since_best,
-)
+from quantik_models.train.convergence import epochs_since_best
 
 
 @pytest.mark.parametrize(
@@ -46,11 +42,17 @@ def test_a_tie_does_not_buy_more_epochs() -> None:
 
 
 def test_patience_defaults_to_off_so_published_runs_reproduce() -> None:
+    pytest.importorskip("torch")
+    from quantik_models.train.supervised import SupervisedConfig, build_parser
+
     assert SupervisedConfig().patience is None
     assert build_parser().parse_args([]).patience is None
 
 
 def test_patience_parses_as_an_int() -> None:
+    pytest.importorskip("torch")
+    from quantik_models.train.supervised import build_parser
+
     # The `--lr`-as-string bug in miniature: an optional field with no
     # runtime value to infer a type from.
     args = build_parser().parse_args(["--patience", "5", "--epochs", "60"])
@@ -87,7 +89,7 @@ def test_patience_zero_stops_after_the_first_epoch(tmp_path) -> None:
     """
     pytest.importorskip("torch")
     pytest.importorskip("safetensors")
-    from quantik_models.train.supervised import train
+    from quantik_models.train.supervised import SupervisedConfig, train
 
     corpus = _tiny_corpus(tmp_path / "corpus.npz")
     train(
@@ -118,7 +120,7 @@ def test_patience_zero_stops_after_the_first_epoch(tmp_path) -> None:
 def test_without_patience_the_run_uses_its_whole_budget(tmp_path) -> None:
     pytest.importorskip("torch")
     pytest.importorskip("safetensors")
-    from quantik_models.train.supervised import train
+    from quantik_models.train.supervised import SupervisedConfig, train
 
     corpus = _tiny_corpus(tmp_path / "corpus.npz")
     train(
