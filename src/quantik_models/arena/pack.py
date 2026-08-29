@@ -43,6 +43,7 @@ class RunSummary:
     seed: int
     games: int
     leaderboard: list[dict]
+    start_plies: int | None = None
 
     @property
     def by_agent(self) -> dict[str, dict]:
@@ -56,7 +57,22 @@ def read_run(run_dir: Path) -> RunSummary:
         seed=int(payload["seed"]),
         games=int(payload["games"]),
         leaderboard=payload["leaderboard"],
+        start_plies=_start_plies(payload, run_dir),
     )
+
+
+def _start_plies(payload: dict, run_dir: Path) -> int | None:
+    """The depth the run started from, or None.
+
+    Falls back to a `-p<N>` suffix on the directory name for runs written
+    before `autoplay` recorded the field. The fallback is brittle by nature,
+    so it is only a fallback: a run with neither is reported as unknown
+    rather than silently grouped with the ply-3 runs.
+    """
+    if "start_plies" in payload:
+        return int(payload["start_plies"])
+    _, _, tail = run_dir.name.rpartition("-p")
+    return int(tail) if tail.isdigit() else None
 
 
 def pooled(runs: list[RunSummary]) -> list[dict]:
@@ -88,16 +104,28 @@ def pooled(runs: list[RunSummary]) -> list[dict]:
 
 
 def seed_spread(runs: list[RunSummary]) -> dict[str, float]:
-    """Widest gap between any two runs' win rates, per agent.
+    """Widest gap between two runs' win rates *at the same start depth*.
 
     The number to read against the pooled interval: a spread much wider
     than the interval means the seeds disagree and the pooled figure is
     hiding it.
+
+    Grouping by start depth is not a refinement, it is the whole point. Two
+    runs at plies 3 and 6 are not replicates — the ranking genuinely moves
+    with depth — and comparing them here reports a real depth effect as
+    seed noise. A first version of this function did exactly that.
     """
+    by_depth: dict[int | None, list[RunSummary]] = defaultdict(list)
+    for run in runs:
+        by_depth[run.start_plies].append(run)
     spread: dict[str, float] = {}
     for agent in {row["agent"] for run in runs for row in run.leaderboard}:
-        rates = [run.by_agent[agent]["win_rate"] for run in runs if agent in run.by_agent]
-        spread[agent] = max(rates) - min(rates) if len(rates) > 1 else 0.0
+        widest = 0.0
+        for group in by_depth.values():
+            rates = [r.by_agent[agent]["win_rate"] for r in group if agent in r.by_agent]
+            if len(rates) > 1:
+                widest = max(widest, max(rates) - min(rates))
+        spread[agent] = widest
     return spread
 
 
@@ -194,17 +222,23 @@ def summarise(
             f"{spread.get(row['agent'], 0.0):.1%} |"
         )
     lines.append("")
+    lines.append(
+        "Widest seed gap is within one start depth: runs at different depths "
+        "are not replicates of each other."
+    )
+    lines.append("")
     lines.append("Per run:")
     lines.append("")
     header = sorted({row["agent"] for run in runs for row in run.leaderboard})
-    lines.append("| run | seed | " + " | ".join(f"`{a}`" for a in header) + " |")
-    lines.append("|---" * (len(header) + 2) + "|")
+    lines.append("| run | seed | start ply | " + " | ".join(f"`{a}`" for a in header) + " |")
+    lines.append("|---" * (len(header) + 3) + "|")
     for run in runs:
         cells = [
             f"{run.by_agent[a]['win_rate']:.1%}" if a in run.by_agent else "—"
             for a in header
         ]
-        lines.append(f"| {run.name} | {run.seed} | " + " | ".join(cells) + " |")
+        depth = "—" if run.start_plies is None else str(run.start_plies)
+        lines.append(f"| {run.name} | {run.seed} | {depth} | " + " | ".join(cells) + " |")
 
     if h2h and oracle:
         lines += [
@@ -250,7 +284,10 @@ def pack(run_dirs: list[Path], out: Path, oracle: str | None = None) -> dict:
 
     h2h = head_to_head(run_dirs, oracle)
     summary: dict[str, Any] = {
-        "runs": [{"name": r.name, "seed": r.seed, "games": r.games} for r in runs],
+        "runs": [
+            {"name": r.name, "seed": r.seed, "games": r.games, "start_plies": r.start_plies}
+            for r in runs
+        ],
         "oracle": oracle,
         "pooled": pooled_rows,
         "head_to_head": h2h,

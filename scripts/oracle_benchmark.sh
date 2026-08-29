@@ -30,7 +30,10 @@ DEPTH="${MINIMAX_DEPTH:-2}"
 # of these is a training seed (training used 20260827, 20260828, 20260901).
 SEEDS="${SEEDS:-20260902 20260903 20260904}"
 START_PLIES="${START_PLIES:-3}"
-EXTRA_PLY="${EXTRA_PLY:-6}"
+# `${EXTRA_PLY-6}`, not `:-`: passing EXTRA_PLY= is the documented way to
+# skip the second depth, and `:-` treats an explicit empty string as unset,
+# so the run happened anyway.
+EXTRA_PLY="${EXTRA_PLY-6}"
 
 mkdir -p "$OUT"
 AGENTS="$OUT/agents.json"

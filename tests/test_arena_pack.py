@@ -195,3 +195,56 @@ def test_pack_infers_the_oracle_from_the_game_counts(tmp_path):
     assert summary["oracle"] == "orc"
     assert {r["agent"] for r in summary["head_to_head"]} == {"cpool", "mlp"}
     assert "Head to head against `orc`" in (tmp_path / "packed" / "summary.md").read_text()
+
+
+def test_seed_spread_does_not_compare_across_start_depths(tmp_path):
+    """Two runs at plies 3 and 6 are not replicates of each other.
+
+    The ranking genuinely moves with start depth, so comparing them here
+    reports a real depth effect as seed noise. A first version of this
+    function did exactly that, and turned a 12.5-point depth difference into
+    a "widest seed gap".
+    """
+    runs = []
+    for name, seed, ply, rate in (
+        ("s1-p3", 1, 3, 0.50),
+        ("s2-p3", 2, 3, 0.52),
+        ("s1-p6", 1, 6, 0.625),
+    ):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "games.json").write_text(
+            json.dumps(
+                {
+                    "seed": seed,
+                    "start_plies": ply,
+                    "games": 100,
+                    "leaderboard": [{"agent": "orc", "wins": int(rate * 100), "games": 100, "win_rate": rate}],
+                    "results": [],
+                }
+            )
+        )
+        runs.append(pack.read_run(d))
+    # Within ply 3 the two seeds differ by 2 points; the ply-6 run differs by
+    # 12.5 and must not be counted.
+    assert pack.seed_spread(runs)["orc"] == pytest.approx(0.02)
+
+
+def test_read_run_falls_back_to_the_directory_name_for_older_runs(tmp_path):
+    """Runs written before autoplay recorded the field still group correctly."""
+    d = tmp_path / "s20260902-p6"
+    d.mkdir()
+    (d / "games.json").write_text(
+        json.dumps({"seed": 20260902, "games": 10, "leaderboard": [], "results": []})
+    )
+    assert pack.read_run(d).start_plies == 6
+
+
+def test_read_run_reports_an_unknown_depth_rather_than_guessing(tmp_path):
+    """A run with neither field nor suffix must not be grouped with ply 3."""
+    d = tmp_path / "some-arena-run"
+    d.mkdir()
+    (d / "games.json").write_text(
+        json.dumps({"seed": 1, "games": 10, "leaderboard": [], "results": []})
+    )
+    assert pack.read_run(d).start_plies is None

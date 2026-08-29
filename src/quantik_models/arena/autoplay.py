@@ -291,6 +291,11 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "seed": args.seed,
+                # Two arena runs at different start depths are not
+                # replicates of each other, and without this field nothing
+                # downstream can tell them apart — which is how a depth
+                # difference gets reported as seed variation.
+                "start_plies": args.start_plies,
                 "games": len(games),
                 "leaderboard": board,
                 "results": [
