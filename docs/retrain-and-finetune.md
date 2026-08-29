@@ -57,6 +57,22 @@ match. That is deliberate — a warm start that silently dropped
 mismatched tensors would train a model that is part new and part stale,
 and report nothing.
 
+**A warm start is where `--patience` earns its keep.** A run from scratch on
+a known corpus has a known length; a warm start on a grown corpus does not,
+and picking an epoch count for it is guessing. Give it a generous cap and
+let the validation loss decide:
+
+```bash
+  --epochs 60 --patience 5
+```
+
+Note that `--epochs` still sets the cosine schedule's `T_max`, so a run that
+stops at 22 of 60 ends part-way down the decay rather than at `min_lr`. That
+is an argument for a generous patience, and it means `--epochs 60 --patience
+5` and `--epochs 22` are different runs even when they stop at the same
+epoch. The written `training-report.json` records `epochs`, `epoch_cap`,
+`patience` and `stopped_early` so the two can be told apart afterwards.
+
 ## Fine-tune: hold most of it fixed
 
 ```bash
