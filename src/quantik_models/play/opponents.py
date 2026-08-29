@@ -83,7 +83,15 @@ CLASSICAL: tuple[Opponent, ...] = (
         opponent_id="beam-w32",
         label="Beam search (width 32)",
         kind="beam",
-        spec={"kind": "beam", "time_limit_s": 1.0, "beam_width": 32, "name": "beam-w32"},
+        # 0.25s, not the 1.0s the other clocked engines carry. Beam checks
+        # its budget between levels and cannot interrupt one, so a width-32
+        # level overruns: measured 3.75s for a declared 1.0s from an empty
+        # board, against 1.00s exactly for `mcts` at the same budget. The
+        # overshoot scales with width (w8 @1.0s -> 1.49s), so the fix is a
+        # budget whose level fits rather than a narrower beam. 0.25s lands at
+        # ~0.36s, next to minimax-d2's 0.42s, which keeps every opponent on
+        # this roster responsive enough to play against.
+        spec={"kind": "beam", "time_limit_s": 0.25, "beam_width": 32, "name": "beam-w32"},
         model_id=None,
         simulations=None,
     ),
