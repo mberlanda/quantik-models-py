@@ -26,7 +26,16 @@ from the run directories, never edited:
 ```bash
 pip install -e '.[viz]'
 python -m quantik_models.report.build_figures --runs runs --out docs/figures
+
+# the oracle figure needs its run directory named, since there is one per
+# benchmark rather than one canonical location
+python -m quantik_models.report.build_figures --runs runs --out docs/figures \
+  --oracle-dir runs/eval/oracle-2026-08-29
 ```
+
+Regenerating an unchanged figure produces byte-identical output — the SVG
+element ids are salted from a fixed string and the creation timestamp is
+suppressed — so a diff in `docs/figures/` means the data or the code moved.
 
 ## How training went
 
