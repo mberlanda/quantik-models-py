@@ -163,3 +163,108 @@ The Hub repos carry the v2 weights. Publishing a checkpoint that is better
 only from shallow starts, on the strength of one seed, with the ply-6
 orderings inside each other's intervals, is not a defensible thing to hand a
 downloader.
+
+## Resolution: the epoch budget was the flaw (2026-08-29)
+
+The test above was run. `cpool/medium` was retrained on both corpora at 40
+epochs with `--patience 5`, lr 6e-4, seed 20260828, everything else held —
+`patience-cpool-v2` and `patience-cpool-v3` — and all four checkpoints were
+put through `scripts/evaluate_lineup.sh` at seed 20260829, 300 games per
+ordered pairing.
+
+**The v3 advantage does not survive the longer budget.**
+
+### On held-out accuracy
+
+| run | epochs | best@ | top-1 | ply 4-6 | ply 7-12 | value MAE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `swept-cpool` | 16 | 11 | 0.9905 | 0.9797 | 0.9950 | 0.0376 |
+| `v3-cpool` | 16 | 12 | 0.9882 | **0.9947** | 0.9919 | 0.0429 |
+| `patience-cpool-v2` | 40 | 25 | 0.9916 | 0.9863 | 0.9951 | 0.0294 |
+| `patience-cpool-v3` | 40 | 31 | **0.9923** | 0.9865 | **0.9953** | **0.0225** |
+
+At sixteen epochs the corpora looked like a trade: v3 bought 1.5 points in
+the shallow band and paid 0.3 in the deep one. At forty the two land
+**0.0002 apart in both bands**. The shallow/deep trade attributed to the
+corpus was a fixed-budget artifact; the deep-band regression this document
+was written about is gone, and so is the shallow-band gain that motivated
+v3 in the first place.
+
+Both runs also beat their own sixteen-epoch versions, and both peaked well
+past sixteen — epoch 25 and epoch 31. Sixteen was short for `cpool` on
+either corpus.
+
+One difference survives: **value MAE**, 0.0225 against 0.0294, and the
+ordering is *reversed* from the sixteen-epoch runs, where v3 was worse.
+Whatever the v3 corpus does for the value head only becomes visible with
+enough training to reach it.
+
+These four numbers are not measured on common ground — the two corpora have
+different held-out splits — which is exactly why the question was settled in
+the arena instead.
+
+### In the arena
+
+Head-to-head, 600 games per pair (side-balanced), Wilson 95%:
+
+| question | ply 3 | ply 6 | ply 9 | MCTS ply 3 | MCTS ply 6 |
+| --- | --- | --- | --- | --- | --- |
+| v3 vs v2, **40 epochs** | 50.0% | 51.5% | 49.3% | 49.5% | 51.0% |
+| v3 vs v2, **16 epochs** | **56.8%** | **55.8%** | **45.8%** | **56.2%** | 48.7% |
+| 40 vs 16 epochs, v2 corpus | **57.3%** | 50.7% | 51.5% | 52.5% | **55.2%** |
+| 40 vs 16 epochs, v3 corpus | 47.7% | 48.2% | 51.8% | 50.7% | 49.7% |
+
+Bold marks an interval excluding 50%.
+
+Read the rows in order. **At equal epochs the corpora are indistinguishable
+in every one of the five conditions** — five intervals, all spanning 50%,
+the widest gap 1.5 points. **At sixteen epochs the v3 advantage is real and
+reproduces** the earlier finding exactly: significant at ply 3 and ply 6,
+reversed at ply 9. And **more epochs helps the v2 corpus but not the v3
+one** — two significant conditions against none.
+
+That last row is the one that explains the rest. If v3 carried information
+v2 lacked, more training on v2 would not close the gap. It closes it
+completely, and training v3 longer adds nothing, because v3's shape was
+already doing at sixteen epochs what extra epochs do for v2. **The v3
+corpus was compensating for undertraining, not adding information.**
+
+### The fourth time held-out accuracy failed to predict strength
+
+`patience-cpool-v3` has the best validation top-1 of the four, the best deep
+band, and a value MAE 23% better than its nearest rival. It does not win a
+single head-to-head. `v3-cpool` has the *worst* validation top-1 of the four
+and tops three of the five arena boards.
+
+This document was written because held-out accuracy missed a 10-point arena
+gap. The correction does not rescue the metric — it adds a case where the
+metric moved and strength did not. The ranking that matters is the arena's.
+
+### What this does not establish
+
+**Multiple comparisons.** Twenty intervals were computed and six exclude
+50%; roughly one is expected by chance at 95%. The individual rows are
+weaker than they look. The pattern across rows is what carries the argument,
+not any single cell.
+
+**The seat still dwarfs the model.** Mover win rates run 68–88% across these
+pairings and responder rates 15–39%. Two networks a point apart are being
+compared inside an effect forty times larger, which is why the balancing
+matters and why 600 games buys less resolution than it would in a game with
+a smaller first-move advantage.
+
+**One seed, still.** Every checkpoint here is seed 20260828. The protocol
+flaw this section fixes was the reason a second seed was deferred; that
+reason is now gone, and a second seed is the next thing this family needs.
+
+### Consequences
+
+- The deep-band regression needs no architectural fix. The loss-balance,
+  capacity and structure investigations queued above are unblocked from a
+  cause that no longer exists.
+- **Sixteen epochs is not a defensible budget for `cpool`.** Any published
+  lineup number measured at it is a fixed-budget number, and re-running the
+  lineup under `--patience` is now the prerequisite for restating any margin
+  in it — the same class of correction the learning-rate sweep forced.
+- Nothing about publishing changes. The Hub still carries v2 weights, and on
+  this evidence v3 has no claim to replace them.
