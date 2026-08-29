@@ -183,6 +183,60 @@ def head_to_head(run_dirs: list[Path], oracle: str) -> list[dict]:
     return sorted(out, key=lambda row: -row["win_rate"])
 
 
+def pairwise(run_dirs: list[Path], a: str, b: str) -> dict:
+    """`a`'s record against `b` alone, pooled across seats and split by them.
+
+    `head_to_head` answers "how does everyone do against this one oracle",
+    which is the right question when a fixed reference opponent exists. It
+    is the wrong one for comparing two candidates to each other: the
+    leaderboard mixes in every other agent on the card, so two networks
+    that never beat each other can still finish points apart because they
+    met a third one different numbers of times.
+
+    The seat split is not decoration. From a ply-3 start the mover wins
+    68-88% of these games whoever is moving, so a pooled rate compares two
+    networks inside an effect an order of magnitude larger than the
+    difference between them. A pairing is only balanced if both seat counts
+    are equal, and `balanced` says whether it was.
+    """
+    mover_wins = mover_games = responder_wins = responder_games = 0
+    for run_dir in run_dirs:
+        path = run_dir / "games.json"
+        if not path.exists():
+            continue
+        for game in json.loads(path.read_text())["results"]:
+            pair = {game["mover"], game["responder"]}
+            if pair != {a, b}:
+                continue
+            if game["mover"] == a:
+                mover_games += 1
+                mover_wins += game["winner"] == a
+            else:
+                responder_games += 1
+                responder_wins += game["winner"] == a
+
+    wins = mover_wins + responder_wins
+    games = mover_games + responder_games
+    low, high = wilson_ci(wins, games) if games else (0.0, 1.0)
+    return {
+        "agent": a,
+        "opponent": b,
+        "wins": wins,
+        "games": games,
+        "win_rate": wins / games if games else 0.0,
+        "ci_low": low,
+        "ci_high": high,
+        "as_mover": mover_wins / mover_games if mover_games else 0.0,
+        "as_responder": responder_wins / responder_games if responder_games else 0.0,
+        "balanced": mover_games == responder_games,
+        # The only claim the interval supports on its own: 50% is outside
+        # it. With twenty such intervals in a lineup, roughly one is
+        # expected to exclude 50% by chance, so a single true here is
+        # weaker evidence than it looks.
+        "separated": games > 0 and not (low <= 0.5 <= high),
+    }
+
+
 def merge_qfens(run_dirs: list[Path], corpus: Path | None = None) -> list[str]:
     """Every run's `to-solve.qfen`, deduplicated up to symmetry.
 

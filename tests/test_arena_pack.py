@@ -285,3 +285,58 @@ def test_pack_records_what_it_filtered_against(tmp_path):
         tmp_path / "runs", "s1-p3", 1, [{"agent": "x", "wins": 1, "games": 2, "win_rate": 0.5}]
     )
     assert pack.pack([d], tmp_path / "out")["filtered_against"] is None
+
+
+def test_pairwise_ignores_every_game_the_two_agents_were_not_both_in(tmp_path):
+    """The reason this exists beside `head_to_head`: a leaderboard mixes in
+    the whole card, so two agents that never beat each other can still
+    finish points apart on games against a third."""
+    results = (
+        [{"mover": "a", "responder": "b", "winner": "a", "plies": 5, "actions": []}] * 3
+        + [{"mover": "b", "responder": "a", "winner": "a", "plies": 5, "actions": []}] * 1
+        + [{"mover": "a", "responder": "c", "winner": "a", "plies": 5, "actions": []}] * 50
+        + [{"mover": "c", "responder": "b", "winner": "c", "plies": 5, "actions": []}] * 50
+    )
+    d = games_json(tmp_path, "s1", 1, results, [{"agent": "a", "wins": 54, "games": 104, "win_rate": 0.52}])
+    row = pack.pairwise([d], "a", "b")
+    assert row["games"] == 4
+    assert row["wins"] == 4
+    assert row["as_mover"] == 1.0
+    assert row["as_responder"] == 1.0
+
+
+def test_pairwise_splits_the_seats_and_flags_an_unbalanced_pairing(tmp_path):
+    """From a shallow start the mover wins most games whoever is moving, so
+    a pairing with unequal seat counts reports a number that is partly the
+    first-move advantage. It has to say so."""
+    results = (
+        [{"mover": "a", "responder": "b", "winner": "a", "plies": 5, "actions": []}] * 8
+        + [{"mover": "b", "responder": "a", "winner": "b", "plies": 5, "actions": []}] * 2
+    )
+    d = games_json(tmp_path, "s1", 1, results, [{"agent": "a", "wins": 8, "games": 10, "win_rate": 0.8}])
+    row = pack.pairwise([d], "a", "b")
+    assert row["as_mover"] == 1.0
+    assert row["as_responder"] == 0.0
+    assert row["win_rate"] == 0.8
+    assert row["balanced"] is False
+
+
+def test_pairwise_separates_only_when_the_interval_excludes_even(tmp_path):
+    even = [
+        {"mover": "a", "responder": "b", "winner": "a", "plies": 5, "actions": []},
+        {"mover": "b", "responder": "a", "winner": "b", "plies": 5, "actions": []},
+    ] * 100
+    d = games_json(tmp_path, "even", 1, even, [{"agent": "a", "wins": 100, "games": 200, "win_rate": 0.5}])
+    assert pack.pairwise([d], "a", "b")["separated"] is False
+
+    lopsided = [{"mover": "a", "responder": "b", "winner": "a", "plies": 5, "actions": []}] * 200
+    d2 = games_json(tmp_path, "lopsided", 2, lopsided, [{"agent": "a", "wins": 200, "games": 200, "win_rate": 1.0}])
+    assert pack.pairwise([d2], "a", "b")["separated"] is True
+
+
+def test_pairwise_on_a_pairing_that_never_happened_is_empty_not_an_error(tmp_path):
+    results = [{"mover": "a", "responder": "b", "winner": "a", "plies": 5, "actions": []}]
+    d = games_json(tmp_path, "s1", 1, results, [{"agent": "a", "wins": 1, "games": 1, "win_rate": 1.0}])
+    row = pack.pairwise([d], "a", "z")
+    assert row["games"] == 0
+    assert row["separated"] is False
