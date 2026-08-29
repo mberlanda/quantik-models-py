@@ -54,7 +54,11 @@ class SupervisedConfig:
     blocks: int | None = None
     epochs: int = 30
     batch_size: int = 1024
-    lr: float = 2e-3
+    # None means "ask the architecture". A shared default is not neutral —
+    # 2e-3 was chosen for the ResNet, and every architecture added later
+    # inherited it silently. The attention encoder does not train at 2e-3
+    # at all. See `registry.ArchitectureEntry.default_lr`.
+    lr: float | None = None
     min_lr: float = 1e-5
     weight_decay: float = 1e-4
     value_loss_weight: float = 1.0
@@ -72,6 +76,10 @@ class SupervisedConfig:
     # meaningful with `init_from`: freezing randomly initialised weights
     # trains a model around noise it can never correct.
     freeze: str | None = None
+
+    def resolved_lr(self) -> float:
+        """The learning rate this run will actually use."""
+        return self.lr if self.lr is not None else registry.default_lr(self.arch)
 
     def build_model(self):
         """Resolve `arch` + `preset` + overrides into a model.
@@ -142,7 +150,10 @@ def _forward_losses(model, boards, policy, policy_weight, value, device, value_l
 def train(config: SupervisedConfig, out_root: Path) -> Path:
     run_dir = out_root / config.name
     run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "config.json").write_text(json.dumps(asdict(config), indent=2))
+    # Record the resolved learning rate, not `null`: a config that says
+    # "None" does not reproduce the run it describes.
+    recorded = asdict(config) | {"lr": config.resolved_lr()}
+    (run_dir / "config.json").write_text(json.dumps(recorded, indent=2))
     metrics_path = run_dir / "metrics.jsonl"
 
     device = resolve_device(config.device)
@@ -180,8 +191,9 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     # Only the trainable parameters go to the optimizer. AdamW would
     # otherwise carry moment buffers for tensors that never receive a
     # gradient, which costs memory and makes the state dict misleading.
+    lr = config.resolved_lr()
     optimizer = torch.optim.AdamW(
-        freezing.trainable_parameters(model), lr=config.lr, weight_decay=config.weight_decay
+        freezing.trainable_parameters(model), lr=lr, weight_decay=config.weight_decay
     )
     sampling = (
         ply_sampling_weights(corpus["plies"][train_idx]) if config.balance_plies else None
@@ -190,9 +202,10 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=config.epochs * steps_per_epoch, eta_min=config.min_lr
     )
+    source = "explicit" if config.lr is not None else f"{config.arch} default"
     print(
         f"{config.name}: {parameter_count(model):,} params on {device}, "
-        f"{config.epochs} epochs x {steps_per_epoch} steps",
+        f"{config.epochs} epochs x {steps_per_epoch} steps, lr {lr:g} ({source})",
         flush=True,
     )
 

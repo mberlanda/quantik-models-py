@@ -86,6 +86,34 @@ nothing of the exporter.
 and `--blocks` override the preset for ablations. An architecture that has
 no notion of `channels` simply ignores it, so one CLI drives all of them.
 
+**The learning rate belongs to the architecture, not to the trainer.**
+`--lr` defaults to the value the registry records for the chosen
+architecture, and the run prints which it used:
+
+```
+lineup-cpool: 1,780,253 params on mps, 16 epochs x 2863 steps, lr 0.002 (cpool default)
+```
+
+| architecture | default lr |
+|---|---|
+| `resnet` | 2e-3 |
+| `mlp` | 2e-3 |
+| `cpool` | 2e-3 |
+| `attn` | **3e-4** |
+
+This is not a convenience. The trainer's old global default was 2e-3,
+chosen for the ResNet because it was the only architecture at the time,
+and every architecture added afterwards inherited it by omission. The
+attention encoder does not train at 2e-3 at all and was nearly recorded as
+a failed architecture because of it — see `attention-negative-result.md`.
+A shared default is not neutral; it privileges whichever architecture it
+was chosen for. Making it per-architecture forces a new one to state its
+own.
+
+The recorded values for `resnet`, `mlp` and `cpool` are **provisional**:
+they are what those models were trained at and are known to work, not the
+outcome of a sweep. The sweep is workstream 11's next item.
+
 ```bash
 .venv/bin/python -m quantik_models.train.supervised \
   --arch resnet --preset small --channels 128 --blocks 6 \
