@@ -214,3 +214,21 @@ def test_the_figures_read_a_real_trainer_run(tmp_path):
 
     written = build_figures.build(tmp_path / "runs", tmp_path / "figures", eval_dir="none")
     assert [p.name for p in written] == ["training-curves.svg"]
+
+
+def test_oracle_benchmark_draws_a_tick_per_run_and_omits_the_oracle(tmp_path):
+    pooled = [
+        {"agent": "minimax-d2", "win_rate": 0.58, "ci_low": 0.57, "ci_high": 0.59},
+        {"agent": "cpool", "win_rate": 0.46, "ci_low": 0.44, "ci_high": 0.48},
+        {"agent": "mlp", "win_rate": 0.38, "ci_low": 0.36, "ci_high": 0.40},
+    ]
+    per_run = {
+        "s1-p3": {"cpool": 0.45, "mlp": 0.37},
+        "s2-p3": {"cpool": 0.47, "mlp": 0.39},
+    }
+    out = fg.oracle_benchmark(pooled, per_run, tmp_path / "oracle.svg", oracle="minimax-d2")
+    body = out.read_text()
+    # The oracle is the axis, not a bar on it: its own win rate is just
+    # one minus the field's and would double the figure's height for nothing.
+    assert "cpool" in body and "mlp" in body
+    assert ">minimax-d2<" not in body

@@ -332,3 +332,55 @@ def arena_by_depth(boards: dict[int, list[dict]], out: Path, title: str) -> Path
     ax.set_title(title, color=INK, loc="left", fontsize=11)
     ax.legend(frameon=False, fontsize=8)
     return _save(fig, out)
+
+
+def oracle_benchmark(
+    pooled: list[dict], per_run: dict[str, dict[str, float]], out: Path, oracle: str
+) -> Path:
+    """Win rate against a fixed oracle: pooled bar, one dot per run.
+
+    The dots are the figure's reason to exist. A pooled bar alone cannot be
+    told apart from a bar that happens to average three disagreeing seeds,
+    and the fixed opponent was chosen precisely so that disagreement between
+    seeds would be visible rather than absorbed.
+    """
+    fig, ax = _new_axes(6.6, 4.2)
+    rows = [row for row in pooled if row["agent"] != oracle]
+    rows.sort(key=lambda row: row["win_rate"])
+    ys = range(len(rows))
+    ax.barh(
+        list(ys),
+        [row["win_rate"] for row in rows],
+        color=[colour_for(row["agent"]) for row in rows],
+        alpha=0.35,
+        height=0.6,
+    )
+    ax.errorbar(
+        [row["win_rate"] for row in rows],
+        list(ys),
+        xerr=[
+            [row["win_rate"] - row["ci_low"] for row in rows],
+            [row["ci_high"] - row["win_rate"] for row in rows],
+        ],
+        fmt="none",
+        ecolor=INK,
+        elinewidth=1.0,
+        capsize=3,
+    )
+    for y, row in zip(ys, rows):
+        for run_name, per_agent in sorted(per_run.items()):
+            if row["agent"] in per_agent:
+                ax.plot(
+                    per_agent[row["agent"]],
+                    y,
+                    marker="|",
+                    markersize=11,
+                    color=colour_for(row["agent"]),
+                )
+    ax.axvline(0.5, color=INK, linewidth=0.9, alpha=0.5)
+    ax.set_yticks(list(ys))
+    ax.set_yticklabels([row["agent"] for row in rows])
+    ax.set_xlabel(f"win rate against `{oracle}`", color=INK)
+    ax.set_title(f"Against a fixed opponent: {oracle}", color=INK, loc="left", fontsize=11)
+    ax.grid(True, axis="y", alpha=0.0)
+    return _save(fig, out)
