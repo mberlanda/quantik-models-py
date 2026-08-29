@@ -189,6 +189,33 @@ def run(
     return games
 
 
+def distinct_games(games: list[Game]) -> dict[tuple[str, str], dict[str, int]]:
+    """Per ordered pairing, how many of the games played were different.
+
+    A win rate over N games, and the interval `arena.pack` puts around it,
+    both assume N independent games. Two things here break that assumption
+    quietly. Every network agent is a deterministic function of the
+    position unless given a temperature, so a pairing replays one game per
+    distinct start position; and `run` samples those start positions with
+    replacement, so a pairing gets fewer of them than it asked for.
+
+    Measured on the published lineup: at `--start-plies 6` a 300-game
+    pairing held 263-272 distinct games, and at `--start-plies 0` it held
+    exactly one. Neither is visible in a leaderboard, which is the reason
+    this count is reported beside it.
+    """
+    tally: dict[tuple[str, str], list] = {}
+    for game in games:
+        key = (game.mover, game.responder)
+        entry = tally.setdefault(key, [0, set()])
+        entry[0] += 1
+        entry[1].add(tuple(game.actions))
+    return {
+        key: {"games": count, "distinct": len(seen)}
+        for key, (count, seen) in tally.items()
+    }
+
+
 def leaderboard(games: list[Game]) -> list[dict]:
     tally: dict[str, list[int]] = {}
     for game in games:
@@ -271,6 +298,25 @@ def main(argv: list[str] | None = None) -> int:
     for row in board:
         print(f"  {row['agent']:<24} {row['win_rate']:.1%}  ({row['wins']}/{row['games']})")
 
+    # Printed next to the leaderboard because it is the denominator the
+    # leaderboard's rates are really over. Deterministic agents replay one
+    # game per start position, so a pairing can spend `--games N` and hold
+    # far fewer than N independent results.
+    distinct = distinct_games(games)
+    worst = min(distinct.values(), key=lambda c: c["distinct"] / max(1, c["games"]))
+    ratio = worst["distinct"] / max(1, worst["games"])
+    print(f"\ndistinct games: worst pairing {worst['distinct']}/{worst['games']}")
+    if ratio < 0.5:
+        print(
+            "  WARNING: this run's win rates rest on far fewer independent\n"
+            "  games than it played, and any interval computed from the game\n"
+            "  count is too narrow. Every network agent is deterministic at\n"
+            "  the default temperature, so a pairing replays one game per\n"
+            "  distinct start position. Raise --start-plies, or give the\n"
+            "  agents an opening temperature (`temperature` in the spec).",
+            flush=True,
+        )
+
     visited = positions_from(games)
     shallow = positions_from(games, max_ply=args.max_solve_ply)
     print(f"\npositions visited: {len(visited):,} distinct "
@@ -297,6 +343,14 @@ def main(argv: list[str] | None = None) -> int:
                 # difference gets reported as seed variation.
                 "start_plies": args.start_plies,
                 "games": len(games),
+                # Keyed by "mover vs responder" because JSON has no tuple
+                # keys, and kept per pairing rather than pooled: a lineup
+                # where one pairing collapsed and the rest did not is a
+                # different problem from one where all of them did.
+                "distinct_games": {
+                    f"{mover} vs {responder}": counts
+                    for (mover, responder), counts in distinct.items()
+                },
                 "leaderboard": board,
                 "results": [
                     {
