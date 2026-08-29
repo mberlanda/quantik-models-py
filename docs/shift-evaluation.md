@@ -17,6 +17,14 @@ of its accuracy survives leaving the distribution.
   --out runs/eval/shift-lineup.json
 ```
 
+> **Provenance.** Every number here was measured at `--lr 2e-3`, which was
+> the trainer's global default and was chosen for the ResNet — the only
+> architecture that existed when it was set. The attention encoder does not
+> train at that rate at all, which is how the problem surfaced. Until the
+> learning-rate sweep finishes, these are comparisons **at the ResNet's
+> preferred setting** and the margins may need restating. See
+> `attention-negative-result.md`.
+
 ## The probe
 
 `runs/oracle/probe-large.jsonl` — 7,800 exactly-solved positions spanning

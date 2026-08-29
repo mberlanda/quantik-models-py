@@ -192,7 +192,9 @@ See `retrain-and-finetune.md`.
 
 ## How it actually performs
 
-Three measurements, and they disagree until you condition on depth:
+Three measurements, and they disagree until you condition on depth. All
+were taken at `--lr 2e-3` — a rate chosen for *this* architecture, which is
+worth knowing before comparing them to anything else:
 
 | | value |
 |---|---|

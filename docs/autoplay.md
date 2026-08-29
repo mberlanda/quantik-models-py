@@ -1,5 +1,13 @@
 # Autoplay: what it is for, and what the games said
 
+> **Provenance.** Every number here was measured at `--lr 2e-3`, which was
+> the trainer's global default and was chosen for the ResNet — the only
+> architecture that existed when it was set. The attention encoder does not
+> train at that rate at all, which is how the problem surfaced. Until the
+> learning-rate sweep finishes, these are comparisons **at the ResNet's
+> preferred setting** and the margins may need restating. See
+> `attention-negative-result.md`.
+
 ## It generates positions, not labels
 
 Autoplay is usually described as a way to make training data out of game
