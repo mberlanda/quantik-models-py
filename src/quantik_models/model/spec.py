@@ -22,7 +22,9 @@ SHAPE_COUNT = 4
 ACTION_COUNT = SHAPE_COUNT * CELL_COUNT  # 64
 
 # Eight bitboard planes (two players x four shapes) plus one constant plane
-# carrying the side to move, matching `quantik_core.ml_data.qfen_to_tensor`.
+# carrying the side to move, matching `fastboard.encode_tensors`. The order
+# is mover-relative (side-to-move's shapes in 0-3, opponent's in 4-7), not
+# the colour-ordered layout `quantik_core.ml_data.qfen_to_tensor` produces.
 INPUT_PLANES = 9
 INPUT_FEATURES = INPUT_PLANES * CELL_COUNT  # 144
 
