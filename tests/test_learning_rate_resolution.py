@@ -109,3 +109,34 @@ def test_the_preflight_uses_the_resolved_rate(tmp_path) -> None:
     source = inspect.getsource(preflight.check_architecture)
     assert "config.resolved_lr()" in source
     assert "lr=config.lr" not in source
+
+
+def test_optional_cli_flags_parse_to_their_annotated_type() -> None:
+    """The bug that broke a running sweep.
+
+    The CLI is generated from the dataclass, and optional fields have no
+    runtime value to infer a type from. That inference was a hardcoded name
+    list — `{"channels", "blocks"}` to int, everything else to str — so
+    when `lr` became optional it started arriving as the string `"2e-3"`.
+    Nothing failed until AdamW compared a float to a str, twelve runs into
+    a sweep.
+
+    Reading the annotation instead means a new optional field cannot
+    silently land in the wrong type.
+    """
+    from quantik_models.train.supervised import build_parser
+
+    args = build_parser().parse_args(
+        ["--lr", "2e-3", "--channels", "64", "--blocks", "4", "--freeze", "stem"]
+    )
+    assert isinstance(args.lr, float) and args.lr == 2e-3
+    assert isinstance(args.channels, int) and args.channels == 64
+    assert isinstance(args.blocks, int) and args.blocks == 4
+    assert isinstance(args.freeze, str)
+
+
+def test_omitted_optional_flags_stay_none() -> None:
+    from quantik_models.train.supervised import build_parser
+
+    args = build_parser().parse_args([])
+    assert args.lr is None and args.channels is None and args.freeze is None

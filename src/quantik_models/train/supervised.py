@@ -24,6 +24,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import get_args, get_type_hints
 
 import numpy as np
 import torch
@@ -324,7 +325,19 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
     return run_dir / "best"
 
 
-def main(argv=None) -> int:
+# Resolved once: `from __future__ import annotations` makes every
+# annotation a string, so the optional-field types below need the real
+# objects rather than the source text.
+_HINTS = get_type_hints(SupervisedConfig)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI, derived from `SupervisedConfig`.
+
+    Separate from `main` so the flag types can be tested without running a
+    training loop — which is how the `--lr`-as-string bug got past every
+    test the first time.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("runs/train"))
     defaults = asdict(SupervisedConfig())
@@ -334,14 +347,25 @@ def main(argv=None) -> int:
             parser.add_argument(flag, action="store_true", default=value)
             parser.add_argument("--no-" + field_name.replace("_", "-"), dest=field_name, action="store_false")
         elif value is None:
-            # Optional fields have no default to infer a type from; the two
-            # numeric ones must not arrive as strings.
-            optional_type = int if field_name in {"channels", "blocks"} else str
-            parser.add_argument(flag, type=optional_type, default=None)
+            # Optional fields have no runtime value to infer a type from, so
+            # read it off the annotation. This was a hardcoded name list
+            # ({"channels", "blocks"} -> int, everything else -> str) until
+            # `lr` became optional, was not on the list, and started arriving
+            # as the string "2e-3" — which AdamW rejects with a TypeError
+            # about comparing float and str, twelve runs into a sweep.
+            annotation = _HINTS[field_name]
+            inner = [a for a in get_args(annotation) if a is not type(None)]
+            parser.add_argument(flag, type=inner[0] if inner else str, default=None)
         else:
             parser.add_argument(flag, type=type(value), default=value)
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
-    config = SupervisedConfig(**{k: v for k, v in vars(args).items() if k in defaults})
+    fields = asdict(SupervisedConfig())
+    config = SupervisedConfig(**{k: v for k, v in vars(args).items() if k in fields})
     path = train(config, args.out)
     print(f"best checkpoint: {path}")
     return 0
