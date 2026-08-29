@@ -78,6 +78,46 @@ of which 5,226 were both shallow and novel. The cost is that plies 0-2 are
 never visited; a run from the empty board is still the right way to see
 what the engines actually open with.
 
+## What the first full cycle produced
+
+Run on 2026-08-29: 2,400 games from ply-3 starts, 5,226 novel shallow
+positions, solved exactly in **6h50m** on twelve threads, then merged.
+
+The solve turned 5,226 solved parents into **118,053 labelled rows** —
+roughly twenty-two free child labels each, which is what makes the cost
+worth paying.
+
+| ply | corpus before | corpus after | |
+|---|---|---|---|
+| 3 | 0 | **664** | new |
+| 4 | 0 | **9,664** | new |
+| 5 | 0 | **22,655** | new |
+| 6 | 40,000 | **86,631** | 2.2x |
+
+3,087,356 -> 3,196,958 rows; 250,000 -> 255,058 policy-labelled. This is
+the direct answer to `shift-evaluation.md`: plies 0-5 held *zero* training
+positions, which is why every architecture was weakest there and why the
+arena ranking flips with start depth. There is now exact, solver-labelled
+data in that region, reached by the engines' own play rather than by
+sampling the canonical space.
+
+### The held-out guard earned its place immediately
+
+The merge **dropped 1,554 probe positions**. They arrived as *children* of
+solved positions — never sampled, never chosen, labelled for free as a side
+effect of solving their parents. That is exactly the mechanism
+`data/merge_corpus.py` documents, and the reason exclusion is applied to
+the merged result rather than only to the new rows.
+
+Without it the probe would have been contaminated and every number in
+`shift-evaluation.md` would have quietly become part recall. Verified
+after the fact: the v2 corpus shares **zero** canonical keys with the
+probe, and all 3,196,958 rows are distinct canonical positions.
+
+Note this is a *different* experiment from the architecture comparison.
+Retraining on v2 measures a better corpus, not a better architecture, and
+conflating the two would make both unreadable.
+
 ## The arena result
 
 2,400 games, every ordered pairing, `--start-plies 3`, seed 20260829.

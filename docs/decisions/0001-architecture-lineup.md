@@ -167,7 +167,59 @@ The lineup is worthless if the models are not comparable, so:
   useless for its first five moves, and only the second evaluation would say
   so.
 
-## Outcome, 2026-08-28
+## Outcome at swept learning rates, 2026-08-30
+
+**This supersedes the section below.** Everything under "Outcome,
+2026-08-28" was measured at `2e-3`, a rate chosen for the ResNet, and two
+of the four architectures were being trained at the wrong one. See
+`learning-rate-sweep.md`.
+
+| model | lr | val top-1 | policy loss | value MAE | value sign |
+|---|---|---|---|---|---|
+| `cpool-c191-b6` | 6e-4 | **0.9893** | **1.1920** | **0.0315** | **0.9884** |
+| `attn-d192-b6` | 6e-4 | 0.9879 | 1.2102 | 0.0378 | 0.9863 |
+| `resnet-c128-b6` | 2e-3 | 0.9701 | 1.3090 | 0.0710 | 0.9748 |
+| `mlp-h455-b4` | 2e-3 | 0.9516 | 1.3945 | 0.1116 | 0.9603 |
+
+### The question this lineup was built to answer
+
+`attn` exists as **the weaker form of the constraint hypothesis** — the
+same bet as `cpool` with no prior, told nothing about rows, columns or
+zones and left to discover them. The ADR named the two outcomes: if `attn`
+matches `cpool`, the explicit wiring was unnecessary; if it loses, the
+prior was doing real work.
+
+**On policy accuracy it is a tie.** The 0.0014 gap is about **1.4 standard
+errors** on the ~12,500 policy-labelled validation rows, which is not a
+difference. Two things push further in `attn`'s favour: it had **not
+converged** — gaining +0.0010 over its final three epochs while `cpool` sat
+flat at -0.0009 — and it took 97 minutes to `cpool`'s 58 for the same
+epoch budget.
+
+**On the value head `cpool` holds a real edge**: 0.0315 MAE against 0.0378,
+a 17% reduction, with both still improving.
+
+So the defensible reading is narrow: **explicit constraint wiring buys
+little or nothing over plain attention on policy accuracy, and something
+real on value estimation.** The prior is not worthless and it is not
+decisive.
+
+### A second flaw in this ADR's methodology
+
+The learning-rate failure has a sibling that this outcome exposes. **A
+shared epoch budget is not equal treatment either**, for the same reason a
+shared learning rate was not: sixteen epochs was chosen when the ResNet was
+the only architecture, and architectures converge at different rates.
+`attn` was still climbing when the budget ran out, so **0.9879 is a floor
+for it**, exactly as 0.9851 was a floor for `cpool` at the wrong rate.
+
+The rule should be a budget defined by convergence — train until validation
+stops improving, with a generous cap — rather than by a fixed epoch count
+inherited from whichever architecture happened to be first. That is not
+done yet, and until it is, any architecture that converges slowly is
+understated here.
+
+## Outcome, 2026-08-28 (superseded — measured at the ResNet's learning rate)
 
 All three trained at `medium` for 16 epochs on `exact-sampled.npz`. Both
 evaluations ran; `shift-evaluation.md` has the detail.
