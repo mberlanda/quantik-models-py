@@ -108,7 +108,11 @@ CREATE TABLE IF NOT EXISTS game_meta (
     game_id                   TEXT    PRIMARY KEY
         REFERENCES games (game_id) ON DELETE CASCADE,
     recorded_at                TEXT    NOT NULL,
-    human_seat                 INTEGER NOT NULL CHECK (human_seat IN (0, 1)),
+    -- Nullable, because the approved plan records *every* game, and a
+    -- model-vs-model one has no human in it. NOT NULL here would have
+    -- silently narrowed the store to human games only, and the shape of
+    -- that failure is an IntegrityError at the end of somebody's game.
+    human_seat                 INTEGER CHECK (human_seat IS NULL OR human_seat IN (0, 1)),
     player_name                TEXT,
     opponent_seat               INTEGER,
     opponent_id                  TEXT,

@@ -203,3 +203,32 @@ def test_a_failed_insert_leaves_no_partial_rows_in_any_table() -> None:
     assert store.game_count(conn) == 0
     assert conn.execute("SELECT COUNT(*) FROM game_meta").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM game_positions").fetchone()[0] == 0
+
+
+def test_a_game_with_no_human_in_it_records(tmp_path: Path) -> None:
+    """The plan records every game, model-vs-model included. A NOT NULL
+    `human_seat` would have narrowed the store to human games only, and the
+    shape of that failure is an IntegrityError at the end of somebody's
+    game rather than an error in the schema."""
+    conn = store.connect(tmp_path / "games.db")
+    assert store.record_game(
+        conn,
+        make_game(game_id="mm-1"),
+        make_meta(game_id="mm-1", human_seat=None, player_name=None),
+        make_positions("mm-1"),
+    ) is True
+    assert store.game_count(conn) == 1
+
+
+def test_a_nonsense_human_seat_is_still_refused(tmp_path: Path) -> None:
+    """Nullable is not unchecked: 0 and 1 remain the only real seats."""
+    import sqlite3
+
+    conn = store.connect(tmp_path / "games.db")
+    with pytest.raises(sqlite3.IntegrityError):
+        store.record_game(
+            conn,
+            make_game(game_id="bad-seat"),
+            make_meta(game_id="bad-seat", human_seat=7),
+            make_positions("bad-seat"),
+        )
