@@ -53,9 +53,13 @@ class ArchitectureEntry:
     # trainer's default was 2e-3, chosen for the ResNet because it was the
     # only architecture at the time; every architecture added afterwards
     # silently inherited it. The attention encoder does not train at 2e-3
-    # at all — flat at 0.5130 for sixteen epochs — and trains at 3e-4. It
-    # was nearly recorded as a failed architecture on the strength of a
-    # hyperparameter belonging to a different one.
+    # at all — flat at 0.5130 for sixteen epochs. It was nearly recorded as
+    # a failed architecture on the strength of a hyperparameter belonging
+    # to a different one.
+    #
+    # Every value here is now swept rather than guessed; see
+    # `docs/learning-rate-sweep.md` for the grid and its limits. Two of the
+    # four architectures turned out to be trained at the wrong rate.
     #
     # A shared default is not neutral: it privileges whichever architecture
     # it was chosen for. Making it per-architecture means a new
@@ -86,7 +90,9 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         presets=constraint_pool_net.PRESETS,
         summary="Message passing over Quantik's twelve constraint groups; "
         "the game's rule structure written into the wiring.",
-        default_lr=2e-3,
+        # Swept: 0.9781 at 6e-4 against 0.9622 at 2e-3 and 0.9666 at 2e-4
+        # over three epochs. A clean peak, not a monotone trend.
+        default_lr=6e-4,
     ),
     "attn": ArchitectureEntry(
         build=attention_net.AttentionNet,
@@ -94,8 +100,14 @@ _REGISTRY: dict[str, ArchitectureEntry] = {
         presets=attention_net.PRESETS,
         summary="Transformer encoder over the sixteen cells; the weaker "
         "form of the constraint hypothesis, with no prior.",
-        # 2e-3 does not train this architecture at all; 3e-4 does.
-        default_lr=3e-4,
+        # Swept: 0.7938 at 6e-4, against 0.5096 at 2e-3 (flat — does not
+        # learn at all), 0.7271 at 3e-4 and 0.5431 at 2e-4. The window is
+        # narrow in both directions; too low is nearly as bad as too high.
+        #
+        # This field was previously 3e-4, set from a single probe. That was
+        # the same "chosen once, then trusted" reasoning that made 2e-3 the
+        # global default in the first place, and it was also wrong.
+        default_lr=6e-4,
     ),
 }
 
