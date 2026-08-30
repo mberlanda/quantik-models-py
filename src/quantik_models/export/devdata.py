@@ -34,11 +34,43 @@ from typing import Any
 
 from .digest import file_digest
 
-DEFAULT_REPO = "quantik-dev-data"
+# Two dataset repositories, split by **churn**, not by subject.
+#
+# The Hub is git+LFS: every re-push of a file adds a permanent LFS object, and
+# the only way to reclaim that space is `super_squash_history`, which is
+# destructive and irreversible. Checkpoints and arena output are rewritten
+# every training generation; corpora, enumerations and solver output are
+# written once and then only appended to. Keeping them in one repository means
+# the churny half inflates the history of the irreplaceable half, and squashing
+# to reclaim it puts the irreplaceable half at risk in the same operation.
+#
+# Split, `quantik-dev-runs` can be squashed freely and `quantik-dev-data` never
+# has to be. The split is also the public/private line: the data repo is the
+# half that would have community value if it were ever opened up.
+DATA_REPO = "quantik-dev-data"
+RUNS_REPO = "quantik-dev-runs"
+DEFAULT_REPO = DATA_REPO
 # Weights, arrays and solver output all need LFS. A file committed as a plain
 # blob cannot be fixed by a later commit — the same trap `stage_hub_repos.sh`
 # documents for model repos.
 LFS_PATTERNS = ("*.npz", "*.npy", "*.jsonl", "*.safetensors", "*.onnx", "*.gz")
+
+
+_REPO_BLURB = {
+    DATA_REPO: (
+        "The inputs: exact solver output, the corpora packed from it, the board "
+        "enumerations, the held-out probe and the opening book. Written once and "
+        "appended to — never rewritten — which is why they live apart from the "
+        "training outputs in `quantik-dev-runs`."
+    ),
+    RUNS_REPO: (
+        "The outputs: every trained checkpoint with its resume state, the sweeps, "
+        "the autoplay games and the arena results behind every published number. "
+        "Rewritten every training generation, so this repository's history may be "
+        "squashed to reclaim space. The irreplaceable inputs are in "
+        "`quantik-dev-data` and are never part of that operation."
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -53,6 +85,7 @@ class Artefact:
     reproduce: str
     expand: str
     caveats: tuple[str, ...] = field(default_factory=tuple)
+    repo: str = DATA_REPO
 
 
 CATALOGUE: tuple[Artefact, ...] = (
@@ -87,7 +120,7 @@ CATALOGUE: tuple[Artefact, ...] = (
     ),
     Artefact(
         name="enumerations",
-        sources=("runs/canonical/level*.npy", "runs/canonical/counts.json"),
+        sources=("runs/canonical/level*.npy", "runs/canonical/counts.json", "runs/canonical/*.log"),
         summary=(
             "Every canonical live position at plies 1-8, deduplicated up to the 192 "
             "board symmetries. Unlabelled — this is the search, not the solve."
@@ -107,7 +140,13 @@ CATALOGUE: tuple[Artefact, ...] = (
     ),
     Artefact(
         name="probe",
-        sources=("runs/oracle/probe-large.jsonl", "runs/oracle/probe-qfens.txt"),
+        sources=(
+            "runs/oracle/probe-large.jsonl",
+            "runs/oracle/probe-qfens.txt",
+            # The earlier, smaller probe. Superseded, kept because a number
+            # published against it cannot be re-derived without it.
+            "runs/oracle/probe.jsonl",
+        ),
         summary=(
             "**HELD OUT.** 7,800 exactly-solved positions at plies 4-12 sharing no "
             "canonical key with any corpus. Every shift-evaluation number in the "
@@ -148,7 +187,18 @@ CATALOGUE: tuple[Artefact, ...] = (
     ),
     Artefact(
         name="checkpoints",
-        sources=("runs/train/*/best", "runs/train/*/config.json", "runs/train/*/metrics.jsonl", "runs/train/*/provenance.json"),
+        repo=RUNS_REPO,
+        sources=(
+            "runs/train/*/best",
+            "runs/train/*/final",
+            "runs/train/*/config.json",
+            "runs/train/*/metrics.jsonl",
+            "runs/train/*/provenance.json",
+            # The resume state. Without these an interrupted run restarts from
+            # epoch zero, which is the whole reason this repository exists.
+            "runs/train/*/latest.pt",
+            "runs/train/*/state.json",
+        ),
         summary=(
             "Trained checkpoints with their resolved config, per-epoch metrics and "
             "provenance. Includes the runs that are **not** published as model "
@@ -177,7 +227,20 @@ CATALOGUE: tuple[Artefact, ...] = (
     ),
     Artefact(
         name="evaluations",
-        sources=("runs/eval/*", "runs/arena/*"),
+        repo=RUNS_REPO,
+        sources=(
+            "runs/eval/*",
+            "runs/arena/*",
+            # Probe scorecards and build logs. Small, and the only written record
+            # of several one-off comparisons that were never re-run.
+            "runs/oracle/*.json",
+            "runs/oracle/*.log",
+            "runs/*.log",
+            "runs/coverage.json",
+            "runs/coverage.md",
+            "runs/oracle/timing/*",
+            "runs/oracle/*.err",
+        ),
         summary="Arena games and shift-evaluation output — the numbers behind every claim.",
         produced_by="`scripts/evaluate_lineup.sh`, `scripts/evaluate_opening_arena.sh`, `eval.shift`",
         cost="hours of CPU per arena",
@@ -195,7 +258,81 @@ CATALOGUE: tuple[Artefact, ...] = (
             "`evaluate_opening_arena.sh`.",
         ),
     ),
+    Artefact(
+        name="solver-output",
+        sources=(
+            "runs/oracle/corpus/ply*.jsonl",
+            "runs/oracle/corpus/ply*.qfen",
+            "runs/oracle/probe-large/*",
+            "runs/oracle/ply*.npy",
+        ),
+        summary=(
+            "The exact oracle's raw per-ply output, before it is packed into a "
+            "corpus. This is the most expensive artefact in the project."
+        ),
+        produced_by="the exact oracle in `quantik-core-rust`, driven by `scripts/build_oracle_corpus.py`",
+        cost="days of CPU — this is the number that makes losing `runs/` expensive",
+        reproduce=(
+            "Re-solve the ply range with the exact oracle. Nothing about it is "
+            "stochastic, so a re-run reproduces it bit-for-bit — it just takes days."
+        ),
+        expand=(
+            "Solve a deeper ply and add the file; the packer takes whatever plies "
+            "are present. Plies 0-2 are absent from every corpus, which is the "
+            "mechanical reason every checkpoint is uniform on the empty board."
+        ),
+        caveats=(
+            "The packed `corpora/*.npz` carry the labels training actually reads. "
+            "These files are the source form, kept because a repack can change what "
+            "is retained and the solve cannot be cheaply redone.",
+        ),
+    ),
+    Artefact(
+        name="sweeps",
+        repo=RUNS_REPO,
+        sources=("runs/lrsweep/*", "runs/sweep/*"),
+        summary=(
+            "Learning-rate and hyperparameter sweeps — the runs behind the chosen "
+            "settings rather than the settings themselves."
+        ),
+        produced_by="`scripts/run_patience_lineup.sh` and the lr sweep drivers",
+        cost="hours per architecture",
+        reproduce="Re-run the sweep driver; the grid is recorded in each run's `config.json`.",
+        expand=(
+            "The largest unmeasured axis is not in this grid: every run here is "
+            "training seed 20260828, so no sweep margin has a seed error bar under it."
+        ),
+        caveats=(
+            "This is the one group that is genuinely cheap to redo relative to its "
+            "size. If disk ever matters, drop this before anything else.",
+        ),
+    ),
+    Artefact(
+        name="autoplay",
+        repo=RUNS_REPO,
+        sources=("runs/autoplay/*",),
+        summary="Self-play games and the positions they nominated for solving.",
+        produced_by="`quantik_models.selfplay.autoplay`",
+        cost="hours, and cheap to regenerate at a new seed",
+        reproduce="Re-run autoplay with the recorded seed and checkpoint.",
+        expand=(
+            "Autoplay only nominates positions; the labels come from the exact "
+            "solver. Game outcomes are never used as labels — see "
+            "`docs/labeling-strategy.md`."
+        ),
+    ),
 )
+
+def first_sentence(text: str) -> str:
+    """The summary's first sentence, without splitting inside a bold marker.
+
+    `**HELD OUT.** 7,800 positions...` splits on the period *inside* the
+    emphasis if you split on ".", which leaves an unterminated `**` and drops
+    the sentence that mattered — on the row where it mattered most.
+    """
+    masked = text.replace("**", "\x00")
+    head = masked.partition(". ")[0]
+    return head.replace("\x00", "**").rstrip(".") + "."
 
 
 def gitattributes(patterns: tuple[str, ...] = LFS_PATTERNS) -> str:
@@ -285,25 +422,42 @@ def stage(
     out_dir: Path,
     *,
     only: tuple[str, ...] | None = None,
+    repo: str | None = None,
+    prune: bool = False,
     catalogue: tuple[Artefact, ...] = CATALOGUE,
 ) -> Path:
-    """Write a Hub-ready dataset directory. Copies, never moves, never uploads."""
+    """Write a Hub-ready dataset directory. Copies, never moves, never uploads.
+
+    `out_dir` may be a clone of the dataset repository — nothing here removes
+    files it did not write, so a `.git` directory survives a re-stage. That is
+    also the trap `prune` exists for: a renamed source leaves its old copy
+    behind, and a stale file in a backup is worse than a missing one because it
+    still hashes fine.
+    """
     selected = [a for a in catalogue if not only or a.name in only]
     unknown = set(only or ()) - {a.name for a in catalogue}
     if unknown:
         raise ValueError(f"unknown artefact(s): {', '.join(sorted(unknown))}")
+    if repo is not None:
+        known = {a.repo for a in catalogue}
+        if repo not in known:
+            raise ValueError(f"unknown repo {repo!r}; want one of {', '.join(sorted(known))}")
+        selected = [a for a in selected if a.repo == repo]
     out_dir.mkdir(parents=True, exist_ok=True)
+    if prune:
+        for artefact in selected:
+            shutil.rmtree(out_dir / artefact.name, ignore_errors=True)
     groups = [stage_artefact(artefact, root, out_dir) for artefact in selected]
     (out_dir / ".gitattributes").write_text(gitattributes(), encoding="utf-8")
     (out_dir / "MANIFEST.json").write_text(
         json.dumps({"schema": "dev-data-manifest.v1", "artefacts": groups}, indent=2) + "\n",
         encoding="utf-8",
     )
-    (out_dir / "README.md").write_text(dataset_card(groups), encoding="utf-8")
+    (out_dir / "README.md").write_text(dataset_card(groups, repo or DATA_REPO), encoding="utf-8")
     return out_dir
 
 
-def dataset_card(groups: list[dict[str, Any]]) -> str:
+def dataset_card(groups: list[dict[str, Any]], repo: str = DATA_REPO) -> str:
     total = sum(group["size_bytes"] for group in groups) / 1e6
     lines = [
         "---",
@@ -314,11 +468,9 @@ def dataset_card(groups: list[dict[str, Any]]) -> str:
         "- reinforcement-learning",
         "---",
         "",
-        "# Quantik development data",
+        f"# Quantik development data — `{repo}`",
         "",
-        "The artefacts that `runs/` holds and git does not: solved corpora, board "
-        "enumerations, the held-out probe, the exact opening book, every trained "
-        "checkpoint, and the arena output behind every published number.",
+        _REPO_BLURB[repo],
         "",
         "**Why this exists.** `runs/` is gitignored and lives on one machine. Losing "
         "it means recomputing days of solver time and hours of training. The published "
@@ -335,7 +487,7 @@ def dataset_card(groups: list[dict[str, Any]]) -> str:
     for group in groups:
         lines.append(
             f"| [`{group['name']}`]({group['name']}/) | {group['file_count']} | "
-            f"{group['size_bytes'] / 1e6:.0f} | {group['summary'].split('.')[0]}. |"
+            f"{group['size_bytes'] / 1e6:.0f} | {first_sentence(group['summary'])} |"
         )
     lines += [
         "",
@@ -377,19 +529,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("out", type=Path, help="directory to stage into")
     parser.add_argument("--root", type=Path, default=Path("."), help="repository root")
     parser.add_argument(
+        "--repo",
+        default=DATA_REPO,
+        choices=sorted({a.repo for a in CATALOGUE}),
+        help="which dataset repository to stage for (default: %(default)s)",
+    )
+    parser.add_argument(
         "--only",
         action="append",
         default=None,
         help=f"stage one group; repeatable. One of: {', '.join(a.name for a in CATALOGUE)}",
     )
+    parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="delete each staged group directory first, so a renamed source does not "
+        "leave a stale copy behind. Never touches .git.",
+    )
     args = parser.parse_args(argv)
-    out = stage(args.root, args.out, only=tuple(args.only) if args.only else None)
+    out = stage(
+        args.root,
+        args.out,
+        only=tuple(args.only) if args.only else None,
+        repo=args.repo,
+        prune=args.prune,
+    )
     manifest = json.loads((out / "MANIFEST.json").read_text())
     for group in manifest["artefacts"]:
         print(f"{group['name']:>14}  {group['file_count']:>5} files  {group['size_bytes'] / 1e6:>8.1f} MB")
-    print(f"\nstaged {out}")
+    print(f"\nstaged {out} for {args.repo}")
     print("\nNothing was uploaded. To publish:")
-    print(f"  huggingface-cli upload-large-folder --repo-type dataset <namespace>/{DEFAULT_REPO} {out}")
+    print(f"  hf upload-large-folder --repo-type dataset <namespace>/{args.repo} {out}")
     return 0
 
 
