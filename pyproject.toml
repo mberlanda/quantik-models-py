@@ -16,6 +16,16 @@ license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
   "numpy>=2.0,<3",
+  # The classical engines (`arena.agents`: minimax, MCTS, beam) and the
+  # play service's legality check import this at module scope, so it was
+  # already load-bearing everywhere the play service runs — just never
+  # declared. Local dev never noticed because every checked-out venv here
+  # has a sibling `../quantik-core-py` installed editable; a clean install
+  # (Docker, most of all — see docker/Dockerfile) had nothing to fall back
+  # to and failed on the first classical move with `ModuleNotFoundError`.
+  # 1.2.0 matches the contract version this repo already targets
+  # (`export.checkpoint._supported_contract_version`).
+  "quantik-core>=1.2",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +47,14 @@ onnx = [
   "onnxscript>=0.1",
   # The exporter is only trustworthy if something executes the graph it
   # produced: onnxruntime backs the torch-vs-ONNX agreement test.
+  "onnxruntime>=1.18",
+]
+serve = [
+  # Just the runtime, not the exporter: `onnx` and `onnxscript` above exist
+  # to *produce* model.onnx and are not needed to run one. This is the
+  # extra the public deployment image installs — see docs/play-service.md
+  # "Reaching it off your LAN" and WORKSTREAMS.md workstream 13. Measured
+  # 2026-08-30: onnxruntime installs at 80 MB against torch's 529 MB.
   "onnxruntime>=1.18",
 ]
 viz = [

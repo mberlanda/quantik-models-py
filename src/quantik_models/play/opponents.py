@@ -141,6 +141,7 @@ def neural_opponents(
     *,
     temperature: float = DEFAULT_OPENING_TEMPERATURE,
     temperature_plies: int = DEFAULT_OPENING_PLIES,
+    runtime: str = "torch",
 ) -> list[Opponent]:
     """Two opponents per `ready` model: the bare policy head, and a search.
 
@@ -163,6 +164,7 @@ def neural_opponents(
                     "kind": "net-policy",
                     "checkpoint": checkpoint,
                     "device": "cpu",
+                    "runtime": runtime,
                     "name": policy_id,
                     "temperature": temperature,
                     "temperature_plies": temperature_plies,
@@ -183,6 +185,7 @@ def neural_opponents(
                     "kind": "net-mcts",
                     "checkpoint": checkpoint,
                     "device": "cpu",
+                    "runtime": runtime,
                     "name": mcts_id,
                     "temperature": temperature,
                     "temperature_plies": temperature_plies,
@@ -202,8 +205,12 @@ def roster(
     *,
     temperature: float = DEFAULT_OPENING_TEMPERATURE,
     temperature_plies: int = DEFAULT_OPENING_PLIES,
+    runtime: str = "torch",
 ) -> list[Opponent]:
     """The classical table followed by every ready model's two opponents."""
     return list(CLASSICAL) + neural_opponents(
-        models, temperature=temperature, temperature_plies=temperature_plies
+        models,
+        temperature=temperature,
+        temperature_plies=temperature_plies,
+        runtime=runtime,
     )

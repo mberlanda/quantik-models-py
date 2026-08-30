@@ -34,6 +34,7 @@ from ..export.digest import file_digest
 
 _MANIFEST_NAME = "manifest.json"
 _WEIGHTS_NAME = "weights.safetensors"
+_ONNX_NAME = "model.onnx"
 _SCHEMA = "model-checkpoint.v1"
 
 
@@ -69,7 +70,7 @@ def _refused(
     )
 
 
-def _scan_one(model_dir: Path) -> PlayModel:
+def _scan_one(model_dir: Path, *, runtime: str = "torch") -> PlayModel:
     model_id = model_dir.name
     manifest_path = model_dir / _MANIFEST_NAME
     if not manifest_path.is_file():
@@ -86,17 +87,23 @@ def _scan_one(model_dir: Path) -> PlayModel:
             model_id, model_dir, f"manifest schema is {schema!r}, expected {_SCHEMA!r}", manifest
         )
 
-    weights_path = model_dir / _WEIGHTS_NAME
-    if not weights_path.is_file():
-        return _refused(model_id, model_dir, "weights.safetensors missing", manifest)
+    # The two runtimes are served from different files, so each checks only
+    # the one it will actually load. An onnx-only image (no torch, no
+    # weights.safetensors on disk — see the Docker image) must not refuse
+    # every model for lacking a file it will never read.
+    artefact_name = _WEIGHTS_NAME if runtime == "torch" else _ONNX_NAME
+    hash_field = "weights_hash" if runtime == "torch" else "onnx_hash"
+    artefact_path = model_dir / artefact_name
+    if not artefact_path.is_file():
+        return _refused(model_id, model_dir, f"{artefact_name} missing", manifest)
 
-    actual_hash = file_digest(weights_path)
-    expected_hash = manifest.get("weights_hash")
+    actual_hash = file_digest(artefact_path)
+    expected_hash = manifest.get(hash_field)
     if actual_hash != expected_hash:
         return _refused(
             model_id,
             model_dir,
-            f"weights hash {actual_hash} does not match manifest {expected_hash!r}",
+            f"{artefact_name} hash {actual_hash} does not match manifest {expected_hash!r}",
             manifest,
             weights_hash=actual_hash,
         )
@@ -130,18 +137,26 @@ def _scan_one(model_dir: Path) -> PlayModel:
     )
 
 
-def scan_models(models_dir: Path) -> list[PlayModel]:
+def scan_models(models_dir: Path, *, runtime: str = "torch") -> list[PlayModel]:
     """One `PlayModel` per subdirectory of `models_dir`, sorted by id.
 
     `Path.iterdir` followed by `Path.is_dir` already resolves through a
     symlinked entry the same way it resolves a real directory, so a
     directory of symlinks to `runs/train/<name>/best` needs no special
     handling here.
+
+    `runtime` selects which artefact and hash field are checked —
+    `weights.safetensors`/`weights_hash` for `"torch"`,
+    `model.onnx`/`onnx_hash` for `"onnx"` — so a storeless, torch-free image
+    that ships only `model.onnx` is not refused for lacking a file it will
+    never load.
     """
+    if runtime not in {"torch", "onnx"}:
+        raise ValueError(f"unknown runtime {runtime!r}; want 'torch' or 'onnx'")
     if not models_dir.is_dir():
         return []
     return sorted(
-        (_scan_one(child) for child in models_dir.iterdir() if child.is_dir()),
+        (_scan_one(child, runtime=runtime) for child in models_dir.iterdir() if child.is_dir()),
         key=lambda model: model.model_id,
     )
 

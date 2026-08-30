@@ -64,6 +64,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="plies the opening temperature applies to; past it the networks "
         f"play their best move (default: {op.DEFAULT_OPENING_PLIES})",
     )
+    parser.add_argument(
+        "--runtime",
+        choices=["torch", "onnx"],
+        default="torch",
+        help="'torch' loads weights.safetensors (default); 'onnx' loads "
+        "model.onnx through onnxruntime and needs no torch install — the "
+        "public deployment image uses this",
+    )
     return parser
 
 
@@ -74,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         args.models,
         opening_temperature=args.opening_temperature,
         opening_plies=args.opening_plies,
+        runtime=args.runtime,
     )
     models = service.list_models()
     ready = [m for m in models if m["status"] == "ready"]
@@ -85,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     static_dir = args.static if args.static.is_dir() else None
 
     print(f"quantik play service {SERVICE_VERSION}")
+    print(f"  runtime    {args.runtime}")
     print(f"  models     {args.models}  ({len(ready)} ready of {len(models)} found)")
     for model in models:
         # A refused model is printed with its reason rather than omitted.
