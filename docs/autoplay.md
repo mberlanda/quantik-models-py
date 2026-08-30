@@ -75,6 +75,41 @@ corpus. And **one row per canonical position**, with policy-labelled rows
 winning the tie-break over value-only ones, so a position solved in one
 file and derived as a child in another is not counted twice.
 
+### Human games feed the same queue
+
+Autoplay explores where the *engines* go. The play service
+(`play/server.py`) records games humans actually play, and every recorded
+game already has its positions in `game_positions` — but nothing consumed
+them until `play/export.py`, so positions people actually reach never
+joined the corpus. It closes that loop by producing the same artifact:
+
+```bash
+python -m quantik_models.play.export \
+  --db ~/.local/share/quantik/games.db \
+  --corpus runs/oracle/corpus/exact-sampled-v3.npz \
+  --out runs/play/packed \
+  --max-ply 6
+```
+
+Same rule as above, stricter: **human game outcomes are never labels, only
+positions travel.** A human game's `winner` says which of two fallible
+players won, not the value of a position, so the exporter never reads
+`games.winner` — it reads `distinct_positions` and nothing else. The one
+trap is that `game_positions.canonical_key` is stored as a decimal string
+(`play/record.py:_canonical_key`) while `ExactCorpus` gives a `uint64`
+array; comparing them without converting finds no overlap and silently
+queues positions the corpus already has. `play/export.py`'s module
+docstring is where that conversion happens, once.
+
+Run against the live store (20 games, 161 positions, 101 distinct keys at
+the time of writing): 66 positions at ply ≤ 6, 40 already in
+`exact-sampled-v3.npz`, 26 written to the queue. Fed straight into
+`exact_oracle` and `merge_corpus.py` with no format change — solving a
+ply-≤6 position is far more expensive than the deeper ones autoplay
+usually queues (see "Plies 0–3 are unevaluated" in `WORKSTREAMS.md`), so
+this queue is small and the run that actually clears it is separate,
+future work.
+
 ### Deterministic agents need randomised starts
 
 `net-policy` takes the argmax with no temperature, so two games between the
