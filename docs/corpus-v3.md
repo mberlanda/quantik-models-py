@@ -159,12 +159,23 @@ thing to spend compute on. The fixed epoch budget is the same class of flaw.
 
 ## Nothing from v3 is published
 
-The Hub repos carry the v2 weights. Publishing a checkpoint that is better
+The Hub repos carry the **v1** weights — `swept-cpool` trains on
+`exact-sampled.npz` (`runs/train/swept-cpool/config.json`), not on
+`exact-sampled-v2.npz`. This sentence said "v2" until 2026-08-30; see the
+correction at the end of this document, where the same mislabel does real
+damage. Publishing a checkpoint that is better
 only from shallow starts, on the strength of one seed, with the ply-6
 orderings inside each other's intervals, is not a defensible thing to hand a
 downloader.
 
 ## Resolution: the epoch budget was the flaw (2026-08-29)
+
+> **This section's conclusion is wrong. Corrected 2026-08-30 — see
+> [Correction](#correction-the-shallow-data-is-real-2026-08-30) at the end of this
+> document.** The measurements below all reproduce; the causal reading of them does
+> not, because the runs labelled "v2" in the sixteen-epoch rows are **v1** runs. The
+> sentence "the v3 corpus was compensating for undertraining, not adding information"
+> should not be cited.
 
 The test above was run. `cpool/medium` was retrained on both corpora at 40
 epochs with `--patience 5`, lr 6e-4, seed 20260828, everything else held —
@@ -207,14 +218,18 @@ the arena instead.
 
 Head-to-head, 600 games per pair (side-balanced), Wilson 95%:
 
-| question | ply 3 | ply 6 | ply 9 | MCTS ply 3 | MCTS ply 6 |
-| --- | --- | --- | --- | --- | --- |
-| v3 vs v2, **40 epochs** | 50.0% | 51.5% | 49.3% | 49.5% | 51.0% |
-| v3 vs v2, **16 epochs** | **56.8%** | **55.8%** | **45.8%** | **56.2%** | 48.7% |
-| 40 vs 16 epochs, v2 corpus | **57.3%** | 50.7% | 51.5% | 52.5% | **55.2%** |
-| 40 vs 16 epochs, v3 corpus | 47.7% | 48.2% | 51.8% | 50.7% | 49.7% |
+| question | what actually varies | ply 3 | ply 6 | ply 9 | MCTS ply 3 | MCTS ply 6 |
+| --- | --- | --- | --- | --- | --- | --- |
+| v3 vs v2, **40 epochs** | corpus only — **the one clean row** | 50.0% | 51.5% | 49.3% | 49.5% | 51.0% |
+| v3 vs v2, **16 epochs** | corpus, but **v1 vs v3**, a two-step change | **56.8%** | **55.8%** | **45.8%** | **56.2%** | 48.7% |
+| 40 vs 16 epochs, "v2" corpus | **corpus AND budget** — v2@40 vs v1@16 | **57.3%** | 50.7% | 51.5% | 52.5% | **55.2%** |
+| 40 vs 16 epochs, v3 corpus | budget only | 47.7% | 48.2% | 51.8% | 50.7% | 49.7% |
 
-Bold marks an interval excluding 50%.
+Bold marks an interval excluding 50%. **The "what actually varies" column was added
+2026-08-30 and is the correction.** The baselines in rows 2 and 3 are `swept-cpool`,
+which trains on `exact-sampled.npz` — v1. Only `patience-cpool-v2` uses
+`exact-sampled-v2.npz`. So "v2" names *two different corpora* inside this one table,
+and row 3, the row the argument below rests on, moves two variables at once.
 
 Read the rows in order. **At equal epochs the corpora are indistinguishable
 in every one of the five conditions** — five intervals, all spanning 50%,
@@ -226,8 +241,14 @@ one** — two significant conditions against none.
 That last row is the one that explains the rest. If v3 carried information
 v2 lacked, more training on v2 would not close the gap. It closes it
 completely, and training v3 longer adds nothing, because v3's shape was
-already doing at sixteen epochs what extra epochs do for v2. **The v3
-corpus was compensating for undertraining, not adding information.**
+already doing at sixteen epochs what extra epochs do for v2. ~~**The v3
+corpus was compensating for undertraining, not adding information.**~~
+
+> **Struck 2026-08-30.** The reasoning is valid and the premise is false. "More
+> training on v2" was never run — row 3 trains on **v2** and compares against a **v1**
+> baseline, so it cannot separate corpus from budget. The run that does exist now,
+> `patience-cpool` (v1, early-stopped at 43), shows more training on v1 *does not*
+> close the gap. See the correction below.
 
 ### The fourth time held-out accuracy failed to predict strength
 
@@ -268,3 +289,111 @@ reason is now gone, and a second seed is the next thing this family needs.
   in it — the same class of correction the learning-rate sweep forced.
 - Nothing about publishing changes. The Hub still carries v2 weights, and on
   this evidence v3 has no claim to replace them.
+
+---
+
+## Correction: the shallow data is real (2026-08-30)
+
+The resolution above concluded that the v3 corpus was compensating for
+undertraining. That is false as written. It is true only of the **v2 to v3**
+increment, and the reason the error survived is a label.
+
+### The label
+
+`swept-cpool` — the published Hub `cpool` — trains on `exact-sampled.npz`.
+Verified in `runs/train/swept-cpool/config.json`. The document above calls it
+"v2" throughout the sixteen-epoch rows, but only `patience-cpool-v2` uses
+`exact-sampled-v2.npz`. So the row read as *"40 vs 16 epochs, v2 corpus"*
+compares `patience-cpool-v2` (v2 corpus, 40 epochs) against `swept-cpool`
+(**v1** corpus, 16 epochs) — **two variables**, and it was the only support for
+the causal claim.
+
+The corpora are strictly nested — `v1 ⊂ v2 ⊂ v3`, zero canonical keys lost at
+either step — and **plies 8-13 are byte-identical across all three**. Every
+difference between them lives at plies 3-7:
+
+| corpus | rows | new keys | ply 3 | ply 4 | ply 5 | ply 6 | ply 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `exact-sampled.npz` | 3,087,356 | — | 0 | 0 | 0 | 40,000 | 846,816 |
+| `exact-sampled-v2.npz` | 3,196,958 | +109,602 | 664 | 9,664 | 22,655 | 86,631 | 876,804 |
+| `exact-sampled-v3.npz` | 3,520,526 | +323,568 | 726 | 9,758 | 29,905 | 170,766 | 1,108,831 |
+
+### The run that settles it
+
+`runs/train/patience-cpool` — **v1 corpus**, `--epochs 60 --patience 5`,
+**early-stopped at epoch 43**. It is the first genuinely converged run on the
+published corpus, and it did not exist when the section above was written.
+Neither `patience-cpool-v2` nor `patience-cpool-v3` is converged: both ran all
+40 epochs and hit their cap.
+
+If the v3 advantage were an epoch artifact, training v1 to convergence would
+recover it. Measured on the **shared probe** — `runs/oracle/probe-large.jsonl`,
+7,800 exactly-solved positions sharing no canonical key with any of the three
+corpora, so this is common ground in a way the per-corpus validation splits in
+the section above are not:
+
+| checkpoint | corpus | budget | ply 4 | shallow 4-6 | deep 7-12 | value MAE |
+| --- | --- | --- | --- | --- | --- | --- |
+| `swept-cpool` (Hub) | v1 | 16 fixed | 0.8780 | 0.9295 | 0.9919 | 0.0777 |
+| `patience-cpool` | v1 | **converged (43)** | **0.8551** | 0.9219 | **0.9953** | 0.0646 |
+| `v3-cpool` | v3 | 16 fixed | **0.9139** | 0.9358 | 0.9872 | 0.0351 |
+| `patience-cpool-v2` | v2 | 40 (cap) | 0.9074 | 0.9195 | 0.9925 | 0.0244 |
+| `patience-cpool-v3` | v3 | 40 (cap) | 0.9009 | 0.9333 | 0.9911 | **0.0228** |
+
+Reproduce with `python -m quantik_models.eval.shift` over the five `best/`
+directories.
+
+**Training v1 to convergence made ply 4 worse**, 0.8780 to 0.8551, while every
+shallow-corpus checkpoint sits at 0.90-0.91. Value MAE recovers only 0.0777 to
+0.0646, against 0.0228-0.0244 for the shallow corpora. Epochs do not buy what
+the shallow positions buy.
+
+### The corrected decomposition — three separable axes
+
+1. **v1 to v2 — adding plies 3-6 — is real and corpus-caused.** About five
+   points of ply-4 accuracy and a threefold cut in value MAE, from 109,602
+   positions. **Epochs cannot substitute for it.**
+2. **v2 to v3 buys nothing.** The one clean single-variable row in the arena
+   table above is null in all five conditions, and the probe agrees: 0.9074 vs
+   0.9009 at ply 4, 0.0244 vs 0.0228 value MAE. This is the increment to retire.
+3. **The epoch budget is a separate, additive axis**, buying deep-band accuracy
+   within a corpus — `patience-cpool` has the best deep band of all five at
+   0.9953 — and costing shallow accuracy.
+
+### What else this overturns
+
+**The deep-band regression is not gone.** The section above declares it fixed on
+the strength of per-corpus validation splits, having just noted those are not
+common ground. On the shared probe it is still there: `patience-cpool` 0.9953
+against `patience-cpool-v3` 0.9911.
+
+**The arena result stands and points the other way.** `cpool-v3` beats
+`minimax-d2` 59.7% and 60.2% from a ply-3 start across two seeds; the published
+`cpool` ties it at 48.9%. It is not a seat artifact — both seats improve, mover
+83.7% against 64.3% and responder 35.7% against 16.3%. The advantage is gone by
+ply 6. `cpool-v3` is the only checkpoint in the family that beats the classical
+incumbent from a shallow start.
+
+### Consequences
+
+- **Do not cite "v3 was compensating for undertraining."** It is false as
+  written and true only of the v2-to-v3 step.
+- **Shallow-ply coverage has a measured payoff**, and it is the motivation for
+  the opening-coverage work rather than an argument against it.
+- **Sixteen epochs is still not a defensible budget for `cpool`.** That
+  conclusion survives; it was reached on the budget-only row, which is clean.
+- **Publishing still does not change.** Nothing here argues for putting a v3
+  checkpoint on the Hub — see the serving decision, which is blocked on an
+  arena from ply 0 that has never been run.
+- **The decisive experiment has still not been run:** a genuinely converged v2
+  run (`--epochs 120 --patience 5`, not a 40-epoch cap) against `patience-cpool`
+  in one arena. Both arms converged, one variable, nested corpora.
+
+### What this correction does not establish
+
+The three-axis reading rests on held-out probe accuracy plus a ply-3 arena, on
+**one training seed**, 20260828, throughout. The McNemar tests behind the
+"p ≤ 0.0008" claims are uncorrected for multiple comparisons, exactly as the
+twenty arena intervals above are. And **no arena on disk starts before ply 3** —
+at ply 0 every checkpoint here is uniform to three decimal places, so the regime
+a human game actually starts in is unmeasured for all of them.
