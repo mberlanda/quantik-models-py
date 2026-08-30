@@ -47,6 +47,11 @@ from .digest import file_digest
 # Split, `quantik-dev-runs` can be squashed freely and `quantik-dev-data` never
 # has to be. The split is also the public/private line: the data repo is the
 # half that would have community value if it were ever opened up.
+# The namespace the repos actually live under. The card is published *into*
+# the repo, so a `<namespace>` placeholder there is a broken instruction at the
+# one moment someone needs it to work — restoring, on a machine that has none
+# of this context.
+NAMESPACE = "brpoplpush"
 DATA_REPO = "quantik-dev-data"
 RUNS_REPO = "quantik-dev-runs"
 DEFAULT_REPO = DATA_REPO
@@ -497,9 +502,8 @@ def dataset_card(groups: list[dict[str, Any]], repo: str = DATA_REPO) -> str:
         "straight back to where the tooling expects it:",
         "",
         "```bash",
-        "huggingface-cli download --repo-type dataset <namespace>/quantik-dev-data \\",
-        "  --local-dir /tmp/devdata",
-        "cp -r /tmp/devdata/corpora/runs/ /path/to/quantik-models-py/",
+        f"hf download --repo-type dataset {NAMESPACE}/{repo} --local-dir /tmp/{repo}",
+        f"cp -r /tmp/{repo}/<group>/runs/ /path/to/quantik-models-py/",
         "```",
         "",
         "Then verify what you got against `MANIFEST.json` rather than trusting the "
@@ -559,7 +563,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{group['name']:>14}  {group['file_count']:>5} files  {group['size_bytes'] / 1e6:>8.1f} MB")
     print(f"\nstaged {out} for {args.repo}")
     print("\nNothing was uploaded. To publish:")
-    print(f"  hf upload-large-folder --repo-type dataset <namespace>/{args.repo} {out}")
+    print(f"  hf upload-large-folder --repo-type dataset {NAMESPACE}/{args.repo} {out}")
     return 0
 
 
