@@ -207,6 +207,61 @@ def _results_table(metrics: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _install_ref(provenance: dict[str, Any] | None) -> str:
+    """A source install pinned to the commit that trained the weights.
+
+    An unpinned `git+https://...` tracks `main`, so a reader following this card
+    a month later gets code the card does not describe. Falls back to the
+    unpinned form only when no commit was recorded — which is itself visible,
+    because the provenance table is then absent from the card.
+    """
+    base = "git+https://github.com/mberlanda/quantik-models-py"
+    commit = ((provenance or {}).get("code") or {}).get("commit")
+    return f"quantik-models[torch] @ {base}@{commit}" if commit else f"quantik-models[torch] @ {base}"
+
+
+def _provenance_section(provenance: dict[str, Any] | None) -> list[str]:
+    """What is needed to reproduce the run, not just to describe it.
+
+    The hyperparameter table above says what was asked for. This says what
+    actually ran: which commit, on which machine, against which corpus *by
+    hash* rather than by filename. A filename is not an identity — this project
+    reached a wrong published conclusion by confusing two corpora whose names
+    differed by one character.
+    """
+    if not provenance:
+        return []
+    code = provenance.get("code") or {}
+    hardware = provenance.get("hardware") or {}
+    versions = provenance.get("versions") or {}
+    corpus = provenance.get("corpus") or {}
+    rows = []
+    commit = code.get("commit")
+    if commit:
+        url = code.get("commit_url")
+        shown = f"[`{commit[:12]}`]({url})" if url else f"`{commit[:12]}`"
+        if code.get("dirty"):
+            # Not a footnote: the commit does not describe the code that ran.
+            shown += " — **uncommitted changes present; this commit does not describe the code that ran**"
+        rows.append(f"| training code | {shown} |")
+    if corpus.get("sha256"):
+        rows.append(f"| corpus | `{Path(corpus['path']).name}`, `{corpus['sha256'][:19]}…` |")
+    accelerator = hardware.get("accelerator") or hardware.get("device")
+    if accelerator:
+        rows.append(f"| trained on | {accelerator}, {hardware.get('platform', '?')} |")
+    pinned = ", ".join(
+        f"{name} {value}" for name, value in versions.items() if value and name != "onnxruntime"
+    )
+    if pinned:
+        rows.append(f"| versions | {pinned} |")
+    if not rows:
+        return []
+    return ["## Reproducing this checkpoint", "", "| | |", "|---|---|", *rows, "",
+            "The seed is in the table above. Everything else a rerun needs is here or in "
+            "`training-report.json`, which carries the complete resolved config and the full "
+            "provenance record.", ""]
+
+
 def _training_section(config: dict[str, Any] | None) -> list[str]:
     """Hyperparameters, read from the run's own `config.json`.
 
@@ -299,7 +354,10 @@ def _limitations_section(shift: list[dict] | None, architecture: str) -> list[st
 
 
 def _usage_section(
-    repo_id: str, manifest: dict[str, Any], links: dict[str, str]
+    repo_id: str,
+    manifest: dict[str, Any],
+    links: dict[str, str],
+    provenance: dict[str, Any] | None = None,
 ) -> list[str]:
     """Two paths: the Python package, and the ONNX graph with neither.
 
@@ -320,8 +378,9 @@ def _usage_section(
         "",
         "```bash",
         "# quantik-models is not on PyPI yet; install it from source.",
-        "pip install 'quantik-models[torch] @ "
-        "git+https://github.com/mberlanda/quantik-models-py'",
+        "# Pinned to the commit that trained these weights — an unpinned install",
+        "# tracks main and will not stay the code this card describes.",
+        f"pip install '{_install_ref(provenance)}'",
         "pip install huggingface_hub",
         "```",
         "",
@@ -422,6 +481,7 @@ def model_card(
     metrics: list[dict[str, Any]] | None = None,
     base_model: str | None = None,
     config: dict[str, Any] | None = None,
+    provenance: dict[str, Any] | None = None,
     shift: list[dict] | None = None,
     siblings: list[str] | None = None,
     links: dict[str, str] | None = None,
@@ -521,8 +581,9 @@ def model_card(
         "",
     ]
 
-    lines += _usage_section(repo_id, manifest, links)
+    lines += _usage_section(repo_id, manifest, links, provenance)
     lines += _training_section(config)
+    lines += _provenance_section(provenance)
     lines += _limitations_section(shift, architecture)
 
     lines += ["## Files", ""]
@@ -653,6 +714,25 @@ def run_config(checkpoint_dir: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def run_provenance(checkpoint_dir: Path) -> dict[str, Any] | None:
+    """The run's provenance record — commit, machine, versions, corpus hash.
+
+    Two places, in order: `training-report.json` beside the checkpoint, which
+    travels with it, then `provenance.json` one level up in the run directory,
+    which does not. Preferring the travelling copy means a checkpoint moved out
+    of its run directory still carries its own provenance, and a checkpoint
+    trained before this record existed simply has none — returning None thins
+    the card rather than failing the publish.
+    """
+    report = checkpoint_dir / "training-report.json"
+    if report.exists():
+        recorded = json.loads(report.read_text()).get("provenance")
+        if recorded:
+            return recorded
+    path = checkpoint_dir.parent / "provenance.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
 def stage(
     checkpoint_dir: Path,
     out_dir: Path,
@@ -691,6 +771,7 @@ def stage(
             metrics=metrics,
             base_model=base_model,
             config=run_config(checkpoint_dir),
+            provenance=run_provenance(checkpoint_dir),
             shift=shift,
             siblings=siblings,
             links=links,

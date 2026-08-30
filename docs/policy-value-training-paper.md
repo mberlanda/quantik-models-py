@@ -387,6 +387,10 @@ that loop with contract-enforced boundaries at every arrow.
 
 ## 7. Reproducibility
 
+See [`reproducibility.md`](reproducibility.md) for the full record kept per
+run and, importantly, for what it is *not* enough to promise — bit-identical
+weights across machines are not claimed.
+
 Every training input is a versioned artifact reproducible from the
 public pipeline (`scripts/run_smoke_pipeline.sh` for the tiny corpus;
 the contracts data-milestone list for the full corpus). Training is
