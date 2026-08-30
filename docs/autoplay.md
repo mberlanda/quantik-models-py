@@ -106,9 +106,9 @@ the time of writing): 66 positions at ply ≤ 6, 40 already in
 `exact-sampled-v3.npz`, 26 written to the queue. Fed straight into
 `exact_oracle` and `merge_corpus.py` with no format change — solving a
 ply-≤6 position is far more expensive than the deeper ones autoplay
-usually queues (see "Plies 0–3 are unevaluated" in `WORKSTREAMS.md`), so
-this queue is small and the run that actually clears it is separate,
-future work.
+usually queues (see "Plies 0–3 are unevaluated" in the workspace's
+WORKSTREAMS.md), so this queue is small and the run that actually clears
+it is separate, future work.
 
 ### Deterministic agents need randomised starts
 
