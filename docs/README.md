@@ -55,6 +55,7 @@ These are the documents to read if you want to know how much to trust the rest.
 
 - [`pipeline.md`](pipeline.md) — how data gets from the solver to a trained model.
 - [`reproducibility.md`](reproducibility.md) — what each run records (commit, machine, versions, corpus **hash**), and what it is not enough to promise.
+- [`corpora.md`](corpora.md) — what is in each corpus, the ply distribution, how to merge and extend one, and which hyperparameters are worth tuning.
 - [`labeling-strategy.md`](labeling-strategy.md) — what a label is here, and why none of them come from game outcomes.
 - [`tensor-structure.md`](tensor-structure.md) — the `(B, 9, 4, 4)` input contract.
 - [`autoplay-training.md`](autoplay-training.md) — feeding arena positions back into the corpus.
