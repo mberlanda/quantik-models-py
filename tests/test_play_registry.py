@@ -17,6 +17,7 @@ torch-free and stay covered in that job.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -26,17 +27,26 @@ from quantik_models.play import opponents as op
 from quantik_models.play import registry as reg
 
 
-def write_checkpoint(root, name, *, weights_bytes=b"not-real-weights", **manifest_overrides):
+def write_checkpoint(
+    root,
+    name,
+    *,
+    weights_bytes=b"not-real-weights",
+    onnx_bytes=b"not-a-real-graph",
+    **manifest_overrides,
+):
     """A hand-built `model-checkpoint.v1` directory: no torch, no real weights.
 
-    `weights_hash` is computed from `weights_bytes` unless the caller wants
-    a mismatch, in which case it passes its own wrong hash through
-    `manifest_overrides`.
+    `weights_hash`/`onnx_hash` are computed from `weights_bytes`/`onnx_bytes`
+    unless the caller wants a mismatch, in which case it passes its own
+    wrong hash through `manifest_overrides`.
     """
     model_dir = root / name
     model_dir.mkdir(parents=True)
     weights_path = model_dir / "weights.safetensors"
     weights_path.write_bytes(weights_bytes)
+    onnx_path = model_dir / "model.onnx"
+    onnx_path.write_bytes(onnx_bytes)
     manifest = {
         "schema": "model-checkpoint.v1",
         "model_id": f"{name}-artifact",
@@ -44,6 +54,7 @@ def write_checkpoint(root, name, *, weights_bytes=b"not-real-weights", **manifes
         "architecture_spec": {"arch": "resnet", "config": {"channels": 16, "blocks": 2}},
         "parameter_count": 13991,
         "weights_hash": file_digest(weights_path),
+        "onnx_hash": file_digest(onnx_path),
     }
     manifest.update(manifest_overrides)
     (model_dir / "manifest.json").write_text(json.dumps(manifest))
@@ -169,3 +180,38 @@ def test_roster_combines_classical_and_neural(tmp_path):
     ids = {o.opponent_id for o in full}
     assert "random" in ids
     assert "cpool-a@0" in ids and "cpool-a@128" in ids
+
+
+def test_onnx_runtime_scans_the_graph_not_the_weights(tmp_path):
+    """The onnx-only public image (workstream 13) ships `model.onnx` and no
+    `weights.safetensors` at all — scanning it in torch mode must not be
+    the only way for a model to appear."""
+    write_checkpoint(tmp_path, "cpool-a")
+    (tmp_path / "cpool-a" / "weights.safetensors").unlink()
+    torch_models = reg.scan_models(tmp_path, runtime="torch")
+    assert torch_models[0].status == "refused"
+    assert "weights.safetensors" in torch_models[0].reason
+
+    onnx_models = reg.scan_models(tmp_path, runtime="onnx")
+    assert onnx_models[0].status == "ready", onnx_models[0].reason
+
+
+def test_onnx_runtime_is_refused_on_a_graph_hash_mismatch(tmp_path):
+    model_dir = write_checkpoint(tmp_path, "cpool-a")
+    (model_dir / "model.onnx").write_bytes(b"tampered-graph")
+    models = reg.scan_models(tmp_path, runtime="onnx")
+    assert models[0].status == "refused"
+    assert "model.onnx" in models[0].reason and "hash" in models[0].reason
+
+
+def test_an_unknown_runtime_is_rejected():
+    with pytest.raises(ValueError):
+        reg.scan_models(Path("/nonexistent"), runtime="tensorflow")
+
+
+def test_neural_opponent_specs_carry_the_requested_runtime(tmp_path):
+    write_checkpoint(tmp_path, "cpool-a")
+    models = reg.scan_models(tmp_path, runtime="onnx")
+    generated = op.neural_opponents(models, runtime="onnx")
+    assert len(generated) == 2
+    assert all(o.spec["runtime"] == "onnx" for o in generated)

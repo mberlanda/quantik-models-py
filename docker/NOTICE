@@ -1,0 +1,17 @@
+This image bundles two things under different licences.
+
+Code — MIT
+  quantik-models (this repo): see LICENSE.
+  quantik-qfen-visualizer (the browser app under app/): MIT, see its own
+  LICENSE at https://github.com/mberlanda/quantik-qfen-visualizer.
+
+Model weights (under staging/) — CC BY-NC 4.0, non-commercial
+  Published at https://huggingface.co/brpoplpush. Each model directory's
+  manifest.json names its architecture; the Hub repo of the same name
+  (https://huggingface.co/brpoplpush/<name>) carries the full model card
+  and the licence text.
+
+CC BY-NC 4.0 permits sharing and adapting the weights with attribution for
+non-commercial purposes; it does not grant commercial use. The code (MIT)
+carries no such restriction on its own. If you need commercial use of the
+weights, the maintainer is reachable through the repos linked above.

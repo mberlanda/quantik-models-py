@@ -39,6 +39,7 @@ RESPONSE_SCHEMA = "quantik.engine-response.v1"
 ANALYSIS_SCHEMA = "quantik-play.analysis.v1"
 
 _WEIGHTS_NAME = "weights.safetensors"
+_ONNX_NAME = "model.onnx"
 _SEED_BITS = 32
 
 
@@ -171,6 +172,7 @@ class PlayService:
         *,
         opening_temperature: float = op.DEFAULT_OPENING_TEMPERATURE,
         opening_plies: int = op.DEFAULT_OPENING_PLIES,
+        runtime: str = "torch",
     ) -> None:
         self.models_dir = Path(models_dir)
         # Held on the service rather than read at each `refresh`, so a
@@ -178,6 +180,12 @@ class PlayService:
         # roster back its defaults.
         self.opening_temperature = opening_temperature
         self.opening_plies = opening_plies
+        # "torch" (default, unchanged behaviour) or "onnx" — the latter is
+        # what lets the storeless public image (workstream 13) run without
+        # a torch install. Chosen once at startup, not per-request: a
+        # process serves one runtime, matching how the model directory
+        # itself only carries one artefact set in the onnx-only image.
+        self.runtime = runtime
         # One lock covers agent construction *and* `select`. The agents,
         # the MCTS trees they build and `arena.registry`'s evaluator cache
         # are all shared mutable state, and the server this feeds is a
@@ -191,13 +199,14 @@ class PlayService:
         self.refresh()
 
     def refresh(self) -> None:
-        models = reg.scan_models(self.models_dir)
+        models = reg.scan_models(self.models_dir, runtime=self.runtime)
         roster = {
             opponent.opponent_id: opponent
             for opponent in op.roster(
                 models,
                 temperature=self.opening_temperature,
                 temperature_plies=self.opening_plies,
+                runtime=self.runtime,
             )
         }
         with self._lock:
@@ -372,7 +381,8 @@ class PlayService:
                 self._agents[opponent.opponent_id] = cached
             return cached.agent
 
-        weights = self.models_dir / opponent.model_id / _WEIGHTS_NAME
+        artefact_name = _WEIGHTS_NAME if self.runtime == "torch" else _ONNX_NAME
+        weights = self.models_dir / opponent.model_id / artefact_name
         try:
             stat = weights.stat()
         except OSError as exc:

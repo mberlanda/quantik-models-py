@@ -51,6 +51,25 @@ def load_evaluator(checkpoint: str | Path, device: str = "cpu", batch_size: int 
     return evaluator
 
 
+def load_onnx_evaluator(checkpoint: str | Path, batch_size: int = 4096):
+    """Load a `model-checkpoint.v1` directory's `model.onnx` into an
+    `OnnxEvaluator` (cached, torch-free).
+
+    Deliberately does not share `load_evaluator`'s cache key or code path:
+    the two runtimes can be loaded side by side (the agreement test does
+    exactly that), and neither import statement runs unless its runtime is
+    actually chosen.
+    """
+    from ..selfplay.evaluator import OnnxEvaluator
+
+    key = f"onnx|{checkpoint}"
+    if key in _CACHE:
+        return _CACHE[key]
+    evaluator = OnnxEvaluator(Path(checkpoint) / "model.onnx", batch_size=batch_size)
+    _CACHE[key] = evaluator
+    return evaluator
+
+
 def _model_from_manifest(manifest: dict[str, Any], model_registry):
     """Rebuild the architecture a checkpoint was trained with.
 
@@ -105,11 +124,16 @@ def build_agent(spec: dict[str, Any]):
             UniformEvaluator(), params=params, name=name or "uniform-mcts", **spec
         )
     if kind in {"net-policy", "net-mcts"}:
-        evaluator = load_evaluator(
-            spec.pop("checkpoint"),
-            spec.pop("device", "cpu"),
-            spec.pop("eval_batch_size", 4096),
-        )
+        checkpoint = spec.pop("checkpoint")
+        device = spec.pop("device", "cpu")
+        batch_size = spec.pop("eval_batch_size", 4096)
+        runtime = spec.pop("runtime", "torch")
+        if runtime == "torch":
+            evaluator = load_evaluator(checkpoint, device, batch_size)
+        elif runtime == "onnx":
+            evaluator = load_onnx_evaluator(checkpoint, batch_size)
+        else:
+            raise ValueError(f"unknown evaluator runtime {runtime!r}; want 'torch' or 'onnx'")
         if kind == "net-policy":
             return PolicyAgent(evaluator, name=name or "net-policy", **spec)
         from ..selfplay.mcts import MCTSParams

@@ -222,6 +222,112 @@ under `runs/`. A checkpoint can be retrained; a game somebody played
 cannot be replayed, and `runs/` is gitignored and routinely deleted
 wholesale.
 
+## Reaching it off your LAN
+
+The `this WiFi` address only works from a device on the same network. To reach
+it from a phone that is not — over cellular, say — put a tunnel in front of
+the one port the service already binds:
+
+```bash
+brew install cloudflared        # once
+.venv/bin/python -m quantik_models.play --models staging &
+cloudflared tunnel --url http://localhost:8000
+```
+
+`cloudflared` prints a random `https://<words>.trycloudflare.com` URL that
+proxies straight to `localhost:8000` — open it on the phone in place of the
+WiFi address. It is an anonymous, unauthenticated quick tunnel: reachable by
+anyone with the URL, fine for a casual look, not for anything sensitive. Kill
+the `cloudflared` process (or `Ctrl-C` it) to close it; the play service is
+unaffected and keeps running.
+
+This is the single-port case the public deployment work (workstream 13 in
+the workspace's WORKSTREAMS.md) is aiming to containerize — one endpoint,
+one tunnel.
+
+## Docker: one endpoint, no store, no torch
+
+```bash
+scripts/build_docker_image.sh best    # swept-cpool only
+scripts/build_docker_image.sh full    # published lineup + v3-cpool
+docker run -p 8000:8000 quantik-play:best
+```
+
+`docker/Dockerfile` runs `--runtime onnx --no-store`: `onnxruntime` (the
+`[serve]` extra, 80 MB) evaluates the `model.onnx` graph every checkpoint
+already ships, so the image never installs torch (529 MB) at all, and it
+opens no database. `scripts/build_docker_image.sh` stages `manifest.json` +
+`model.onnx` from local `runs/train/*/best` checkpoints into
+`docker/staging/` before the build — no network fetch yet; pulling from the
+Hub instead is the production path workstream 13 still names as open.
+
+Measured 2026-08-30, `python:3.12-slim` base, one architecture per opponent:
+
+| image | models staged | size |
+|---|---|---|
+| `quantik-play:best` | `cpool` (the lineup winner — see the lineup-results memory / `docs/benchmarks.md`) | 441 MB |
+| `quantik-play:full` | `cpool`, `attn`, `resnet`, `mlp`, `v3-cpool` | 498 MB |
+
+The `--runtime onnx` path is a second, independent way of running the same
+weights, not a second model — `tests/test_onnx_evaluator_agreement.py`
+checks `OnnxEvaluator` against `NetEvaluator` (the torch path) on a real
+exported checkpoint before either is trusted to serve a player.
+
+**A packaging bug this surfaced:** `quantik_core` (the legality checker
+`arena.agents`'s classical engines import at module scope, and the play
+service's request validator relies on) was never a declared dependency —
+every local `.venv` here happens to have it `pip install -e`'d from the
+sibling `quantik-core-py` checkout, which papered over the gap. A clean
+install had nothing to fall back to and failed on the first move with
+`ModuleNotFoundError: No module named 'quantik_core'`. Fixed in
+`pyproject.toml`: `quantik-core>=1.2` is now a base dependency, pulled from
+PyPI like any other install.
+
+**Still open**, per workstream 13: the browser client does not yet learn
+"no store" from `GET /api` and would show a `503` at the end of every game
+against a `--no-store` server; the image never fetches weights from the
+Hub (local checkpoints only, for now); nothing publishes to GHCR yet.
+
+### Sharing a local build off your LAN
+
+The container binds one port, so putting a tunnel in front of it is the
+same recipe as "Reaching it off your LAN" above, just pointed at `docker
+run`'s published port instead of the bare process:
+
+```bash
+brew install cloudflared        # once
+scripts/build_docker_image.sh best
+docker run -p 8000:8000 quantik-play:best &
+cloudflared tunnel --url http://localhost:8000
+```
+
+Open the printed `https://<words>.trycloudflare.com` URL on the phone —
+same anonymous, unauthenticated quick tunnel as before, fine for a look,
+not for anything sensitive. `Ctrl-C` the `cloudflared` process to close
+the tunnel; `docker stop` the container when done, or leave it running for
+the next tunnel.
+
+**Without staged models** (no `staging/` directory yet, or between training
+runs when only classical engines matter): `quantik-api-rust` and the
+visualizer's static files are two separate processes on two separate ports,
+so reaching them off-LAN needs a tunnel on each:
+
+```bash
+# from quantik-api-rust
+QUANTIK_API_ADDR=127.0.0.1:8000 cargo run --release &
+cloudflared tunnel --url http://localhost:8000 &   # the engine endpoint
+
+# from quantik-qfen-visualizer
+python3 -m http.server 5173 &
+cloudflared tunnel --url http://localhost:5173 &   # the page itself
+```
+
+Open the `:5173` tunnel URL on the phone, then set a Remote seat's endpoint
+to the `:8000` tunnel URL plus `/v1/move/mcts` (or `minimax` / `beam`).
+`quantik-api-rust` only serves the classical search engines — a trained
+network opponent needs the play service above, which is the one process that
+serves both the board and the models on a single port.
+
 ## Asking what the network thinks, without playing
 
 `POST /api/analyse/{opponent_id}` returns the network's read of a position
