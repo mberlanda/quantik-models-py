@@ -43,6 +43,7 @@ from ..model import registry
 from ..model.policy_value_net import masked_log_softmax, parameter_count
 from . import freezing
 from .convergence import epochs_since_best
+from .provenance import capture as capture_provenance
 from .alphazero import resolve_device
 
 
@@ -162,13 +163,20 @@ def _forward_losses(model, boards, policy, policy_weight, value, device, value_l
 def train(config: SupervisedConfig, out_root: Path) -> Path:
     run_dir = out_root / config.name
     run_dir.mkdir(parents=True, exist_ok=True)
-    # Record the resolved learning rate, not `null`: a config that says
-    # "None" does not reproduce the run it describes.
-    recorded = asdict(config) | {"lr": config.resolved_lr()}
-    (run_dir / "config.json").write_text(json.dumps(recorded, indent=2))
     metrics_path = run_dir / "metrics.jsonl"
 
     device = resolve_device(config.device)
+    # Record the resolved learning rate and the resolved *device*, not `null`
+    # and not `"auto"`: a config that says "None" does not reproduce the run it
+    # describes, and neither does one that says "auto" — a run on MPS and a run
+    # on CPU are not the same run.
+    recorded = asdict(config) | {"lr": config.resolved_lr(), "device": str(device)}
+    (run_dir / "config.json").write_text(json.dumps(recorded, indent=2))
+    # Everything config.json cannot carry: the commit, the machine, the
+    # dependency versions, and the corpus's hash rather than its filename.
+    # See provenance.py for why each one is here.
+    provenance = capture_provenance(corpus=config.corpus, device=str(device))
+    (run_dir / "provenance.json").write_text(json.dumps(provenance, indent=2))
     torch.manual_seed(config.seed)
     rng = np.random.default_rng(config.seed)
 
@@ -336,7 +344,16 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
                 model,
                 out_dir=run_dir / "best",
                 model_id=f"{config.name}-best",
-                training_report={"run": config.name, "epoch": epoch, "metrics": record},
+                training_report={
+                    "run": config.name,
+                    "epoch": epoch,
+                    "metrics": record,
+                    # A checkpoint that leaves the machine — to the Hub, to a
+                    # serving container — takes its provenance with it. The run
+                    # directory is gitignored; this file is what a downloader gets.
+                    "config": recorded,
+                    "provenance": provenance,
+                },
             )
         stale = epochs_since_best(val_history)
         if config.patience is not None and stale >= config.patience:

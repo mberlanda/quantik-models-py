@@ -44,6 +44,7 @@ from ..model.policy_value_net import (
 from ..selfplay.evaluator import NetEvaluator
 from ..selfplay.generate import SelfPlayConfig, augment, play_batch
 from ..selfplay.mcts import MCTSParams
+from .provenance import capture as capture_provenance
 
 
 @dataclass
@@ -178,9 +179,16 @@ def train(config: AlphaZeroConfig, out_root: Path, resume: bool = True) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     state_path = run_dir / "state.json"
     metrics_path = run_dir / "metrics.jsonl"
-    (run_dir / "config.json").write_text(json.dumps(asdict(config), indent=2))
 
     device = resolve_device(config.device)
+    # The resolved device, not "auto" — see supervised.train for why.
+    (run_dir / "config.json").write_text(
+        json.dumps(asdict(config) | {"device": str(device)}, indent=2)
+    )
+    # Self-play has no corpus file; the rest of the record applies unchanged.
+    (run_dir / "provenance.json").write_text(
+        json.dumps(capture_provenance(device=str(device)), indent=2)
+    )
     torch.manual_seed(config.seed)
     rng = np.random.default_rng(config.seed)
 
