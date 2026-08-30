@@ -259,6 +259,45 @@ rescaling a schedule to a length that is not known yet. It also means
 `--epochs 60 --patience 5` and `--epochs 22` are *different runs*, and the
 recorded `epoch_cap` is what distinguishes them.
 
+## Outcome under patience-based budgets, 2026-08-30
+
+The separate piece of work above is now done: `--patience 5 --epochs 60`,
+same corpus, same swept learning rates, seed 20260828.
+
+| model | best epoch | ran to | val top-1 | policy loss | value loss |
+|---|---|---|---|---|---|
+| `cpool-c191-b6` | 37 | 42 (early) | **0.9916** | **1.1778** | **0.0231** |
+| `attn-d192-b6` | 41 | 46 (early) | 0.9900 | 1.1811 | 0.0187 |
+| `resnet-c128-b6` | 58 | 59 (cap) | 0.9793 | 1.2567 | 0.0475 |
+| `mlp-h455-b4` | 59 | 59 (cap) | 0.9660 | 1.3234 | 0.0834 |
+
+`cpool` and `attn` early-stopped comfortably inside the cap; `resnet` and
+`mlp` ran the full 60 epochs still improving at the last one, so 60 may
+still be a floor for them — the same shape of problem the fixed 16-epoch
+budget was. Ranking is unchanged, but `resnet`/`mlp` gained far more top-1
+from the extra epochs (+0.0092, +0.0144) than `cpool`/`attn` did (+0.0023,
++0.0021), which is consistent with the former pair being the ones the
+16-epoch cap was actually cutting off.
+
+That is still only top-1. `scripts/evaluate_lineup.sh` against
+`runs/train/patience-{arch}/best` (`runs/eval/patience-2026-08-30/`) is
+what settles whether it changes anything downstream — see
+`shift-evaluation.md` and `autoplay.md` for the restated tables. Short
+version: the earlier "`attn` matches `cpool`" reading was a top-1 artifact
+of an unconverged `attn`. Under 128-simulation search from ply-3 starts the
+gap is real — `cpool` 66.4% to `attn`'s 59.9% — and `cpool`'s deep/value
+advantage widens rather than closes. `attn` still edges `cpool` at ply-6
+MCTS starts by 0.8 points, which is inside the noise a single seed and
+imperfect game-diversity can produce, not a second regime the way the
+ResNet-vs-`cpool` split was in the superseded section below.
+
+**That arena ran on `20260829`**, a seed already spent on a different
+comparison (`runs/eval/epoch-test/`) — the workspace task that commissioned
+this run (QW-012) explicitly called for a fresh one and the run did not use
+one. See `autoplay.md`'s "Seed caveat" for detail. The ranking above stands
+provisionally; an independent-seed re-run has not happened yet. Tracked as
+`QW-026` in `quantik-workspace`.
+
 ## Outcome, 2026-08-28 (superseded — measured at the ResNet's learning rate)
 
 All three trained at `medium` for 16 epochs on `exact-sampled.npz`. Both

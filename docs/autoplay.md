@@ -304,6 +304,48 @@ leans on the leaf value, and `attn`'s value head is measurably weaker —
 the shift probe. Good priors, weaker values, and search finds the
 difference.
 
+## Restated 2026-08-30 under patience-based budgets
+
+Same four checkpoints, retrained with `--patience 5 --epochs 60` in place
+of the fixed 16-epoch budget above. `scripts/evaluate_lineup.sh`, output
+`runs/eval/patience-2026-08-30/`.
+
+> **Seed caveat.** This run took the script's default seed, `20260829`,
+> because nothing overrode it — the same value already spent on
+> `runs/eval/epoch-test/`, a different comparison. The workspace task that
+> commissioned this run (QW-012) explicitly called for a fresh arena seed
+> for exactly the reason the script's own comment gives: reusing one makes
+> seed-linked bias invisible rather than absent. Caught after the ~3.6h run
+> finished, not before. The ranking below is not being withdrawn on the
+> strength of this alone, but it has not been confirmed on an independent
+> seed either — treat a re-run on a fresh seed as unfinished business, not
+> optional polish. Tracked as `QW-026` in `quantik-workspace`.
+
+On raw policy (`net-policy`, deterministic — the ply-9 row is directional
+only, since its worst pairing replays just 135 of 300 distinct games):
+
+| start ply | 1st | 2nd | 3rd | 4th | distinct games (worst pairing) |
+|---|---|---|---|---|---|
+| 3 | `cpool` 55.0% | `attn` 52.2% | `mlp`/`resnet` 46.4% (tied) | | 297/300 |
+| 6 | `attn` 52.6% | `cpool` 51.9% | `resnet` 50.8% | `mlp` 44.8% | 244/300 |
+| 9 | `cpool` 51.1% | `attn` 50.3% | `mlp` 49.6% | `resnet` 49.0% | 135/300 |
+
+Under 128-simulation MCTS, where distinct-game coverage is far better:
+
+| start ply | order | uniform control | distinct games (worst pairing) |
+|---|---|---|---|
+| 3 | `cpool` 66.4% · `resnet` 61.8% · `mlp` 61.5% · `attn` 59.9% | 0.5% | 292/300 |
+| 6 | `attn` 58.4% · `cpool` 57.6% · `resnet` 57.0% · `mlp` 56.1% | 21.0% | 230/300 |
+
+The cpool/attn "tie" ADR 0001 reported on fixed-budget top-1 does not
+survive this arena: `cpool` wins ply-3 MCTS by 6.5 points, the widest gap
+in either table, and only loses ply-6 MCTS to `attn` by 0.8 points —
+inside the noise a single seed and imperfect game diversity can produce,
+not a second regime the way the ResNet-vs-`cpool` split above was.
+`resnet`/`mlp` stay mid-pack under MCTS despite gaining the most top-1 from
+the longer training budget, which is this document's point restated: raw
+policy accuracy and play strength are separate measurements.
+
 ## What the earlier version of this document claimed, and why it was wrong
 
 Before `cpool` was retrained, this file reported that the ResNet led from
