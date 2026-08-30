@@ -55,7 +55,7 @@ These are the documents to read if you want to know how much to trust the rest.
 
 - [`pipeline.md`](pipeline.md) — how data gets from the solver to a trained model.
 - [`reproducibility.md`](reproducibility.md) — what each run records (commit, machine, versions, corpus **hash**), and what it is not enough to promise.
-- [`dev-data.md`](dev-data.md) — the `quantik-dev-data` dataset repo: what `runs/` holds, how to stage it, and how to restore it.
+- [`dev-data.md`](dev-data.md) — the `quantik-dev-data` and `quantik-dev-runs` dataset repos: what `runs/` holds, how to stage and sync it, and how to restore it.
 - [`corpora.md`](corpora.md) — what is in each corpus, the ply distribution, how to merge and extend one, and which hyperparameters are worth tuning.
 - [`labeling-strategy.md`](labeling-strategy.md) — what a label is here, and why none of them come from game outcomes.
 - [`tensor-structure.md`](tensor-structure.md) — the `(B, 9, 4, 4)` input contract.
