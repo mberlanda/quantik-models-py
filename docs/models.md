@@ -65,6 +65,57 @@ set of weights, not two models.
 evaluator = hub.load_evaluator("cpool", revision="a6a122ef")
 ```
 
+If you did not pin one, `resolve` tells you afterwards which commit you got,
+so a run is still reproducible after the fact:
+
+```python
+resolved = hub.resolve("cpool")
+print(resolved.commit)   # a6a122ef082b0b2defde9ea2495fbffe2dfcb602
+```
+
+## Fetching, caching, and being offline
+
+The weights live on the Hub rather than in the wheel: ~7 MB each, a
+different licence from the code, and a release cadence of their own. The
+practical consequences are all in one place here so they do not have to be
+rediscovered.
+
+**The first call needs the network. No later call does.** Downloads land in
+the Hugging Face cache — `$HF_HOME`, `~/.cache/huggingface` by default — and
+`load_evaluator` reads them from there afterwards, including with the network
+gone entirely.
+
+**Fill the cache ahead of time** for a container image, an air-gapped host,
+or a machine about to lose connectivity:
+
+```bash
+quantik-models-fetch --all
+quantik-models-fetch cpool --revision a6a122ef      # pinned
+quantik-models-fetch --all --cache-dir ./weights    # somewhere copyable
+```
+
+It imports neither torch nor onnxruntime, so it can run in an image layer
+before either is installed, and it prints the resolved commit per model. The
+same thing from Python is `hub.prefetch()`.
+
+**Failures are messages, not tracebacks.** Everything the fetch path can hit
+is re-raised as `hub.HubError` naming the next step — the cache directory and
+the fetch command when you are offline with nothing cached, the terms link
+for a gated repo, the four valid names for a typo, the commit list for a bad
+revision. The Hub's own exception is kept as `__cause__` if you need to
+branch on it.
+
+**A truncated download repairs itself once.** A digest mismatch triggers one
+forced re-fetch before it is raised, because the usual cause is a half-written
+cache entry, and "delete this directory under `HF_HOME`" is not a remedy
+anyone infers from a safetensors parse error. A mismatch that survives the
+re-fetch is a hard `HubError`: at that point the file on the Hub is wrong, or
+the cache cannot be written, and neither is fixed by trying again.
+
+**Digest checking can be turned off** with `check_digest=False` — the file
+still has to exist, and a missing `model.onnx` is reported as a missing
+`model.onnx` rather than as an onnxruntime protobuf error.
+
 ## The contract every model implements
 
     input   (B, 9, 4, 4) float32      tensor-board.v1, mover-relative

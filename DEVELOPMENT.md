@@ -206,6 +206,22 @@ Versioning policy, and what counts as a breaking change here, is
    through **trusted publishing** — there is no long-lived PyPI token stored
    in this repository.
 
+6. **Re-stage and push the four model cards**, once the version is on PyPI
+   and not before. The generated card's install line names a released
+   version (`pip install 'quantik-models[torch,hub]>=X.Y.Z'`), so pushing it
+   ahead of the upload publishes an instruction that does not work yet:
+
+   ```bash
+   ./scripts/stage_hub_repos.sh staging \
+     runs/train/swept-cpool/best runs/train/swept-attn/best \
+     runs/train/lineup-resnet/best runs/train/lineup-mlp/best
+   ```
+
+   Diff each `staging/<repo>/README.md` against the live card and confirm
+   `weights_hash` is unchanged before uploading — a card push must never
+   quietly replace the weights it describes. Then, per repository:
+   `hf upload brpoplpush/<name> . --repo-type model`.
+
 Releasing the *weights* is a separate process with a separate licence; see
 [`docs/publishing-to-hugging-face.md`](docs/publishing-to-hugging-face.md).
 

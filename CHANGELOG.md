@@ -32,6 +32,18 @@ as a library rather than as this workspace's training directory.
   in `manifest.json` for the runtime that will load it — `weights_hash` for
   safetensors, `onnx_hash` for the graph. The module is importable without
   torch.
+
+  Every fetch failure is re-raised as `hub.HubError` carrying the remedy —
+  the cache path and the command to run when offline with a cold cache, the
+  terms link for a gated repo, the valid names for a typo, the commit list
+  for an unknown revision — with the Hub's own exception kept as `__cause__`.
+  A digest mismatch is re-fetched once before it is raised, because the usual
+  cause is a truncated cache entry that would otherwise fail identically
+  forever. `resolve()` reports the commit `main` resolved to, so a run made
+  without an explicit `revision` is still reproducible.
+- **`quantik-models-fetch` console script** (`hub.prefetch()` from Python) —
+  fills the Hugging Face cache without loading anything, so a container build
+  or an air-gapped host can be prepared before torch or onnxruntime exist.
 - **`hub` extra** (`pip install 'quantik-models[hub]'`) carrying
   `huggingface-hub`. Kept out of the base install because nothing in
   training, evaluation or the arena fetches anything.

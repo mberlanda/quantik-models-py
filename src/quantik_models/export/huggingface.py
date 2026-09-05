@@ -419,6 +419,14 @@ def _usage_section(
         "directory you already have, pass it to "
         "`quantik_models.arena.registry.load_evaluator` instead.",
         "",
+        "The download happens once and is served from the Hugging Face cache "
+        "afterwards, so everything works offline from the second call on. To "
+        "fill that cache first — in a container build, or before losing "
+        "connectivity — run `quantik-models-fetch "
+        f"{_short_name(manifest)}`, which needs neither torch nor "
+        "onnxruntime. Fetch failures are raised as `hub.HubError` with the "
+        "remedy in the message.",
+        "",
     ]
     if manifest.get("onnx_export"):
         lines += [

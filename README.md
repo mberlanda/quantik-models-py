@@ -49,6 +49,40 @@ does not need it. The full table is in
 
 Python 3.12+.
 
+## Getting the weights
+
+The weights are not in the wheel. They are ~7 MB each, they carry a different
+licence from the code, and they version independently of it — so
+`load_evaluator` fetches them from the Hub on first use and reads them from
+the Hugging Face cache (`$HF_HOME`, default `~/.cache/huggingface`) every time
+after. **One network call, once per model, and never again.**
+
+To fill that cache ahead of time — a container build, a machine that is about
+to go offline, an air-gapped copy — use the fetch command. It needs neither
+torch nor onnxruntime, so it runs before either is installed:
+
+```bash
+quantik-models-fetch --all          # or: quantik-models-fetch cpool attn
+```
+
+Once a model is cached, everything works with no network at all.
+
+Nothing else needs special attention. Every way this can fail raises
+`hub.HubError` with the remedy in the message rather than a traceback through
+`huggingface_hub`:
+
+| what went wrong | what you get |
+|---|---|
+| offline, model already cached | it just works — the cache is used |
+| offline, nothing cached | the cache path, and the `quantik-models-fetch` line to run while online |
+| truncated download | re-fetched once automatically; a second failure names the cache to clear |
+| typo in the model name | the four names that do exist |
+| bad `revision` | a link to the repo's commit list |
+| rate limited | that it clears on its own, and that logging in raises the limit |
+
+`hub.resolve()` returns the commit the download actually resolved to, which is
+what to record when you report a number — `revision="main"` is not a pin.
+
 ## The models
 
 Four networks answering the same question in different ways, all
