@@ -48,6 +48,9 @@ def write_hub_layout(root, *, weights=b"weights", digest=None):
 
 
 def test_every_published_short_name_is_a_registered_architecture() -> None:
+    # The model registry builds torch modules, so this one check cannot run on
+    # the torch-free install — the rest of this file deliberately can.
+    pytest.importorskip("torch")
     from quantik_models.model import registry as model_registry
 
     assert set(hub.PUBLISHED) == set(model_registry.architectures())

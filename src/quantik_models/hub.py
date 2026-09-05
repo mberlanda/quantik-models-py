@@ -211,10 +211,18 @@ def _explain(
     Subclass order matters here: `GatedRepoError` is a `RepositoryNotFound`
     and `LocalEntryNotFoundError` is a `FileNotFoundError`, so the specific
     cases have to be tested before the general ones.
-    """
-    from huggingface_hub import errors as hf
 
+    The Hub's exception classes are imported defensively rather than assumed:
+    a function whose job is to explain a failure must not be able to raise
+    one of its own, and on a torch-free install without the `hub` extra this
+    import is exactly the thing that is missing.
+    """
     url = f"https://huggingface.co/{repo}"
+
+    try:
+        from huggingface_hub import errors as hf
+    except ImportError:  # pragma: no cover - only without the `hub` extra
+        return HubError(f"fetching {repo} from the Hub failed: {exc!r}")
 
     if isinstance(exc, hf.GatedRepoError):
         return HubError(

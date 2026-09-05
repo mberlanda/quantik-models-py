@@ -80,10 +80,25 @@ def test_py_typed_ships_with_the_package(project) -> None:
     )
 
 
+# Training needs torch, and torch is an extra. Every *other* script has to
+# import on the base install: the storeless Docker image and the published
+# wheel both run without it, and a module-scope torch import under `play/`
+# or `hub` would break a deployment while every torch-having test passed.
+SCRIPTS_NEEDING_AN_EXTRA = {"quantik-models-train": "torch"}
+
+
 def test_every_console_script_resolves(project) -> None:
     for name, target in project["scripts"].items():
         module_name, _, attribute = target.partition(":")
-        module = importlib.import_module(module_name)
+        try:
+            module = importlib.import_module(module_name)
+        except ModuleNotFoundError as exc:
+            assert SCRIPTS_NEEDING_AN_EXTRA.get(name) == exc.name, (
+                f"console script {name!r} cannot import {exc.name!r}. Only "
+                f"{', '.join(SCRIPTS_NEEDING_AN_EXTRA)} may need an extra; "
+                "everything else must run on the base install"
+            )
+            continue
         assert callable(getattr(module, attribute, None)), (
             f"console script {name!r} points at {target!r}, which is not a "
             "callable — the script installs fine and fails on first run"
