@@ -51,12 +51,21 @@ IMAGE = re.compile(r"!\[[^\]]*\]\(([A-Za-z0-9._/-]+\.(?:svg|png))\)")
 
 
 
+# The documents at the repository root. These were not checked for most of
+# this project's life, which is backwards: `README.md` is the most-read file
+# here and the likeliest to point at something that has since moved, and it
+# is the one a reader meets before they have any reason to trust the rest.
+ROOT_DOCS = ("README.md", "DEVELOPMENT.md", "AGENTS.md", "CHANGELOG.md")
+
+
 def _markdown_files() -> list[Path]:
-    return sorted(
+    docs = [
         doc
         for doc in DOCS.rglob("*.md")
         if not any(part in doc.relative_to(DOCS).as_posix() for part in ARCHIVAL)
-    )
+    ]
+    docs += [REPO / name for name in ROOT_DOCS if (REPO / name).exists()]
+    return sorted(docs)
 
 
 def test_there_are_docs_to_check() -> None:
@@ -128,3 +137,15 @@ def test_the_skip_rule_does_not_swallow_the_check() -> None:
         f"only {len(checked)} of {len(referenced)} references are being "
         "checked; the skip list has grown too broad"
     )
+
+
+def test_the_root_documents_are_covered() -> None:
+    """Guards the guard, again.
+
+    `README.md` and `DEVELOPMENT.md` reference each other and both reference
+    `docs/`. If a rename ever drops them out of the glob, the checks above go
+    on passing while the two most-read files in the repository stop being
+    checked at all.
+    """
+    checked = {p.name for p in _markdown_files()}
+    assert {"README.md", "DEVELOPMENT.md"} <= checked
