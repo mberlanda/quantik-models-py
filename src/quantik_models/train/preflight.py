@@ -107,7 +107,7 @@ def check_split(corpus: dict[str, np.ndarray], val_fraction: float) -> list[Chec
         ),
         Check(
             "split proportion",
-            abs(actual - val_fraction) < 0.25 * val_fraction,
+            bool(abs(actual - val_fraction) < 0.25 * val_fraction),
             f"{actual:.2%} validation against a requested {val_fraction:.2%}",
         ),
     ]
