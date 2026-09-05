@@ -91,8 +91,23 @@ def from_observations(rows: Iterable[ObservationRow]) -> TrainingDatasetView:
     if not materialized:
         raise ValueError("at least one observation row is required")
 
+    # `ObservationRow.qfen` is optional in the contract, so a row can arrive
+    # without a position. Refuse it by index: the alternative is a TypeError
+    # raised inside the encoder, several frames down, naming neither the row
+    # nor the file it was read from.
+    for index, row in enumerate(materialized):
+        if row.qfen is None:
+            raise ValueError(
+                f"observation row {index} has no qfen; a training view cannot "
+                "be materialized from a row with no position"
+            )
+
     tensors = np.stack(
-        [qfen_to_tensor(row.qfen, row.side_to_move) for row in materialized]
+        [
+            qfen_to_tensor(row.qfen, row.side_to_move)
+            for row in materialized
+            if row.qfen is not None
+        ]
     ).astype(np.float32, copy=False)
     policies = np.stack(
         [_policy_from_dense(row.policy_visits) for row in materialized]
@@ -129,8 +144,23 @@ def from_selfplay(rows: Iterable[SelfPlayRow]) -> TrainingDatasetView:
     if not materialized:
         raise ValueError("at least one selfplay row is required")
 
+    # `ObservationRow.qfen` is optional in the contract, so a row can arrive
+    # without a position. Refuse it by index: the alternative is a TypeError
+    # raised inside the encoder, several frames down, naming neither the row
+    # nor the file it was read from.
+    for index, row in enumerate(materialized):
+        if row.qfen is None:
+            raise ValueError(
+                f"observation row {index} has no qfen; a training view cannot "
+                "be materialized from a row with no position"
+            )
+
     tensors = np.stack(
-        [qfen_to_tensor(row.qfen, row.side_to_move) for row in materialized]
+        [
+            qfen_to_tensor(row.qfen, row.side_to_move)
+            for row in materialized
+            if row.qfen is not None
+        ]
     ).astype(np.float32, copy=False)
     policies = np.stack(
         [policy_visits_to_distribution(row.policy) for row in materialized]

@@ -1,0 +1,135 @@
+name: "Publish to PyPI"
+
+# Releases are cut by publishing a GitHub Release, not by pushing a tag, so
+# that the version being published is something a person deliberately wrote
+# down. See DEVELOPMENT.md, "Cutting a release".
+"on":
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to upload"
+        required: true
+        default: "testpypi"
+        type: choice
+        options: ["testpypi", "pypi"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: "verify the tag matches the package"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install with every optional extra
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,arrow,torch,onnx,serve,hub,viz]" \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: The release tag has to be the version being published
+        # A tag and a version that disagree produce a PyPI release nobody can
+        # find the source for, and the mismatch is invisible until somebody
+        # goes looking. Checked before anything is built.
+        if: github.event_name == 'release'
+        run: |
+          python - <<'PY'
+          import os, sys
+          import quantik_models
+
+          tag = os.environ["TAG"].removeprefix("v")
+          if tag != quantik_models.__version__:
+              sys.exit(
+                  f"release tag {tag!r} does not match "
+                  f"quantik_models.__version__ {quantik_models.__version__!r}"
+              )
+          print(f"tag and version agree: {tag}")
+          PY
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+
+      - name: Run the unit tests
+        run: python -m pytest -q
+
+      - name: Type check
+        run: python -m mypy
+
+  build:
+    name: "build"
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+          python scripts/check_dist.py dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    name: "upload to TestPyPI"
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/quantik-models
+    permissions:
+      # Trusted publishing: PyPI mints a short-lived token from this
+      # workflow's OIDC identity, so no long-lived API token is stored as a
+      # repository secret.
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    name: "upload to PyPI"
+    needs: build
+    if: github.event_name == 'release' || inputs.target == 'pypi'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/quantik-models
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

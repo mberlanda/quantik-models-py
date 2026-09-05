@@ -24,7 +24,7 @@ import json
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import get_args, get_type_hints
+from typing import Any, get_args, get_type_hints
 
 import numpy as np
 import torch
@@ -237,7 +237,9 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
         flush=True,
     )
 
-    def batch_arrays(idx: np.ndarray, augment: bool):
+    def batch_arrays(
+        idx: np.ndarray, augment: bool
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         boards = corpus["boards"][idx]
         policy = unpack(corpus["optimal_mask"][idx])
         if augment:
@@ -299,7 +301,10 @@ def train(config: SupervisedConfig, out_root: Path) -> Path:
                 )
                 per_ply[int(ply)] = [metrics]
 
-        record = {
+        # Heterogeneous by design — scalars, a nested per-ply mapping, and
+        # the timing. Annotated because an inferred union of those makes
+        # every later subscript a type error without any of them being wrong.
+        record: dict[str, Any] = {
             "epoch": epoch,
             "lr": scheduler.get_last_lr()[0],
             "train_policy_loss": train_metrics["policy_loss"],

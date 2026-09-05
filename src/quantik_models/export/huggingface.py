@@ -32,6 +32,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from .. import __version__ as _PACKAGE_VERSION
 from . import cards
 from .digest import file_digest
 
@@ -207,17 +208,38 @@ def _results_table(metrics: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _install_ref(provenance: dict[str, Any] | None) -> str:
-    """A source install pinned to the commit that trained the weights.
+def _short_name(manifest: dict[str, Any]) -> str:
+    """The registry name a caller passes to `hub.load_evaluator`.
 
-    An unpinned `git+https://...` tracks `main`, so a reader following this card
-    a month later gets code the card does not describe. Falls back to the
-    unpinned form only when no commit was recorded — which is itself visible,
-    because the provenance table is then absent from the card.
+    Prefers `architecture_spec.arch`, which records it outright. Falls back
+    to the leading segment of `architecture` (`cpool-c191-b6` -> `cpool`) for
+    checkpoints exported before that field existed.
     """
-    base = "git+https://github.com/mberlanda/quantik-models-py"
+    spec = manifest.get("architecture_spec") or {}
+    arch = spec.get("arch")
+    return arch if arch else str(manifest["architecture"]).split("-", 1)[0]
+
+
+def _install_lines(provenance: dict[str, Any] | None) -> list[str]:
+    """How to install the code that loads these weights.
+
+    The release is the line a reader should normally use, and it is first.
+    The pinned source install stays underneath it because the two answer
+    different questions: "how do I run this model" and "what exact code
+    produced the numbers on this card". An unpinned `git+https://...` answers
+    neither — it tracks `main`, so a reader following this card a month later
+    gets code the card does not describe.
+    """
+    lines = [f"pip install 'quantik-models[torch,hub]>={_PACKAGE_VERSION}'"]
     commit = ((provenance or {}).get("code") or {}).get("commit")
-    return f"quantik-models[torch] @ {base}@{commit}" if commit else f"quantik-models[torch] @ {base}"
+    if commit:
+        base = "git+https://github.com/mberlanda/quantik-models-py"
+        lines += [
+            "",
+            "# Or the exact code that trained these weights:",
+            f"# pip install 'quantik-models[torch,hub] @ {base}@{commit}'",
+        ]
+    return lines
 
 
 def _provenance_section(provenance: dict[str, Any] | None) -> list[str]:
@@ -377,23 +399,33 @@ def _usage_section(
         "`architecture_spec`, and gives you the legality masking for free.",
         "",
         "```bash",
-        "# quantik-models is not on PyPI yet; install it from source.",
-        "# Pinned to the commit that trained these weights — an unpinned install",
-        "# tracks main and will not stay the code this card describes.",
-        f"pip install '{_install_ref(provenance)}'",
-        "pip install huggingface_hub",
+        *_install_lines(provenance),
         "```",
         "",
         "```python",
-        "from huggingface_hub import snapshot_download",
-        "from quantik_models.arena.registry import load_evaluator",
+        "from quantik_models import hub",
         "from quantik_models.env import fastboard as fb",
         "",
-        f'evaluator = load_evaluator(snapshot_download("{repo_id}"), "cpu")',
+        f'evaluator = hub.load_evaluator("{_short_name(manifest)}")',
         "",
         "boards = fb.empty_boards(1)                    # (1, 8) uint16",
-        "policy, value = evaluator.evaluate(boards)     # masking applied",
+        "legal = fb.legal_masks(boards)                 # (1, 64) bool",
+        "policy, value = evaluator(boards, legal)       # masked priors, value",
         "```",
+        "",
+        "`hub.load_evaluator` downloads this repository, checks the weights "
+        "against the digest in `manifest.json`, rebuilds the network from "
+        "`architecture_spec` and applies legality masking. To load a "
+        "directory you already have, pass it to "
+        "`quantik_models.arena.registry.load_evaluator` instead.",
+        "",
+        "The download happens once and is served from the Hugging Face cache "
+        "afterwards, so everything works offline from the second call on. To "
+        "fill that cache first — in a container build, or before losing "
+        "connectivity — run `quantik-models-fetch "
+        f"{_short_name(manifest)}`, which needs neither torch nor "
+        "onnxruntime. Fetch failures are raised as `hub.HubError` with the "
+        "remedy in the message.",
         "",
     ]
     if manifest.get("onnx_export"):

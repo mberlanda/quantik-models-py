@@ -1,19 +1,49 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+# 77 is the floor for PEP 639 metadata: the SPDX `license = "MIT"` string and
+# `license-files` below are both errors on older setuptools, and a build that
+# resolves an older one would either fail or emit a wheel with no licence.
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantik-models"
-version = "0.1.0"
-description = "Training and model tooling for Quantik policy/value checkpoints"
+description = "Policy/value networks, training and evaluation for the Quantik board game"
 readme = "README.md"
 # MIT, matching quantik-core-py and quantik-core-rust. Stated here as well as
 # in LICENSE because the Hugging Face model cards this repo generates publish
 # a `license:` field, and a card asserting a licence the source tree does not
 # carry is worse than a card with none.
+#
+# The *weights* on the Hub are CC-BY-NC-4.0 and are not distributed in this
+# wheel. See docs/models.md; the split is deliberate.
 license = "MIT"
 license-files = ["LICENSE"]
+authors = [
+  { name = "Mauro Berlanda", email = "mauro.berlanda@gmail.com" },
+]
 requires-python = ">=3.12"
+# Single source of truth is `quantik_models.__version__`; setuptools reads it
+# statically, so nothing here imports the package (which would drag in numpy
+# at build time) to learn its own version.
+dynamic = ["version"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  # No `License ::` classifier: PEP 639 supersedes it with the SPDX
+  # expression above, and setuptools>=77 rejects a build that has both.
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Games/Entertainment :: Board Games",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
+keywords = [
+  "quantik", "board-games", "game-ai", "policy-value-network",
+  "reinforcement-learning", "mcts", "alphazero", "onnx", "pytorch",
+]
 dependencies = [
   "numpy>=2.0,<3",
   # The classical engines (`arena.agents`: minimax, MCTS, beam) and the
@@ -25,13 +55,15 @@ dependencies = [
   # to and failed on the first classical move with `ModuleNotFoundError`.
   # 1.2.0 matches the contract version this repo already targets
   # (`export.checkpoint._supported_contract_version`).
-  "quantik-core>=1.2",
+  "quantik-core>=1.2,<2",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8,<10",
   "mypy>=1.8,<3",
+  "build>=1,<2",
+  "twine>=6,<7",
 ]
 arrow = [
   "pyarrow>=16,<22",
@@ -52,10 +84,15 @@ onnx = [
 serve = [
   # Just the runtime, not the exporter: `onnx` and `onnxscript` above exist
   # to *produce* model.onnx and are not needed to run one. This is the
-  # extra the public deployment image installs — see docs/play-service.md
-  # "Reaching it off your LAN" and WORKSTREAMS.md workstream 13. Measured
-  # 2026-08-30: onnxruntime installs at 80 MB against torch's 529 MB.
+  # extra the public deployment image installs — see docs/play-service.md.
+  # Measured 2026-08-30: onnxruntime installs at 80 MB against torch's 529 MB.
   "onnxruntime>=1.18",
+]
+hub = [
+  # Only `quantik_models.hub` needs this, and only when called. Kept out of
+  # the base install so that training, evaluation and the arena — none of
+  # which fetch anything — do not pull a network client.
+  "huggingface-hub>=0.34",
 ]
 viz = [
   # The benchmark figures. Kept out of the default install because nothing
@@ -63,18 +100,57 @@ viz = [
   "matplotlib>=3.8",
 ]
 all = [
-  "quantik-models[dev,arrow,torch,onnx,viz]",
+  # Every extra, including `serve` — which is a subset of `onnx` and so
+  # adds nothing to the resolution, but is listed because "all" that
+  # silently omits an extra is how a developer install drifts from the
+  # configurations CI tests.
+  "quantik-models[dev,arrow,torch,onnx,serve,hub,viz]",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mberlanda/quantik-models-py"
+Repository = "https://github.com/mberlanda/quantik-models-py"
+Documentation = "https://github.com/mberlanda/quantik-models-py#readme"
+Changelog = "https://github.com/mberlanda/quantik-models-py/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/mberlanda/quantik-models-py/issues"
+"Model Weights" = "https://huggingface.co/brpoplpush"
 
 [project.scripts]
 quantik-models-materialize = "quantik_models.data.materialize:main"
 quantik-models-train = "quantik_models.train.trainer:main"
 quantik-models-figures = "quantik_models.report.build_figures:main"
 quantik-models-hf-stage = "quantik_models.export.huggingface:main"
+quantik-models-play = "quantik_models.play.__main__:main"
+quantik-models-fetch = "quantik_models.hub:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "quantik_models.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+quantik_models = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--strict-markers", "--strict-config"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/quantik_models"]
+# The gate this repo actually enforces in CI. Deliberately not
+# `disallow_untyped_defs`: most of this package predates the type checker
+# being wired up, and a flag that fails on 60 files is a flag somebody turns
+# off. These four catch the errors that have actually shipped here — a
+# mistyped return, a None that was never guarded, an unreachable branch
+# after a narrowed type.
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+no_implicit_optional = true
+check_untyped_defs = true
+# torch, onnxruntime, matplotlib and huggingface_hub are all optional extras;
+# in the torch-free CI job they are genuinely absent, and a missing-import
+# error there would mean the type check only runs in the fat configuration.
+ignore_missing_imports = true

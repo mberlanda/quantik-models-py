@@ -1,0 +1,26 @@
+# What ships in the sdist beyond the package itself.
+#
+# The rule: an sdist must be enough to build the wheel *and* verify it. That
+# means the tests and the 80 KB smoke checkpoint they load — shipping
+# `tests/` without `tests/fixtures/` gives a source distribution whose test
+# suite cannot run, which is worse than shipping neither.
+include LICENSE
+include CHANGELOG.md
+include AGENTS.md
+recursive-include tests *.py *.json *.safetensors
+
+# Everything below is deliberately excluded.
+#
+# `runs/` is gitignored and holds every corpus and checkpoint — tens of GB,
+# none of it publishable, and the reason this list is explicit rather than
+# implicit. `docs/` is 664 KB of Markdown and figures that are one link away
+# on GitHub. `docker/staging/` is materialized weights.
+prune runs
+prune docs
+prune docker
+prune experiments
+prune examples
+prune scripts
+prune staging
+global-exclude *.pyc *.npz *.parquet *.jsonl
+global-exclude .DS_Store

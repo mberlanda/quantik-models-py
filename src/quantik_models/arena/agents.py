@@ -40,8 +40,24 @@ class Agent(Protocol):
         ...
 
 
+def _bitboard(board: Board) -> tuple[int, int, int, int, int, int, int, int]:
+    """A `Board` row as the fixed-width tuple `quantik-core` is typed for.
+
+    `Board` is `(8,) uint16` by construction, but a comprehension over it is
+    a `tuple[int, ...]` to a type checker, which is not the same type as the
+    eight-element tuple `State` and `generate_legal_moves_list` accept. The
+    cast is here, once, rather than at each call site.
+    """
+    values = tuple(int(v) for v in board)
+    # The length check is not decoration: it is what narrows `tuple[int, ...]`
+    # to the eight-element tuple, so no cast is needed and a malformed board
+    # fails here rather than inside the Rust extension.
+    assert len(values) == 8, f"a Board is 8 planes wide, got {len(values)}"
+    return values
+
+
 def _state(board: Board) -> State:
-    return State(tuple(int(v) for v in board))
+    return State(_bitboard(board))
 
 
 def _ply(board: Board) -> int:
@@ -178,7 +194,7 @@ class BeamAgent:
         # leaves rather than a single best move.
         ranked = result.ranked_root_moves(top_k=1)
         move = ranked[0].move if ranked else generate_legal_moves_list(
-            tuple(int(v) for v in board)
+            _bitboard(board)
         )[0]
         return move.shape * 16 + move.position
 

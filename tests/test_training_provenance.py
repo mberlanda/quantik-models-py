@@ -99,14 +99,22 @@ def test_hardware_records_the_resolved_device_not_the_request() -> None:
 
 
 def test_card_pins_the_install_to_the_commit_that_trained_the_weights() -> None:
+    from quantik_models import __version__
     from quantik_models.export import huggingface as hf
 
-    pinned = hf._install_ref({"code": {"commit": "a" * 40}})
-    assert pinned.endswith("@" + "a" * 40)
-    # Without a commit it degrades to the unpinned form rather than emitting a
-    # broken ref — and the card's provenance table is then absent, which is the
-    # visible signal that nothing was recorded.
-    assert hf._install_ref(None).endswith("quantik-models-py")
+    pinned = "\n".join(hf._install_lines({"code": {"commit": "a" * 40}}))
+    # The release is what a reader runs; the commit is what reproduces the
+    # numbers. Both, in that order.
+    assert f"quantik-models[torch,hub]>={__version__}" in pinned
+    assert "@" + "a" * 40 in pinned
+
+    # Without a commit the pinned line is *omitted* rather than degraded to an
+    # unpinned `git+https://...`, which would track main and stop describing
+    # the card the first time main moved. The card's provenance table is then
+    # absent too, which is the visible signal that nothing was recorded.
+    unpinned = "\n".join(hf._install_lines(None))
+    assert f"quantik-models[torch,hub]>={__version__}" in unpinned
+    assert "git+https" not in unpinned
 
 
 def test_card_flags_a_dirty_tree_rather_than_quoting_the_commit_plainly() -> None:

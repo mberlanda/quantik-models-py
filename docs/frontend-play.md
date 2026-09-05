@@ -1,18 +1,5 @@
 # Frontend Play And Autoplay Integration
 
-> **About the numbers in this document.** Every measurement here comes from
-> a specific run of a specific checkpoint, and the checkpoints live under
-> `runs/`, which is gitignored — so nothing here can be verified from a
-> fresh clone alone. Two things are worth checking before trusting a figure:
-> **which learning rate it was measured at**, and **when**. Anything dated
-> before 2026-08-30 was measured at `--lr 2e-3`, a rate chosen for the
-> ResNet and inherited by every architecture added later; two of the four
-> were being trained at the wrong one, and correcting that reversed several
-> conclusions rather than merely shifting decimals. See
-> `learning-rate-sweep.md`. Regenerate everything with
-> `scripts/evaluate_lineup.sh`.
-
-
 The frontend should reuse the same engine/artifact boundaries as model training.
 Human play, CPU play, and autoplay should all flow through the core rules and
 engine APIs rather than duplicating game logic in the UI.

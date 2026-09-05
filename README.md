@@ -1,177 +1,123 @@
-# quantik-models-py
+# quantik-models
 
-`quantik-models-py` owns Quantik model training, dataset materialization,
-autoplay experiments, checkpoint export, and evaluation. It consumes
-`quantik-core-py`, `quantik-core-rust`, and `quantik-core-contracts`; it does
-not replace them.
+[![PyPI](https://img.shields.io/pypi/v/quantik-models.svg)](https://pypi.org/project/quantik-models/)
+[![Python](https://img.shields.io/pypi/pyversions/quantik-models.svg)](https://pypi.org/project/quantik-models/)
+[![License](https://img.shields.io/pypi/l/quantik-models.svg)](LICENSE)
 
-Core libraries stay small and stable:
+Policy/value networks for **Quantik**, and the training, evaluation and play
+tooling behind them. Four architectures, parameter-matched, trained on
+positions labelled by an exact solver — and four sets of weights published on
+the Hugging Face Hub.
 
-- `quantik-core-contracts`: artifact IDs, schemas, docs, validators.
-- `quantik-core-rust`: search, opening-book generation, observations, H2H,
-  self-play producers.
-- `quantik-core-py`: artifact readers, QFEN/bitboard/action helpers, tensor
-  encoders, checkpoint manifest validation.
-- `quantik-models-py`: training views, model architecture, training loops,
-  exported checkpoints, calibration reports.
-
-## Clone The Workspace
-
-Choose any parent directory for the Quantik repositories:
+Quantik is a 4×4 board game with a group-wise placement rule: you may not
+place a shape in a row, column or 2×2 zone where your *opponent* already has
+that shape, and you win by completing a line of four different shapes in
+either colour. It is small enough to solve exactly, which is what makes it a
+useful place to ask whether an architectural prior is worth having — the
+ground truth is available to check the answer against.
 
 ```bash
-export QUANTIK_NS="$HOME/Code/quantik-ns"
-mkdir -p "$QUANTIK_NS"
-cd "$QUANTIK_NS"
-
-git clone https://github.com/mberlanda/quantik-core-contracts.git
-git clone https://github.com/mberlanda/quantik-core-rust.git
-git clone https://github.com/mberlanda/quantik-core-py.git
-git clone https://github.com/mberlanda/quantik-models-py.git
+pip install 'quantik-models[torch,hub]'
 ```
 
-## Setup
+```python
+from quantik_models import hub
+from quantik_models.env import fastboard as fb
+
+evaluator = hub.load_evaluator("cpool")     # downloads and verifies the weights
+
+boards = fb.empty_boards(1)              # (1, 8) uint16
+legal = fb.legal_masks(boards)           # (1, 64) bool
+policy, value = evaluator(boards, legal) # masked priors, value in [-1, 1]
+```
+
+Working *on* this package rather than with it: **[DEVELOPMENT.md](DEVELOPMENT.md)**.
+
+## Install
+
+| you want | install |
+|---|---|
+| the published models, on torch | `pip install 'quantik-models[torch,hub]'` |
+| the published models, no torch | `pip install 'quantik-models[serve,hub]'` |
+| to train your own | `pip install 'quantik-models[torch,onnx]'` |
+| the library only | `pip install quantik-models` |
+
+The base install is `numpy` and `quantik-core` and nothing else. torch is a
+529 MB dependency and onnxruntime is 80 MB; neither is imposed on someone who
+does not need it. The full table is in
+[DEVELOPMENT.md](DEVELOPMENT.md#environment).
+
+Python 3.12+.
+
+## Getting the weights
+
+The weights are not in the wheel. They are ~7 MB each, they carry a different
+licence from the code, and they version independently of it — so
+`load_evaluator` fetches them from the Hub on first use and reads them from
+the Hugging Face cache (`$HF_HOME`, default `~/.cache/huggingface`) every time
+after. **One network call, once per model, and never again.**
+
+To fill that cache ahead of time — a container build, a machine that is about
+to go offline, an air-gapped copy — use the fetch command. It needs neither
+torch nor onnxruntime, so it runs before either is installed:
 
 ```bash
-export QUANTIK_NS="${QUANTIK_NS:-$HOME/Code/quantik-ns}"
-export CONTRACTS="$QUANTIK_NS/quantik-core-contracts"
-export RUST="$QUANTIK_NS/quantik-core-rust"
-export CORE_PY="$QUANTIK_NS/quantik-core-py"
-export MODELS="$QUANTIK_NS/quantik-models-py"
-
-cd "$MODELS"
-test -d .venv || python -m venv .venv
-.venv/bin/python -m pip install -e "${CORE_PY}[arrow]"
-.venv/bin/python -m pip install -e ".[dev,arrow]"
+quantik-models-fetch --all          # or: quantik-models-fetch cpool attn
 ```
 
-## Smoke Pipeline
+Once a model is cached, everything works with no network at all.
 
-```bash
-cd "$MODELS"
-scripts/run_smoke_pipeline.sh
-```
+Nothing else needs special attention. Every way this can fail raises
+`hub.HubError` with the remedy in the message rather than a traceback through
+`huggingface_hub`:
 
-The script validates contracts, asks Rust to build a depth-6 opening book,
-generates positions, observations, H2H rows, and MCTS self-play rows, converts
-contract rows to Parquet where supported, and materializes `.npz` training
-views.
+| what went wrong | what you get |
+|---|---|
+| offline, model already cached | it just works — the cache is used |
+| offline, nothing cached | the cache path, and the `quantik-models-fetch` line to run while online |
+| truncated download | re-fetched once automatically; a second failure names the cache to clear |
+| typo in the model name | the four names that do exist |
+| bad `revision` | a link to the repo's commit list |
+| rate limited | that it clears on its own, and that logging in raises the limit |
 
-## CI Data Pipeline
+`hub.resolve()` returns the commit the download actually resolved to, which is
+what to record when you report a number — `revision="main"` is not a pin.
 
-`.github/workflows/e2e-data-pipeline.yml` runs a tiny version of the same flow
-on GitHub Actions. It checks out contracts, Rust core, Python core, and this
-repository; generates a small book/dataset/observation/H2H/self-play corpus;
-materializes training views; verifies the output arrays; and uploads the smoke
-artifacts.
+## The models
 
-## Materialize A Training View
-
-From observations:
-
-```bash
-quantik-models-materialize \
-  --observations-jsonl /path/to/observations-v1.jsonl \
-  --output-npz /path/to/training-view-observations.npz
-```
-
-From self-play:
-
-```bash
-quantik-models-materialize \
-  --selfplay-jsonl /path/to/selfplay-v1.jsonl \
-  --output-npz /path/to/training-view-selfplay.npz
-```
-
-## Models
-
-Four architectures, all answering the same question in a different way and
-all interchangeable because they agree on one contract:
+Four networks answering the same question in different ways, all
+interchangeable because they agree on one contract:
 
     input   (B, 9, 4, 4) float32      tensor-board.v1, mover-relative
     output  (B, 64) policy logits     action_index = shape * 16 + position
             (B,)    value in [-1, 1]  +1 = good for the side to move
 
-Legality masking is applied **outside** every model, by `masked_log_softmax`,
-using the same code path in training and at inference — so no engine here can
-return an illegal move.
+**Legality masking is applied outside every model**, using the same code path
+in training and at inference — so no engine here can return an illegal move.
 
-> **Current results, 2026-08-30.** `--preset medium`, ~1.79M parameters each,
-> matched within 1.2%. `cpool` and `attn` at `--lr 6e-4`; `resnet` and `mlp`
-> at `2e-3`. Those rates are swept, not inherited — see
-> [`docs/learning-rate-sweep.md`](docs/learning-rate-sweep.md).
->
-> | model | IID top-1 | shift, plies 4-6 | shift, plies 7-12 | arena @ply3 | vs `minimax-d2` |
-> |---|---|---|---|---|---|
-> | `cpool-c191-b6` | **0.9893** | **0.9295** | **0.9919** | **57.2%** | **49.4%** |
-> | `attn-d192-b6` | 0.9879 | 0.9102 | 0.9914 | 54.2% | 43.1% |
-> | `resnet-c128-b6` | 0.9701 | 0.9126 | 0.9720 | 47.8% | 36.5% |
-> | `mlp-h455-b4` | 0.9516 | 0.8843 | 0.9578 | 40.8% | 31.9% |
->
-> Four numbers, because they disagree: validation on the trained
-> distribution, accuracy on solved positions the corpus never saw
-> ([`docs/shift-evaluation.md`](docs/shift-evaluation.md)), games against the
-> other networks ([`docs/autoplay.md`](docs/autoplay.md)), and games against a
-> fixed classical opponent
-> ([`docs/oracle-benchmark.md`](docs/oracle-benchmark.md)) — the only column
-> whose floor does not move with the field. `cpool` playing raw policy, one
-> forward pass a move, is even with a two-ply alpha-beta search; the other
-> three lose to it. Which architectures were declined
-> and why is in
-> [`docs/decisions/0001-architecture-lineup.md`](docs/decisions/0001-architecture-lineup.md).
+| model | Hub repository | IID top-1 | vs `minimax-d2` |
+|---|---|---|---|
+| **`cpool`** | [`quantik-cpool-c191-b6`](https://huggingface.co/brpoplpush/quantik-cpool-c191-b6) | **0.9893** | **49.4%** |
+| `attn` | [`quantik-attn-d192-b6`](https://huggingface.co/brpoplpush/quantik-attn-d192-b6) | 0.9879 | 43.1% |
+| `resnet` | [`quantik-resnet-c128-b6`](https://huggingface.co/brpoplpush/quantik-resnet-c128-b6) | 0.9701 | 36.5% |
+| `mlp` | [`quantik-mlp-h455-b4`](https://huggingface.co/brpoplpush/quantik-mlp-h455-b4) | 0.9516 | 31.9% |
 
-![Validation top-1 per epoch for all six runs](docs/figures/training-curves.svg)
+`minimax-d2` is a fixed two-ply alpha-beta search — the only opponent whose
+strength does not move with the field, and so the only column that answers
+"is any of this good" rather than "which of these is better". `cpool` playing
+raw policy, one forward pass per move, is even with it. **Full numbers, the
+four measurements that disagree, and what not to conclude from them:
+[`docs/models.md`](docs/models.md).**
 
-The dashed lines are the same two architectures trained at `2e-3`, the rate
-the ResNet was tuned for and everything added later inherited. `attn` did
-not learn at all at that rate; `cpool` converged perfectly well, to a lower
-place. A single-rate run cannot tell either of those apart from "this
-architecture is worse". Every figure, and what each one does and does not
-establish: [`docs/benchmarks.md`](docs/benchmarks.md).
-
-### `resnet` — the incumbent
-
-Convolutional residual trunk. 99.2% of its parameters are the trunk; both
-heads together are 3,655.
-
-```mermaid
-flowchart LR
-  IN["board<br/>(B,9,4,4)"] --> STEM["stem<br/>Conv3x3 9→C · BN · ReLU"]
-  STEM --> TRUNK["trunk<br/>B × residual block<br/>Conv3x3 · BN · ReLU · Conv3x3 · BN · +skip"]
-  TRUNK --> PH["policy head<br/>Conv1x1 C→2 · flatten · Linear 32→64"]
-  TRUNK --> VH["value head<br/>Conv1x1 C→1 · flatten · Linear · tanh"]
-  PH --> POL["policy logits (B,64)"]
-  VH --> VAL["value (B,)"]
-```
-
-Design: [`docs/architecture-resnet.md`](docs/architecture-resnet.md) ·
-Training: [`docs/policy-value-training-paper.md`](docs/policy-value-training-paper.md)
-
-### `mlp` — the control
-
-Throws spatial structure away entirely: 144 flat features through dense
-residual blocks. It exists to make "convolution is worth having on a 4x4
-board" falsifiable rather than assumed. It loses, so the spatial prior is
-real.
-
-```mermaid
-flowchart LR
-  IN["board<br/>(B,9,4,4)"] --> FL["flatten → 144"]
-  FL --> STEM["Linear 144→H · BN · ReLU"]
-  STEM --> TRUNK["trunk<br/>B × dense residual block<br/>Linear · BN · ReLU · Linear · BN · +skip"]
-  TRUNK --> PH["policy head<br/>Linear H→64"]
-  TRUNK --> VH["value head<br/>Linear H→64 · ReLU · Linear→1 · tanh"]
-  PH --> POL["policy logits (B,64)"]
-  VH --> VAL["value (B,)"]
-```
-
-Design: [`docs/architecture-mlp.md`](docs/architecture-mlp.md)
+> **The weights are CC BY-NC 4.0; this package is MIT.** A commercial
+> application may use the pipeline, the rules engine and the evaluation
+> harness freely, and may not ship these weights. Train your own and they
+> are yours.
 
 ### `cpool` — the constraint model
 
-Quantik's rule is group-wise, not spatial: a shape may not go where the
-opponent already has that shape in the same row, column or 2x2 zone. Twelve
-overlapping groups, every cell in exactly three. Each block pools the sixteen
+Quantik's rule is group-wise, not spatial: twelve overlapping groups (4 rows,
+4 columns, 4 zones), every cell in exactly three. Each block pools the sixteen
 cell tokens into those groups, transforms them there, and scatters back.
 
 ```mermaid
@@ -192,93 +138,105 @@ flowchart LR
   VH --> VAL["value (B,)"]
 ```
 
-Design: [`docs/architecture-constraint-pool.md`](docs/architecture-constraint-pool.md)
+[`docs/architecture-constraint-pool.md`](docs/architecture-constraint-pool.md)
 
 ### `attn` — the same bet without the prior
 
-Transformer encoder over the sixteen cells. It is told *nothing* about rows,
-columns or zones and has to discover them, which is what makes it the test of
-whether `cpool`'s explicit wiring was necessary. On policy accuracy it ties;
-on the value head it does not.
+Transformer encoder over the sixteen cells, told *nothing* about rows,
+columns or zones. It is the test of whether `cpool`'s explicit wiring was
+necessary: on policy accuracy it ties, on the value head it does not.
 
-```mermaid
-flowchart LR
-  IN["board<br/>(B,9,4,4)"] --> TOK["16 cell tokens<br/>Linear 9→D + learned position"]
-  TOK --> BLK
-  subgraph BLK["pre-norm encoder block × B"]
-    direction LR
-    N1["LayerNorm"] --> MHA["multi-head self-attention"]
-    MHA --> R1["+ residual"]
-    R1 --> N2["LayerNorm"] --> FF["FFN"] --> R2["+ residual"]
-  end
-  BLK --> PH["policy head<br/>Linear D→4 per cell<br/>transpose → 64"]
-  BLK --> VH["value head<br/>mean over cells · MLP · tanh"]
-  PH --> POL["policy logits (B,64)"]
-  VH --> VAL["value (B,)"]
-```
-
-Design: [`docs/architectures.md`](docs/architectures.md) ·
-Why it first appeared to fail:
+[`docs/architectures.md`](docs/architectures.md) ·
 [`docs/attention-negative-result.md`](docs/attention-negative-result.md)
 
-### Working with them
+### `resnet` — the incumbent
 
-    # what is registered, and at what rate
-    python -c "from quantik_models.model import registry; \
-      print([(a, registry.default_lr(a)) for a in registry.architectures()])"
+Convolutional residual trunk, and the architecture every hyperparameter here
+was originally chosen for. 99.2% of its parameters are the trunk.
 
-    # check the assumptions before a long run (~1 min/arch)
-    python -m quantik_models.train.preflight --preset medium --epochs 16
+[`docs/architecture-resnet.md`](docs/architecture-resnet.md)
 
-    # train to a fixed budget, as every published run did
-    python -m quantik_models.train.supervised --arch cpool --preset medium \
-      --corpus runs/oracle/corpus/exact-sampled.npz --name my-run --epochs 16
+### `mlp` — the control
 
-    # or train to convergence: --epochs becomes a cap, --patience the rule
-    python -m quantik_models.train.supervised --arch attn --preset medium \
-      --corpus runs/oracle/corpus/exact-sampled.npz --name my-run \
-      --epochs 60 --patience 5
+Throws spatial structure away entirely: 144 flat features through dense
+residual blocks. It exists to make "convolution is worth having on a 4×4
+board" falsifiable rather than assumed. It loses, so the spatial prior is
+real.
 
-    # regenerate every published number
-    scripts/evaluate_lineup.sh runs/eval/today cpool=runs/train/my-run/best
+[`docs/architecture-mlp.md`](docs/architecture-mlp.md)
 
-    # stage the family for the Hugging Face Hub (writes files; uploads nothing)
-    scripts/stage_hub_repos.sh staging \
-      runs/train/swept-cpool/best runs/train/swept-attn/best \
-      runs/train/lineup-resnet/best runs/train/lineup-mlp/best
+![Validation top-1 per epoch](docs/figures/training-curves.svg)
 
-**Twenty-two documents live in [`docs/`](docs/). Start with
-[`docs/README.md`](docs/README.md)** — it gives the reading order, says which
-numbers are superseded and why the old ones are kept, and names the two
-documents to read if you want to know how much to trust the rest.
+The dashed lines are two architectures trained at `2e-3`, the rate the ResNet
+was tuned for and everything added later inherited by silence. `attn` did not
+learn at all at that rate; `cpool` converged perfectly well, to a lower place.
+A single-rate comparison cannot tell either of those apart from "this
+architecture is worse" — which is how three published conclusions here turned
+out to be hyperparameter artifacts.
+[`docs/learning-rate-sweep.md`](docs/learning-rate-sweep.md).
 
-Retraining and fine-tuning, including freezing part of a network:
-[`docs/retrain-and-finetune.md`](docs/retrain-and-finetune.md). What a model
-repository needs, and what the Hub treats as structural rather than
-decorative: [`docs/publishing-to-hugging-face.md`](docs/publishing-to-hugging-face.md).
+## Playing against them
 
-## Training and checkpoint export
+The play service serves the board and the models on one port, and records
+finished games:
 
-Install the training extra and train the smoke preset on materialized
-views:
+```bash
+pip install 'quantik-models[serve,hub]'
+quantik-models-play --models staging
+```
 
-    pip install -e ".[dev,torch]"
-    quantik-models-train \
-      --npz outputs/smoke/training-view-observations.npz \
-      --npz outputs/smoke/training-view-selfplay.npz \
-      --preset smoke --epochs 5 --out-dir outputs/checkpoint
+It prints a LAN address to open on a phone. `--no-store` opens no database,
+which is the configuration the public container runs.
+[`docs/play-service.md`](docs/play-service.md).
 
-This exports `weights.safetensors`, `training-report.json`, and a
-`model-checkpoint.v1` `manifest.json` (validated against
-quantik-core-py in tests). See `examples/train_smoke.sh` for the full
-end-to-end demo, `examples/inspect_checkpoint.py` to poke at a
-checkpoint, and `docs/scaling-guide.md` for the smoke -> small ->
-target path. The design/tradeoff discussion lives in
-`docs/policy-value-training-paper.md`.
+## Training your own
 
-See `docs/architectures.md` for the model contract, the architecture
-registry, and how checkpoints are exported (safetensors plus ONNX).
+```bash
+pip install 'quantik-models[torch,onnx]'
+```
 
-See `docs/model-report.md`, `docs/pipeline.md`, `docs/tensor-structure.md`,
-`docs/labeling-strategy.md`, `docs/autoplay-training.md`, and
-`docs/frontend-play.md`.
+```bash
+# check the assumptions before a long run (~1 min/arch)
+python -m quantik_models.train.preflight --preset medium --epochs 16
+
+# train to convergence: --epochs is the cap, --patience the rule
+python -m quantik_models.train.supervised --arch cpool --preset medium \
+  --corpus runs/oracle/corpus/exact-sampled.npz --name my-run \
+  --epochs 60 --patience 5
+
+# regenerate every published number for it
+scripts/evaluate_lineup.sh runs/eval/today cpool=runs/train/my-run/best
+
+# stage it as a Hugging Face model repository (writes files; uploads nothing)
+quantik-models-hf-stage runs/train/my-run/best staging/my-model
+```
+
+Training writes `weights.safetensors`, `model.onnx`, a
+`model-checkpoint.v1` `manifest.json` and a training report. Corpora, the
+label strategy and the retrain/fine-tune path — including freezing part of a
+network — are in [`docs/`](docs/README.md).
+
+## Documentation
+
+[`docs/README.md`](docs/README.md) is the reading order. The four to start
+with:
+
+| | |
+|---|---|
+| [`docs/models.md`](docs/models.md) | the published models: how to load one, what the numbers mean, what not to conclude |
+| [`docs/decisions/0001-architecture-lineup.md`](docs/decisions/0001-architecture-lineup.md) | which architectures were trained, which six were declined, and the methodology |
+| [`docs/benchmarks.md`](docs/benchmarks.md) | the figures, and what each does and does not establish |
+| [`docs/oracle-benchmark.md`](docs/oracle-benchmark.md) | the field against a fixed classical engine |
+
+## Related
+
+- [`quantik-core`](https://pypi.org/project/quantik-core/) — the rules
+  engine, QFEN, bitboards and the exact solver. Also on
+  [crates.io](https://crates.io/crates/quantik-core).
+- [The models on the Hub](https://huggingface.co/brpoplpush) — weights,
+  ONNX graphs and model cards.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The published **weights** are CC BY-NC 4.0 and
+are not distributed with this package.
