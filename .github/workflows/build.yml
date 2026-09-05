@@ -112,16 +112,19 @@ jobs:
           PY
 
       - name: Console scripts have to run without any extra
-        # Four of the five must work on the base install. `quantik-models-play`
+        # Five of the six must work on the base install. `quantik-models-play`
         # is the one that matters most: the storeless Docker image installs
         # `[serve]` and no torch, so a module-scope torch import anywhere under
         # `play/` breaks a published deployment and nothing else would notice.
+        # `quantik-models-fetch` matters for the same reason in reverse: it is
+        # what fills a cache during an image build, before torch exists.
         # `quantik-models-train` is excluded because training genuinely needs
         # the torch extra.
         shell: bash
         run: |
           for script in quantik-models-materialize quantik-models-figures \
-                        quantik-models-hf-stage quantik-models-play; do
+                        quantik-models-hf-stage quantik-models-play \
+                        quantik-models-fetch; do
             "$script" --help > /dev/null || { echo "FAILED: $script"; exit 1; }
             echo "ok $script"
           done
@@ -131,3 +134,28 @@ jobs:
         run: |
           python -m pip install "$(ls dist/*.whl)[hub]"
           python -c "import huggingface_hub; print('hub extra ok')"
+
+      - name: A cold cache with no network fails with the fix, not a traceback
+        # The worst case the fetch path has to handle gracefully. HF_HUB_OFFLINE
+        # with an empty HF_HOME is exactly "no network, nothing cached", and it
+        # is reproducible in CI where a real outage is not.
+        shell: bash
+        env:
+          HF_HUB_OFFLINE: "1"
+        run: |
+          python - <<'PY'
+          import tempfile
+          from quantik_models import hub
+
+          with tempfile.TemporaryDirectory() as empty:
+              try:
+                  hub.resolve("cpool", cache_dir=empty)
+              except hub.HubError as exc:
+                  message = str(exc)
+              else:
+                  raise SystemExit("offline resolve unexpectedly succeeded")
+
+          assert "quantik-models-fetch cpool" in message, message
+          assert empty in message, message
+          print("offline failure is actionable:", message)
+          PY

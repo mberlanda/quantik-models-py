@@ -121,6 +121,7 @@ quantik-models-train = "quantik_models.train.trainer:main"
 quantik-models-figures = "quantik_models.report.build_figures:main"
 quantik-models-hf-stage = "quantik_models.export.huggingface:main"
 quantik-models-play = "quantik_models.play.__main__:main"
+quantik-models-fetch = "quantik_models.hub:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "quantik_models.__version__" }

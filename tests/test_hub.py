@@ -203,8 +203,14 @@ def test_load_evaluator_verifies_before_it_loads(tmp_path, monkeypatch) -> None:
     # whatever torch says when it is handed half a tensor file.
     d = write_hub_layout(tmp_path, digest="sha256:0000")
     monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(d))
-    with pytest.raises(ValueError, match="digest"):
+    loaded = []
+    monkeypatch.setattr(
+        "quantik_models.arena.registry.load_evaluator",
+        lambda *a, **kw: loaded.append(a),
+    )
+    with pytest.raises(hub.HubError, match="digest"):
         hub.load_evaluator("cpool")
+    assert loaded == []
 
 
 def test_the_missing_extra_is_named_in_the_import_error(monkeypatch) -> None:
@@ -235,3 +241,270 @@ def test_hub_imports_without_torch() -> None:
         "assert h.repo_id('cpool').endswith('quantik-cpool-c191-b6')"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+# --- what a failed fetch tells the caller --------------------------------
+#
+# Every one of these was a traceback through `huggingface_hub` before. The
+# exceptions were already precise; what they were not is actionable to
+# someone who called `load_evaluator("cpool")` and has never heard of a
+# snapshot. The assertions are on the *remedy* appearing in the message,
+# because that is the part a reader acts on.
+
+
+def _hf_errors():
+    pytest.importorskip("huggingface_hub")
+    from huggingface_hub import errors
+
+    return errors
+
+
+class _Response:
+    """Enough of a response for the Hub's HTTP errors to construct.
+
+    They want a real `httpx.Response` (a `requests.Response` in older
+    versions) purely to read a couple of headers. Building one for a test
+    about *message text* would tie these assertions to whichever HTTP client
+    huggingface_hub happens to vendor this month.
+    """
+
+    status_code = 404
+    headers: dict[str, str] = {}
+    text = ""
+    request = None
+    url = "https://huggingface.co/"
+
+
+def _http(cls, message):
+    try:
+        return cls(message, response=_Response())
+    except TypeError:  # pragma: no cover - older huggingface_hub
+        return cls(message)
+
+
+def _explained(exc, *, name="cpool", revision="main", cache_dir=None):
+    return str(
+        hub._explain(
+            exc,
+            name=name,
+            repo=hub.repo_id(name),
+            revision=revision,
+            cache_dir=cache_dir,
+        )
+    )
+
+
+def test_being_offline_with_a_cold_cache_names_the_cache_and_the_fix() -> None:
+    errors = _hf_errors()
+    message = _explained(errors.LocalEntryNotFoundError("no internet"), cache_dir="/c")
+    # The worst case: no network, nothing cached. Nothing can rescue the call,
+    # so the message has to carry the whole recovery — where the files would
+    # have gone, and the command that puts them there while online.
+    assert "/c" in message
+    assert "quantik-models-fetch cpool" in message
+
+
+def test_a_gated_repo_says_accept_the_terms_not_repository_not_found() -> None:
+    errors = _hf_errors()
+    # GatedRepoError subclasses RepositoryNotFoundError, so a naive isinstance
+    # ladder reports a licence gate as a missing repo and sends the reader
+    # looking for a typo.
+    message = _explained(_http(errors.GatedRepoError, "gated"))
+    assert "Accept its terms" in message
+    assert "hf auth login" in message
+
+
+def test_a_missing_repo_lists_the_names_that_do_exist() -> None:
+    errors = _hf_errors()
+    message = _explained(_http(errors.RepositoryNotFoundError, "404"), name="brpoplpush/typo")
+    assert "https://huggingface.co/brpoplpush/typo" in message
+    for known in hub.PUBLISHED:
+        assert known in message
+
+
+def test_a_bad_revision_is_not_reported_as_a_bad_repo() -> None:
+    errors = _hf_errors()
+    message = _explained(_http(errors.RevisionNotFoundError, "404"), revision="v9")
+    assert "'v9'" in message
+    assert "commit sha" in message
+
+
+def test_a_rate_limit_says_it_clears_on_its_own() -> None:
+    errors = _hf_errors()
+    message = _explained(_http(errors.HfHubHTTPError, "429 Too Many Requests"))
+    assert "rate limit" in message
+
+
+def test_an_unrecognised_failure_still_blames_the_hub_not_quantik() -> None:
+    message = _explained(OSError("connection reset by peer"))
+    assert "connection reset by peer" in message
+    assert "from the Hub failed" in message
+
+
+def test_resolve_reraises_as_hub_error_keeping_the_original_cause(monkeypatch) -> None:
+    errors = _hf_errors()
+    original = errors.LocalEntryNotFoundError("offline")
+
+    def boom(**_kwargs):
+        raise original
+
+    monkeypatch.setattr(hub, "_snapshot_download", boom)
+    with pytest.raises(hub.HubError) as excinfo:
+        hub.resolve("cpool")
+    # One catchable type for callers, without throwing away what actually
+    # happened — a `hf` user can still branch on `__cause__`.
+    assert excinfo.value.__cause__ is original
+
+
+def test_the_missing_extra_survives_the_translation(monkeypatch) -> None:
+    # ImportError is the one failure that must *not* become a HubError: it is
+    # a packaging problem, and `pip install 'quantik-models[hub]'` is not a
+    # sentence about the Hub being unreachable.
+    def missing(**_kwargs):
+        raise ImportError("pip install 'quantik-models[hub]'")
+
+    monkeypatch.setattr(hub, "_snapshot_download", missing)
+    with pytest.raises(ImportError, match=r"quantik-models\[hub\]"):
+        hub.resolve("cpool")
+
+
+# --- knowing which weights you got ---------------------------------------
+
+
+def test_resolve_reports_the_commit_main_pointed_at(tmp_path, monkeypatch) -> None:
+    sha = "a" * 40
+    snapshot = tmp_path / "snapshots" / sha
+    snapshot.mkdir(parents=True)
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+    resolved = hub.resolve("cpool")
+    # `revision="main"` is unreportable on its own — main moves. The commit
+    # read back off the cache path is what a caller pins to reproduce a run.
+    assert resolved.revision == "main"
+    assert resolved.commit == sha
+
+
+def test_a_path_without_a_sha_reports_no_commit_rather_than_a_guess(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(tmp_path))
+    assert hub.resolve("cpool").commit is None
+
+
+# --- prefetch ------------------------------------------------------------
+
+
+def test_prefetch_defaults_to_the_whole_family(tmp_path, monkeypatch) -> None:
+    asked = []
+    monkeypatch.setattr(
+        hub,
+        "_snapshot_download",
+        lambda **kw: asked.append(kw["repo_id"]) or str(tmp_path),
+    )
+    hub.prefetch()
+    assert asked == [m.repo for m in hub.PUBLISHED.values()]
+
+
+def test_the_fetch_cli_prints_the_commit_and_exits_zero(tmp_path, monkeypatch, capsys):
+    sha = "b" * 40
+    snapshot = tmp_path / "snapshots" / sha
+    snapshot.mkdir(parents=True)
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+    assert hub.main(["cpool"]) == 0
+    assert sha in capsys.readouterr().out
+
+
+def test_the_fetch_cli_reports_a_failure_as_a_message_not_a_traceback(
+    monkeypatch, capsys
+) -> None:
+    def boom(*_args, **_kwargs):
+        raise hub.HubError("cannot reach the Hugging Face Hub")
+
+    monkeypatch.setattr(hub, "resolve", boom)
+    assert hub.main(["--all"]) == 1
+    out = capsys.readouterr().out
+    assert out.startswith("error: ")
+    assert "Traceback" not in out
+
+
+def test_the_fetch_cli_refuses_to_guess_what_to_download() -> None:
+    with pytest.raises(SystemExit):
+        hub.main([])
+
+
+# --- the artifact a runtime will actually open ---------------------------
+
+
+def test_a_missing_onnx_graph_is_named_before_onnxruntime_sees_it(tmp_path) -> None:
+    d = write_hub_layout(tmp_path)  # safetensors only
+    hub.artifact_path(d, runtime="torch")
+    with pytest.raises(FileNotFoundError, match="model.onnx"):
+        hub.artifact_path(d, runtime="onnx")
+
+
+def test_the_torch_artifact_names_match_the_registry_loader() -> None:
+    # Two lists of the same filenames, in two modules that cannot import each
+    # other at module scope (registry pulls in torch; hub must not). This is
+    # the test that keeps them from drifting.
+    assert hub._ARTIFACTS["torch"] == registry._WEIGHT_FILENAMES
+
+
+def test_a_directory_with_no_manifest_says_so(tmp_path) -> None:
+    d = tmp_path / "half"
+    d.mkdir()
+    (d / "model.safetensors").write_bytes(b"w")
+    with pytest.raises(FileNotFoundError, match="manifest.json"):
+        hub.verify(d)
+
+
+def test_load_skips_the_digest_but_never_the_existence_check(
+    tmp_path, monkeypatch
+) -> None:
+    d = write_hub_layout(tmp_path)  # no model.onnx
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(d))
+    with pytest.raises(FileNotFoundError, match="model.onnx"):
+        hub.load_evaluator("cpool", runtime="onnx", check_digest=False)
+
+
+# --- self-healing a truncated download -----------------------------------
+
+
+def test_a_bad_digest_is_refetched_once_before_it_is_raised(
+    tmp_path, monkeypatch
+) -> None:
+    from quantik_models.export.digest import file_digest
+
+    good = write_hub_layout(tmp_path / "good", weights=b"whole weights")
+    manifest = json.loads((good / "manifest.json").read_text())
+    manifest["weights_hash"] = file_digest(good / "model.safetensors")
+    (good / "manifest.json").write_text(json.dumps(manifest))
+    truncated = write_hub_layout(tmp_path / "bad", weights=b"whole")
+    (truncated / "manifest.json").write_text(json.dumps(manifest))
+
+    calls = []
+
+    def download(**kw):
+        calls.append(kw["force_download"])
+        return str(good if kw["force_download"] else truncated)
+
+    monkeypatch.setattr(hub, "_snapshot_download", download)
+    monkeypatch.setattr(
+        hub, "load_evaluator", hub.load_evaluator
+    )  # keep the real one explicit
+    loaded = {}
+    monkeypatch.setattr(
+        "quantik_models.arena.registry.load_evaluator",
+        lambda path, device="cpu", batch_size=4096: loaded.setdefault("path", path),
+    )
+    hub.load_evaluator("cpool")
+    # A half-written cache entry fails identically forever otherwise, and the
+    # remedy — delete a directory under HF_HOME — is not discoverable from a
+    # safetensors parse error.
+    assert calls == [False, True]
+    assert loaded["path"] == good
+
+
+def test_a_digest_that_survives_a_refetch_is_a_hard_error(tmp_path, monkeypatch):
+    d = write_hub_layout(tmp_path, digest="sha256:0000")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(d))
+    with pytest.raises(hub.HubError, match="forced re-download"):
+        hub.load_evaluator("cpool")
