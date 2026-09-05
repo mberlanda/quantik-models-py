@@ -1,0 +1,133 @@
+name: "Build"
+
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "build sdist + wheel"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Build
+        run: python -m build
+
+      - name: Check the metadata renders
+        run: python -m twine check dist/*
+
+      - name: Check what is actually in the artifacts
+        # `twine check` validates metadata and says nothing about the
+        # payload. The payload is where the irreversible mistakes are: an
+        # sdist that picked up `runs/` uploads gigabytes of differently
+        # licensed weights to PyPI, and PyPI never lets a filename be
+        # replaced.
+        run: python scripts/check_dist.py dist/
+
+      - name: Upload the artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  install:
+    name: "install from wheel (${{ matrix.os }}, py${{ matrix.python-version }})"
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download the wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install the wheel, and only the wheel
+        # Deliberately no checkout and no extras. This is the configuration a
+        # user gets from `pip install quantik-models`, and it is the one that
+        # broke last time: `quantik_core` was imported at module scope by the
+        # classical engines and never declared, which every local venv here
+        # hid by having it installed editable from a sibling checkout. A
+        # clean install failed on the first move.
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "$(ls dist/*.whl)"
+
+      - name: The base install has to work on its own
+        shell: bash
+        run: |
+          python - <<'PY'
+          import quantik_models
+          from quantik_models import hub
+          from quantik_models.arena import registry
+          from quantik_models.env import fastboard as fb
+
+          print("version", quantik_models.__version__)
+
+          # The four published models must resolve without a network call.
+          assert set(hub.PUBLISHED) == {"cpool", "attn", "resnet", "mlp"}
+          assert hub.repo_id("cpool") == "brpoplpush/quantik-cpool-c191-b6"
+
+          # The rules engine is a *declared* dependency, so the classical
+          # agents must import and a legality mask must be computable with
+          # no extras installed at all.
+          boards = fb.empty_boards(1)
+          assert fb.legal_masks(boards).shape == (1, 64)
+
+          # Typed package, not an untyped one that happens to have hints.
+          from importlib.resources import files
+          assert files("quantik_models").joinpath("py.typed").is_file()
+          print("base install ok")
+          PY
+
+      - name: Console scripts have to run without any extra
+        # Four of the five must work on the base install. `quantik-models-play`
+        # is the one that matters most: the storeless Docker image installs
+        # `[serve]` and no torch, so a module-scope torch import anywhere under
+        # `play/` breaks a published deployment and nothing else would notice.
+        # `quantik-models-train` is excluded because training genuinely needs
+        # the torch extra.
+        shell: bash
+        run: |
+          for script in quantik-models-materialize quantik-models-figures \
+                        quantik-models-hf-stage quantik-models-play; do
+            "$script" --help > /dev/null || { echo "FAILED: $script"; exit 1; }
+            echo "ok $script"
+          done
+
+      - name: The hub extra resolves and imports
+        shell: bash
+        run: |
+          python -m pip install "$(ls dist/*.whl)[hub]"
+          python -c "import huggingface_hub; print('hub extra ok')"

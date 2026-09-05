@@ -38,7 +38,7 @@ jobs:
           # repo's green to another repo's in-flight work, which is the
           # circular wait that stalled the 1.2.0 release for six weeks.
           pip install "quantik-core>=1.2,<2"
-          pip install -e ".[dev,arrow,torch,onnx,viz]" \
+          pip install -e ".[dev,arrow,torch,onnx,serve,hub,viz]" \
             --extra-index-url https://download.pytorch.org/whl/cpu
 
       - name: Assert every optional dependency is importable
@@ -51,7 +51,7 @@ jobs:
           import importlib
           for name in (
               "torch", "safetensors", "onnx", "onnxscript", "onnxruntime",
-              "pyarrow", "matplotlib",
+              "pyarrow", "matplotlib", "huggingface_hub",
               "quantik_core.artifact_data", "quantik_core.contracts",
           ):
               importlib.import_module(name)
@@ -91,3 +91,32 @@ jobs:
           if missing:
               sys.exit("every extra is installed; nothing should skip on an import")
           PY
+
+  mypy:
+    name: "mypy"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install with every optional extra
+        # The type check needs the extras present: with them absent every
+        # optional import falls back to `Any` and the check passes by
+        # knowing nothing. `ignore_missing_imports` in pyproject.toml is
+        # there for the *torch-free* job, not for this one.
+        run: |
+          python -m pip install --upgrade pip
+          pip install "quantik-core>=1.2,<2"
+          pip install -e ".[dev,arrow,torch,onnx,serve,hub,viz]" \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+
+      - name: Type check
+        # A gate, not advice. See AGENTS.md: this was declared in `[dev]` and
+        # wired into nothing for months, which is the same as not having it.
+        run: python -m mypy
