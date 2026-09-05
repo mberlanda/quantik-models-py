@@ -22,9 +22,44 @@ from .agents import (
 
 _CACHE: dict[str, Any] = {}
 
+# A checkpoint directory names its weights one of two ways, and both are
+# canonical somewhere:
+#
+# * `weights.safetensors` is what `export.checkpoint` writes and what every
+#   `runs/train/*/best` on disk holds.
+# * `model.safetensors` is what `export.huggingface.stage` renames it to,
+#   because the Hub's viewers and half its tooling look for that name.
+#
+# Resolving both is not leniency for its own sake: the four published model
+# cards tell a reader to `load_evaluator(snapshot_download(repo_id))`, and a
+# downloaded Hub repo is the *second* layout. Accepting only the first made
+# that snippet raise `FileNotFoundError` on every published model.
+_WEIGHT_FILENAMES = ("weights.safetensors", "model.safetensors")
+
+
+def weights_path(checkpoint: str | Path) -> Path:
+    """The safetensors file inside a checkpoint directory.
+
+    Raises `FileNotFoundError` naming both candidates, because "no such file
+    or directory: .../weights.safetensors" sends a reader looking for a file
+    that was never supposed to be there.
+    """
+    path = Path(checkpoint)
+    for filename in _WEIGHT_FILENAMES:
+        candidate = path / filename
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(
+        f"no safetensors weights in {path}: expected one of "
+        f"{', '.join(_WEIGHT_FILENAMES)}"
+    )
+
 
 def load_evaluator(checkpoint: str | Path, device: str = "cpu", batch_size: int = 4096):
     """Load a `model-checkpoint.v1` directory into a `NetEvaluator` (cached).
+
+    Accepts both a local `runs/train/*/best` directory and the path returned
+    by `huggingface_hub.snapshot_download` for a published Quantik model.
 
     Workers replay the same spec for every game, so caching keeps the weights
     off the critical path after the first call in each process.
@@ -44,7 +79,7 @@ def load_evaluator(checkpoint: str | Path, device: str = "cpu", batch_size: int 
 
     manifest = json.loads((path / "manifest.json").read_text())
     model = _model_from_manifest(manifest, model_registry)
-    model.load_state_dict(load_file(str(path / "weights.safetensors")))
+    model.load_state_dict(load_file(str(weights_path(path))))
     resolved = torch.device(device)
     evaluator = NetEvaluator(model, resolved, batch_size=batch_size)
     _CACHE[key] = evaluator
