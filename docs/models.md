@@ -28,14 +28,22 @@ from quantik_models.env import fastboard as fb
 
 evaluator = hub.load_evaluator("cpool")
 
-boards = fb.empty_boards(1)                 # (1, 8) uint16
-policy, value = evaluator.evaluate(boards)  # (1, 64) and (1,)
+boards = fb.empty_boards(1)               # (1, 8) uint16
+legal = fb.legal_masks(boards)            # (1, 64) bool
+policy, value = evaluator(boards, legal)  # (1, 64) priors, (1,) value
 ```
 
-`load_evaluator` downloads the repository, verifies the weights against the
-`weights_hash` in `manifest.json`, rebuilds the network from
-`architecture_spec` and applies legality masking. It caches, so calling it
-again in the same process costs nothing.
+An evaluator is **callable**, and the legality mask is an argument rather
+than something it works out for itself — the rules live in `quantik-core`,
+and a caller running a search already has the mask. The priors it returns
+are masked with it: probability on an illegal action is exactly zero, and
+the legal entries sum to one.
+
+`load_evaluator` downloads the repository, verifies the artifact the chosen
+runtime will actually load against the matching digest in `manifest.json`
+(`weights_hash` for safetensors, `onnx_hash` for the graph), and rebuilds
+the network from `architecture_spec`. It caches, so calling it again in the
+same process costs nothing.
 
 **Without torch**, using the ONNX graph every repository ships:
 

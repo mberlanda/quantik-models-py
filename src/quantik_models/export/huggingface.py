@@ -409,7 +409,8 @@ def _usage_section(
         f'evaluator = hub.load_evaluator("{_short_name(manifest)}")',
         "",
         "boards = fb.empty_boards(1)                    # (1, 8) uint16",
-        "policy, value = evaluator.evaluate(boards)     # masking applied",
+        "legal = fb.legal_masks(boards)                 # (1, 64) bool",
+        "policy, value = evaluator(boards, legal)       # masked priors, value",
         "```",
         "",
         "`hub.load_evaluator` downloads this repository, checks the weights "

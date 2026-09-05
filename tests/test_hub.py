@@ -163,10 +163,39 @@ def test_resolve_defaults_to_main(tmp_path, monkeypatch) -> None:
     assert seen["revision"] == "main"
 
 
-def test_load_evaluator_rejects_an_unknown_runtime(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(tmp_path))
+def test_load_evaluator_rejects_an_unknown_runtime_before_downloading(
+    tmp_path, monkeypatch
+) -> None:
+    # Refused before the download, not after: a typo should not cost 7 MB and
+    # a Hub round trip to report.
+    called = []
+    monkeypatch.setattr(
+        hub, "_snapshot_download", lambda **kw: called.append(kw) or str(tmp_path)
+    )
     with pytest.raises(ValueError, match="unknown runtime"):
         hub.load_evaluator("cpool", runtime="tensorflow")
+    assert called == []
+
+
+def test_verify_checks_the_artifact_the_runtime_will_load(tmp_path) -> None:
+    """`weights_hash` covers model.safetensors, `onnx_hash` covers model.onnx.
+
+    Checking the one the caller is not about to load is a check that cannot
+    fail usefully — which is what the ONNX path had before: no check at all.
+    """
+    from quantik_models.export.digest import file_digest
+
+    d = write_hub_layout(tmp_path)
+    (d / "model.onnx").write_bytes(b"graph")
+
+    manifest = json.loads((d / "manifest.json").read_text())
+    manifest["weights_hash"] = file_digest(d / "model.safetensors")
+    manifest["onnx_hash"] = "sha256:wrong"
+    (d / "manifest.json").write_text(json.dumps(manifest))
+
+    hub.verify(d, runtime="torch")  # the safetensors digest is right
+    with pytest.raises(ValueError, match="model.onnx"):
+        hub.verify(d, runtime="onnx")
 
 
 def test_load_evaluator_verifies_before_it_loads(tmp_path, monkeypatch) -> None:

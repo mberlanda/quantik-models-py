@@ -28,9 +28,10 @@ as a library rather than as this workspace's training directory.
 
   Short names resolve through a table of the published repo ids rather than
   a Hub query, a full `owner/repo` passes through unresolved so a fork needs
-  no code change, and the downloaded weights are checked against the
-  `weights_hash` in `manifest.json` before they are loaded. The module is
-  importable without torch.
+  no code change, and the downloaded artifact is checked against the digest
+  in `manifest.json` for the runtime that will load it — `weights_hash` for
+  safetensors, `onnx_hash` for the graph. The module is importable without
+  torch.
 - **`hub` extra** (`pip install 'quantik-models[hub]'`) carrying
   `huggingface-hub`. Kept out of the base install because nothing in
   training, evaluation or the arena fetches anything.
@@ -58,6 +59,14 @@ as a library rather than as this workspace's training directory.
   with no licence, or failed outright.
 - **The generated model cards told readers `quantik-models` was not on PyPI**
   and to install from a git ref. They now name the release.
+- **The card's Python snippet called a method that does not exist.**
+  `evaluator.evaluate(boards)` is wrong twice over — an evaluator is
+  callable, and the legality mask is a required argument with no default —
+  so a reader following the card got an `AttributeError` on the one line the
+  card exists to provide. Both live snippets were verified against a real
+  download from the Hub before this release, and
+  `tests/test_documented_snippets.py` now executes the documented call and
+  fails if `Evaluator.__call__` and the documents disagree.
 
 ### Changed
 

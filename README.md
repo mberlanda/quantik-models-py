@@ -26,8 +26,9 @@ from quantik_models.env import fastboard as fb
 
 evaluator = hub.load_evaluator("cpool")     # downloads and verifies the weights
 
-boards = fb.empty_boards(1)                 # (1, 8) uint16
-policy, value = evaluator.evaluate(boards)  # (1, 64) logits, (1,) value
+boards = fb.empty_boards(1)              # (1, 8) uint16
+legal = fb.legal_masks(boards)           # (1, 64) bool
+policy, value = evaluator(boards, legal) # masked priors, value in [-1, 1]
 ```
 
 Working *on* this package rather than with it: **[DEVELOPMENT.md](DEVELOPMENT.md)**.

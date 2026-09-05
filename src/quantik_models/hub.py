@@ -185,10 +185,15 @@ def resolve(
     return Resolved(path=Path(path), repo=target, revision=revision)
 
 
-def verify(checkpoint: str | Path) -> None:
-    """Check the weights against the digest the manifest carries.
+def verify(checkpoint: str | Path, *, runtime: str = "torch") -> None:
+    """Check the artifact a runtime will load against the manifest's digest.
 
-    Raises `ValueError` naming both digests. This is the same check
+    `runtime` selects *which* artifact, and that is the whole point: a
+    checkpoint carries `weights_hash` for `model.safetensors` and
+    `onnx_hash` for `model.onnx`, and checking the one the caller is not
+    about to load is a check that cannot fail usefully.
+
+    Raises `ValueError` naming both digests. This is the same comparison
     `export.huggingface.verify_staged` runs before a directory is published
     and the play service runs before it serves a move; running it after a
     download closes the loop at the other end.
@@ -200,15 +205,22 @@ def verify(checkpoint: str | Path) -> None:
 
     path = Path(checkpoint)
     manifest = json.loads((path / "manifest.json").read_text())
-    expected = manifest.get("weights_hash")
+
+    if runtime == "onnx":
+        target, expected = path / "model.onnx", manifest.get("onnx_hash")
+    else:
+        target, expected = weights_path(path), manifest.get("weights_hash")
+
+    # Older manifests predate these fields. Refusing them would make the
+    # loader stricter than the checkpoints it has to be able to read.
     if expected is None:
         return
-    actual = file_digest(weights_path(path))
+    actual = file_digest(target)
     if actual != expected:
         raise ValueError(
-            f"weights in {path} digest {actual}, but manifest.json claims "
-            f"{expected} — the download is incomplete or the files are mixed "
-            "from two revisions"
+            f"{target.name} in {path} digests {actual}, but manifest.json "
+            f"claims {expected} — the download is incomplete or the files "
+            "are mixed from two revisions"
         )
 
 
@@ -236,11 +248,12 @@ def load_evaluator(
     from .arena.registry import load_evaluator as _load_local
     from .arena.registry import load_onnx_evaluator as _load_onnx
 
+    if runtime not in ("torch", "onnx"):
+        raise ValueError(f"unknown runtime {runtime!r}: expected 'torch' or 'onnx'")
+
     resolved = resolve(name, revision=revision, cache_dir=cache_dir)
-    if check_digest and runtime == "torch":
-        verify(resolved.path)
+    if check_digest:
+        verify(resolved.path, runtime=runtime)
     if runtime == "onnx":
         return _load_onnx(resolved.path, batch_size=batch_size)
-    if runtime == "torch":
-        return _load_local(resolved.path, device=device, batch_size=batch_size)
-    raise ValueError(f"unknown runtime {runtime!r}: expected 'torch' or 'onnx'")
+    return _load_local(resolved.path, device=device, batch_size=batch_size)
