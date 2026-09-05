@@ -96,15 +96,49 @@ def test_the_card_front_matter_carries_the_metadata_the_hub_indexes():
     assert "  - cpool" in head
 
 
-def test_the_card_does_not_tell_the_reader_to_pip_install_something_unpublished():
-    """`quantik-models` is not on PyPI. A card whose first step is a 404 is
-    the worst kind of wrong here — it fails for the reader, not for us."""
-    card = hf.model_card(MANIFEST)
-    assert "pip install quantik-models" not in card
-    assert "git+https://github.com/mberlanda/quantik-models-py" in card
+def test_the_card_installs_from_the_release_and_pins_the_source_underneath():
+    """The install line a reader runs must be the published package.
+
+    Both halves matter and they answer different questions: the release is
+    how you run the model, the pinned commit is what produced the numbers on
+    the card. The unpinned `git+https://...` form is neither — it tracks
+    `main` and stops describing the card the first time main moves.
+    """
+    from quantik_models import __version__
+
+    card = hf.model_card(MANIFEST, provenance={"code": {"commit": "abc1234"}})
+    assert f"pip install 'quantik-models[torch,hub]>={__version__}'" in card
+    assert "@abc1234" in card
     # `quantik-core` *is* published, on both registries.
     assert "pip install quantik-core" in card
     assert "cargo add quantik-core" in card
+
+
+def test_the_card_snippet_loads_the_directory_this_module_stages(tmp_path):
+    """The card's Python snippet, checked against the layout `stage` writes.
+
+    This is the regression that shipped: the card said
+    `load_evaluator(snapshot_download(repo_id))`, `stage` renames
+    `weights.safetensors` to `model.safetensors`, and the loader only read
+    the first name — so the primary snippet on all four published cards
+    raised `FileNotFoundError`. Asserting the prose and the staged bytes
+    separately is what let that through; this ties them together.
+    """
+    from quantik_models.arena.registry import weights_path
+
+    checkpoint = write_checkpoint(tmp_path)
+    out = tmp_path / "staged"
+    hf.stage(checkpoint, out)
+
+    card = (out / "README.md").read_text()
+    assert 'hub.load_evaluator("cpool")' in card
+    assert "from quantik_models import hub" in card
+
+    # The name the card's call resolves to, and the file it will look for.
+    from quantik_models import hub
+
+    assert hub.repo_id("cpool") == hf.repo_id_for(MANIFEST["architecture"])
+    assert weights_path(out).name == "model.safetensors"
 
 
 def test_the_card_says_the_mask_is_the_callers_job():
