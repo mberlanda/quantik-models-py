@@ -9,6 +9,20 @@ What counts as a breaking change here is written down in
 
 ## Unreleased
 
+### Fixed
+
+- `env.fastboard`'s D4 spatial-symmetry index (`spatial` in
+  `random_symmetries`/`transform_boards`/`transform_actions`) now uses the
+  same `d4_index` ordering (id, rot90, rot180, rot270, reflV, reflH, reflD,
+  reflAD) as `quantik_core.symmetry.D4Index` and
+  `quantik-core-contracts/docs/symmetry-transposition.md`, instead of numpy
+  `rot90`/`fliplr` composition's own order (which swapped rot90/rot270 and
+  reflH/reflD relative to the contract). No stored artifact is affected — `spatial`
+  values are drawn fresh per augmentation call and never persisted — but
+  `spatial * 24 + shape` is now literally QW-001's `transform_index`, cross-
+  checked directly against `quantik_core.SymmetryHandler.remap_action_index`
+  in `tests/test_fastboard.py`.
+
 ## 1.0.0 - 2026-09-05
 
 First release on PyPI. The package has been usable from a checkout for

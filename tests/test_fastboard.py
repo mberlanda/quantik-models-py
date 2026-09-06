@@ -17,6 +17,7 @@ from quantik_core.game_utils import has_winning_line as core_has_winning_line
 from quantik_core.ml_data import qfen_to_tensor
 from quantik_core.move import apply_move, generate_legal_moves_list
 from quantik_core.qfen import bb_to_qfen
+from quantik_core.symmetry import SymmetryHandler
 
 from quantik_models.env import fastboard as fb
 
@@ -234,6 +235,88 @@ def test_square_channel_view_round_trips(sym_batch):
         rebuilt[:, channel] = (bits * fb.SQUARE_BITS[None, :]).sum(axis=1).astype(np.uint16)
     assert np.array_equal(rebuilt, sym_batch)
     assert np.all(squares <= 8)
+
+
+def test_spatial_perms_match_core_d4_mappings():
+    """`spatial` here must be the same `d4_index` QW-001's
+    `transform_index = d4_index * 24 + shape_perm_index` uses -- not just
+    some other valid enumeration of the same 8 geometric transforms. This
+    failed before the fix: numpy's `rot90`/`fliplr` composition enumerates
+    the group in a different order (rot90/rot270 and reflH/reflD swapped)
+    than `quantik_core.symmetry.D4Index`.
+
+    `D4_MAPPINGS` and `permute16` both predate QW-001 and are already in the
+    published `quantik-core`, so this test (unlike the two below) needs no
+    version guard."""
+    SymmetryHandler.permute16(0, 0)  # force lazy D4_MAPPINGS init
+    for d in range(8):
+        assert fb.SPATIAL_PERMS[d].tolist() == SymmetryHandler.D4_MAPPINGS[d]
+
+
+def test_shape_perms_match_core_all_shape_perms():
+    for i, perm in enumerate(fb.SHAPE_PERMS.tolist()):
+        assert tuple(perm) == SymmetryHandler.ALL_SHAPE_PERMS[i]
+
+
+_HAS_CORE_REMAP = hasattr(SymmetryHandler, "remap_action_index")
+_SKIP_UNTIL_CORE_RELEASES_REMAP = pytest.mark.skipif(
+    not _HAS_CORE_REMAP,
+    reason=(
+        "requires a quantik-core release containing SymmetryHandler."
+        "remap_action_index/inverse_transform_index (QW-001; merged to "
+        "quantik-core-py main, not yet published as of this test). Not a "
+        "missing-extra skip: quantik-core is this package's required base "
+        "dependency, and DEVELOPMENT.md's tests.yml runs against the "
+        "published release by design, so this repo's CI must not depend on "
+        "another repo's in-flight, unreleased state."
+    ),
+)
+
+
+@_SKIP_UNTIL_CORE_RELEASES_REMAP
+def test_transform_actions_matches_core_remap_action_index():
+    """The load-bearing cross-check: `fb.transform_actions` (batched) and
+    `quantik_core.SymmetryHandler.remap_action_index` (scalar) must agree
+    for every one of the 192 transforms and 64 action indices. This is what
+    makes the batched re-expression in this module a re-expression of the
+    QW-001 action-index.v1 transform contract, rather than a parallel
+    192-element scheme that happens to have the same size."""
+    actions = np.arange(fb.ACTION_COUNT, dtype=np.int64)
+    n_shape_perms = len(fb.SHAPE_PERMS)
+    for d4_index in range(8):
+        for shape_index in range(n_shape_perms):
+            spatial = np.full(fb.ACTION_COUNT, d4_index, dtype=np.int64)
+            shape = np.full(fb.ACTION_COUNT, shape_index, dtype=np.int64)
+            got = fb.transform_actions(actions, spatial, shape)
+            t_index = int(fb.transform_index(np.int64(d4_index), np.int64(shape_index)))
+            expected = np.array(
+                [SymmetryHandler.remap_action_index(int(a), t_index) for a in actions]
+            )
+            assert np.array_equal(got, expected), f"d4_index={d4_index} shape_index={shape_index}"
+
+
+@_SKIP_UNTIL_CORE_RELEASES_REMAP
+def test_transform_round_trips_through_core_inverse(sym_batch):
+    """Applying a transform and then the inverse `quantik_core.
+    SymmetryHandler.inverse_transform_index` reports for it must recover the
+    original boards and actions -- an end-to-end round trip through the
+    shared contract, not just this module's own machinery agreeing with
+    itself."""
+    rng = np.random.default_rng(9)
+    n = sym_batch.shape[0]
+    spatial, shape = fb.random_symmetries(n, rng)
+    t_index = fb.transform_index(spatial, shape)
+    inverse_index = np.array([SymmetryHandler.inverse_transform_index(int(t)) for t in t_index])
+    inv_spatial, inv_shape = np.divmod(inverse_index, len(fb.SHAPE_PERMS))
+
+    moved = fb.transform_boards(sym_batch, spatial, shape)
+    restored = fb.transform_boards(moved, inv_spatial, inv_shape)
+    assert np.array_equal(restored, sym_batch)
+
+    actions = rng.integers(0, fb.ACTION_COUNT, size=n)
+    moved_actions = fb.transform_actions(actions, spatial, shape)
+    restored_actions = fb.transform_actions(moved_actions, inv_spatial, inv_shape)
+    assert np.array_equal(restored_actions, actions)
 
 
 def test_canonical_key_equals_the_explicit_192_way_minimum(sym_batch):

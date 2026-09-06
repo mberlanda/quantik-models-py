@@ -261,22 +261,57 @@ class BatchBoard:
 # Not every D4 element preserves the 2x2 zone partition on its own, but all
 # eight do here: the zone grid is symmetric under the full dihedral group of
 # the square, and rows/columns map to rows/columns.
+#
+# QW-001 (quantik-core-contracts' docs/symmetry-transposition.md) names this
+# exact group and gives it a portable index:
+# `transform_index = d4_index * 24 + shape_perm_index`. `spatial` below *is*
+# `d4_index` in that contract, not a locally-invented numbering that happens
+# to also run 0..7 — `_spatial_permutations()` builds each element from the
+# same per-cell formula as `quantik_core.symmetry.D4Index` (id, rot90,
+# rot180, rot270, reflV, reflH, reflD, reflAD) and `SHAPE_PERMS` below
+# enumerates shape permutations in the same order `quantik_core`'s
+# `ALL_SHAPE_PERMS` does (both from `itertools.permutations`, which is
+# lexicographic by construction). `test_fastboard.py`'s
+# `test_spatial_perms_match_core_d4_mappings`,
+# `test_shape_perms_match_core_all_shape_perms`, and
+# `test_transform_actions_matches_core_remap_action_index` hold this
+# equivalence, and `transform_index()` below is how a caller crosses into
+# `quantik_core.SymmetryHandler.remap_action_index`/`inverse_transform_index`
+# without duplicating the encoding by hand. What genuinely does not exist in
+# `quantik_core` — and is the actual, deliberate re-expression this module
+# adds rather than an accidental duplicate of the same logic — is a
+# *batched* transform: `remap_action_index` takes one action and one
+# transform at a time, while self-play needs hundreds of boards augmented
+# per step, which is what `transform_boards`/`transform_actions`/
+# `transform_policies` are for.
 
 _IDENTITY = np.arange(SQUARES, dtype=np.int64)
 
 
 def _spatial_permutations() -> npt.NDArray[np.int64]:
-    """`(8, 16)` — `perm[d, src] = dst` for each dihedral element."""
-    grid = _IDENTITY.reshape(BOARD_SIZE, BOARD_SIZE)
-    variants = []
-    for flip in (False, True):
-        base = np.fliplr(grid) if flip else grid
-        for turns in range(4):
-            variants.append(np.rot90(base, turns))
+    """`(8, 16)` — `perm[d, src] = dst` for each of the 8 D4 elements, `d`
+    being the same `d4_index` `quantik_core.symmetry.D4Index` and
+    `transform_index = d4_index * 24 + shape_perm_index` use — see the
+    module note above."""
+    r = _IDENTITY // BOARD_SIZE
+    c = _IDENTITY % BOARD_SIZE
+    # One row per D4Index member, in that exact order: id, rot90, rot180,
+    # rot270, reflV, reflH, reflD, reflAD. Each `(new_row, new_col)` is the
+    # same per-cell formula quantik-core-rust's D4_MAPS and quantik-core-py's
+    # SymmetryHandler.D4 use.
+    formulas = (
+        (r, c),
+        (c, 3 - r),
+        (3 - r, 3 - c),
+        (3 - c, r),
+        (r, 3 - c),
+        (3 - r, c),
+        (c, r),
+        (3 - c, 3 - r),
+    )
     perms = np.zeros((8, SQUARES), dtype=np.int64)
-    for d, variant in enumerate(variants):
-        # variant[dst] names the source square that lands on dst.
-        perms[d, variant.reshape(-1)] = _IDENTITY
+    for d, (new_row, new_col) in enumerate(formulas):
+        perms[d] = new_row * BOARD_SIZE + new_col
     return perms
 
 
@@ -301,6 +336,23 @@ from itertools import permutations as _permutations  # noqa: E402
 
 SHAPE_PERMS = np.array(list(_permutations(range(SHAPES))), dtype=np.int64)  # (24, 4)
 SYMMETRY_COUNT = 8 * len(SHAPE_PERMS)
+
+
+def transform_index(
+    spatial: npt.NDArray[np.int64], shape: npt.NDArray[np.int64]
+) -> npt.NDArray[np.int64]:
+    """The QW-001 `action-index.v1` `transform_index = d4_index * 24 +
+    shape_perm_index` for a `(spatial, shape)` pair.
+
+    `spatial` already *is* `d4_index` here (see the module note above
+    `_spatial_permutations`), so this is a plain combinator, not a
+    translation between two different numberings. Use it when crossing into
+    `quantik_core.SymmetryHandler.remap_action_index`/
+    `inverse_transform_index` — e.g. to look up the inverse of a batch of
+    augmentation draws from `random_symmetries` — rather than hardcoding
+    `len(SHAPE_PERMS) == 24` at the call site.
+    """
+    return spatial * len(SHAPE_PERMS) + shape
 
 
 def transform_boards(
