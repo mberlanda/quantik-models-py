@@ -8,6 +8,7 @@ include LICENSE
 include CHANGELOG.md
 include AGENTS.md
 recursive-include tests *.py *.json *.safetensors
+recursive-include src/quantik_models/play/app *
 
 # Everything below is deliberately excluded.
 #

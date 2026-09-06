@@ -129,6 +129,67 @@ jobs:
             echo "ok $script"
           done
 
+      - name: Serve the vendored app and API on a free port
+        shell: bash
+        run: |
+          python - <<'PY'
+          import http.client
+          import json
+          import socket
+          import subprocess
+          import sys
+          import time
+
+          # Pick a free port
+          with socket.socket() as s:
+              s.bind(("", 0))
+              port = s.getsockname()[1]
+
+          srv = subprocess.Popen(
+              [sys.executable, "-m", "quantik_models.play",
+               "--port", str(port), "--no-store"],
+              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+          )
+          try:
+              # Wait for the server to start listening
+              for _ in range(30):
+                  time.sleep(0.2)
+                  try:
+                      socket.create_connection(("127.0.0.1", port), timeout=0.5)
+                      break
+                  except OSError:
+                      continue
+              else:
+                  out, err = srv.communicate(timeout=3)
+                  raise SystemExit(f"server did not start:\n{err.decode()}")
+
+              # Fetch / — should return the vendored app (HTML)
+              conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+              conn.request("GET", "/")
+              resp = conn.getresponse()
+              body = resp.read().decode()
+              assert resp.status == 200, f"GET / returned {resp.status}"
+              assert "text/html" in resp.getheader("Content-Type", "")
+              assert "Quantik" in body
+              print("GET / ok — HTML app served")
+
+              # Fetch /api — should return JSON
+              conn.request("GET", "/api")
+              resp = conn.getresponse()
+              payload = json.loads(resp.read().decode())
+              assert resp.status == 200, f"GET /api returned {resp.status}"
+              assert isinstance(payload, dict)
+              print("GET /api ok — json:", list(payload.keys()))
+              conn.close()
+          finally:
+              srv.terminate()
+              try:
+                  srv.wait(timeout=5)
+              except subprocess.TimeoutExpired:
+                  srv.kill()
+                  srv.wait()
+          PY
+
       - name: The hub extra resolves and imports
         shell: bash
         run: |

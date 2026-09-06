@@ -8,6 +8,7 @@ survive a `runs/` cleanup.
 from __future__ import annotations
 
 import argparse
+import importlib.resources
 import sys
 from pathlib import Path
 
@@ -21,11 +22,13 @@ from .service import PlayService
 # replayed — and `runs/` is gitignored and routinely deleted wholesale.
 DEFAULT_DB = Path.home() / ".local" / "share" / "quantik" / "games.db"
 
-# The visualizer, if it is checked out beside this repo. A sibling default
-# rather than a required flag: that layout is what `quantik-ns` is. The
-# repository root, not `src/` — `index.html` lives at the top and pulls
-# `src/*.js`, so serving `src/` would serve the scripts and no page.
-DEFAULT_STATIC = Path(__file__).resolve().parents[4] / "quantik-qfen-visualizer"
+# Vendored browser app inside the package. `importlib.resources.files` works
+# whether the package is installed, editable, or running from a source tree.
+# The Traversable is an AnchoredPath in the editable/installed cases, so
+# `str()` yields the real filesystem path that the HTTP server expects.
+DEFAULT_STATIC = Path(
+    str(importlib.resources.files("quantik_models.play").joinpath("app"))
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--static",
         type=Path,
         default=DEFAULT_STATIC,
-        help="directory to serve the browser app from",
+        help="directory to serve the browser app from (use this to point at a "
+        "live quantik-qfen-visualizer checkout while working on it)",
     )
     parser.add_argument("--host", default="0.0.0.0", help="bind address (default: every interface)")
     parser.add_argument("--port", type=int, default=8000)

@@ -27,7 +27,11 @@ FORBIDDEN_PREFIXES = ("runs/", "staging/", "docker/staging/", ".venv/", ".git/")
 FORBIDDEN_SUFFIXES = (".npz", ".parquet", ".jsonl", ".onnx", ".pyc")
 
 # Present in the wheel or the package is not what it claims to be.
-REQUIRED_IN_WHEEL = ("quantik_models/py.typed", "quantik_models/hub.py")
+REQUIRED_IN_WHEEL = (
+    "quantik_models/py.typed",
+    "quantik_models/hub.py",
+    "quantik_models/play/app/index.html",
+)
 
 # Present in the sdist or its test suite cannot run.
 REQUIRED_IN_SDIST = (
@@ -35,6 +39,7 @@ REQUIRED_IN_SDIST = (
     "tests/fixtures/checkpoints/smoke-best/weights.safetensors",
     "CHANGELOG.md",
     "LICENSE",
+    "src/quantik_models/play/app/index.html",
 )
 
 
