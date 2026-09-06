@@ -159,9 +159,20 @@ jobs:
                   except OSError:
                       continue
               else:
-                  out, err = srv.communicate(timeout=3)
-                  raise SystemExit(f"server did not start:\n{err.decode()}")
-
+                  # Server didn't start quickly enough - get any error output that might help debug 
+                  try:
+                      # Use a shorter timeout to avoid hanging, but still allow some time for output
+                      out, err = srv.communicate(timeout=1)
+                      raise SystemExit(f"server did not start:\n{err.decode()}")
+                  except subprocess.TimeoutExpired:
+                      # If we can't get the output in 1 second just kill and error
+                      try:
+                          srv.kill()
+                          srv.wait(timeout=1)
+                      except:
+                          pass
+                      raise SystemExit("server did not start within timeout period")
+  
               # Fetch / — should return the vendored app (HTML)
               conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
               conn.request("GET", "/")
@@ -171,7 +182,7 @@ jobs:
               assert "text/html" in resp.getheader("Content-Type", "")
               assert "Quantik" in body
               print("GET / ok — HTML app served")
-
+  
               # Fetch /api — should return JSON
               conn.request("GET", "/api")
               resp = conn.getresponse()
