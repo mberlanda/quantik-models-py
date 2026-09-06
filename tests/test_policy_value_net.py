@@ -41,6 +41,31 @@ def test_masked_log_softmax_zeroes_illegal() -> None:
     assert not torch.isnan(logits.grad).any()
 
 
+def test_masked_log_softmax_all_false_row_is_uniform_not_nan() -> None:
+    """An all-False mask row (every action illegal) must yield a finite,
+    uniform distribution -- not NaN -- per masked_log_softmax's own
+    docstring. This is the QW-001 "all-false mask handling" case: it is
+    handled, deliberately, rather than rejected, so callers must not treat
+    an all-illegal row as an input error."""
+    logits = torch.randn(3, 64, requires_grad=True)
+    mask = torch.zeros(3, 64, dtype=torch.bool)
+    mask[1, :10] = True  # one ordinary legal row either side, for contrast
+    mask[2, 30] = True
+
+    logp = masked_log_softmax(logits, mask)
+    probs = logp.exp()
+
+    assert torch.isfinite(probs).all()
+    assert not torch.isnan(probs).any()
+    assert torch.allclose(probs[0], torch.full((64,), 1.0 / 64), atol=1e-6)
+    assert torch.allclose(probs[0].sum(), torch.tensor(1.0), atol=1e-5)
+
+    loss = probs[0].sum()
+    loss.backward()
+    assert logits.grad is not None
+    assert not torch.isnan(logits.grad).any()
+
+
 def test_preset_sizes() -> None:
     smoke = parameter_count(PolicyValueNet(PRESETS["smoke"]))
     small = parameter_count(PolicyValueNet(PRESETS["small"]))
