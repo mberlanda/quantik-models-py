@@ -138,6 +138,7 @@ jobs:
           import socket
           import subprocess
           import sys
+          import threading
           import time
 
           # Pick a free port
@@ -152,19 +153,36 @@ jobs:
               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
               text=True,
           )
+
+          # Drain the pipe continuously, not just on the error paths — a
+          # server writing enough startup output to fill the OS pipe buffer
+          # would otherwise block on write() forever with nobody reading,
+          # deadlocking the job even on the success path.
+          output_lines: list[str] = []
+
+          def _drain() -> None:
+              for line in srv.stdout:
+                  output_lines.append(line)
+
+          reader = threading.Thread(target=_drain, daemon=True)
+          reader.start()
+
+          def _output() -> str:
+              reader.join(timeout=5)
+              return "".join(output_lines)
+
           try:
               # Wait for the server to start listening with a 30 second deadline
               deadline = time.monotonic() + 30
               while time.monotonic() < deadline:
                   # Check if process has exited early
                   if srv.poll() is not None:
-                      output, _ = srv.communicate()
                       raise SystemExit(
-                          f"server exited with {srv.returncode} before becoming ready:\n{output}"
+                          f"server exited with {srv.returncode} before becoming ready:\n{_output()}"
                       )
-                  
+
                   try:
-                      socket.create_connection(("127.0.0.1", port), timeout=0.5)
+                      socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
                       break
                   except OSError:
                       time.sleep(0.2)
@@ -172,12 +190,12 @@ jobs:
                   # Server didn't start within 30 seconds
                   srv.terminate()
                   try:
-                      output, _ = srv.communicate(timeout=5)
+                      srv.wait(timeout=5)
                   except subprocess.TimeoutExpired:
                       srv.kill()
-                      output, _ = srv.communicate()
-                  
-                  raise SystemExit(f"server did not become ready within 30 seconds:\n{output}")
+                      srv.wait()
+
+                  raise SystemExit(f"server did not become ready within 30 seconds:\n{_output()}")
   
               # Fetch / — should return the vendored app (HTML)
               conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)

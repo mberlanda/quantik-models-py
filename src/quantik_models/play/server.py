@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import socket
+import socketserver
 import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -283,6 +284,26 @@ class PlayHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class _PlayServer(ThreadingHTTPServer):
+    """`ThreadingHTTPServer` without the reverse-DNS lookup on bind.
+
+    `HTTPServer.server_bind` calls `socket.getfqdn(host)` to populate
+    `server_name`, which nothing here reads — the banner and every route
+    print the caller-supplied host, not this. That lookup runs *before*
+    `server_activate` calls `listen()`, so on a host where reverse DNS for
+    127.0.0.1 hangs (sandboxed macOS CI runners with no PTR record, seen
+    consistently in this project's CI) the socket sits bound-but-not-
+    listening for the length of the hang — every connection attempt made
+    meanwhile fails, indistinguishable from the server never starting.
+    """
+
+    def server_bind(self) -> None:
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
+
+
 def make_server(
     service: PlayService,
     *,
@@ -300,7 +321,7 @@ def make_server(
             "static_dir": Path(static_dir).resolve() if static_dir else None,
         },
     )
-    server = ThreadingHTTPServer((host, port), handler)
+    server = _PlayServer((host, port), handler)
     server.daemon_threads = True
     return server
 

@@ -35,6 +35,29 @@ def _git_commit(src: Path) -> str:
     return result.stdout.strip()
 
 
+def _git_remote_url(src: Path) -> str:
+    """The canonical `https://github.com/...` URL for `src`'s `origin`.
+
+    A sibling folder's name is a local implementation detail — worthless
+    to anyone who checks out this package alone. The remote is the stable,
+    portable reference, and it isn't the SSH form `git` hands back either:
+    `git@github.com:owner/repo.git` means nothing pasted into a browser.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(src), "remote", "get-url", "origin"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"git failed: {result.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+    url = result.stdout.strip()
+    if url.startswith("git@github.com:"):
+        url = "https://github.com/" + url[len("git@github.com:") :]
+    if url.endswith(".git"):
+        url = url[: -len(".git")]
+    return url
+
+
 def _check_clean(src: Path) -> None:
     result = subprocess.run(
         ["git", "-C", str(src), "status", "--porcelain"],
@@ -64,6 +87,7 @@ def sync(source_dir: Path = Path("../quantik-qfen-visualizer")) -> None:
 
     _check_clean(source_dir)
     commit = _git_commit(source_dir)
+    repository = _git_remote_url(source_dir)
 
     # Clean destination — a removed file must not survive.
     if dest.exists():
@@ -85,7 +109,7 @@ def sync(source_dir: Path = Path("../quantik-qfen-visualizer")) -> None:
     source_json.write_text(
         json.dumps(
             {
-                "repository": source_dir.name,
+                "repository": repository,
                 "commit": commit,
                 "synced": date.today().isoformat(),
             },
