@@ -157,10 +157,24 @@ class PlayHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def _api_index(self) -> dict[str, Any]:
+        """`_API_INDEX` plus whether *this* server was started with a store.
+
+        Recording is a per-instance fact (`--no-store` on the command
+        line), not something the module-level route table can know — so
+        this builds the payload per request instead of serving a constant.
+        """
+        return {
+            "service": _API_INDEX["service"],
+            "version": _API_INDEX["version"],
+            "recording": self.db_path is not None,
+            "routes": _API_INDEX["routes"],
+        }
+
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
         if path == "/api" or path == "/api/":
-            self._dispatch(lambda: (200, _API_INDEX))
+            self._dispatch(lambda: (200, self._api_index()))
         elif path == "/api/opponents":
             self._dispatch(lambda: (200, {"opponents": self.service.list_opponents()}))
         elif path == "/api/models":

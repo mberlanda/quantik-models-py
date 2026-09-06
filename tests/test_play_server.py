@@ -54,6 +54,27 @@ def live(tmp_path):
         thread.join(timeout=5)
 
 
+@pytest.fixture
+def live_storeless(tmp_path):
+    """Same as `live`, but started the way `--no-store` starts it: no db_path."""
+    static = tmp_path / "app"
+    static.mkdir()
+    (static / "index.html").write_text("<h1>quantik</h1>")
+
+    service = PlayService(tmp_path / "models")
+    (tmp_path / "models").mkdir(exist_ok=True)
+    http = srv.make_server(service, host="127.0.0.1", port=0, db_path=None, static_dir=static)
+    thread = threading.Thread(target=http.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{http.server_address[1]}"
+    try:
+        yield base
+    finally:
+        http.shutdown()
+        http.server_close()
+        thread.join(timeout=5)
+
+
 def get(base, path):
     with urllib.request.urlopen(base + path, timeout=30) as response:
         return response.status, response.read(), response.headers
@@ -203,6 +224,24 @@ def test_a_finished_game_is_recorded_and_the_second_post_is_not(live):
 
     _, summary, _ = get(live, "/api/games")
     assert json.loads(summary)["games"] == 1
+
+
+def test_the_api_index_reports_recording_true_with_a_store(live):
+    """Paired with the storeless test below so the two states cannot drift
+    apart from each other."""
+    status, body, _ = get(live, "/api")
+    assert status == 200 and json.loads(body)["recording"] is True
+
+
+def test_the_api_index_reports_recording_false_without_a_store(live_storeless):
+    """A storeless server still answers a move request — only the *record*
+    step is refused, and it must be refused quietly: no 503 shows up until
+    a client actually tries to record a game."""
+    status, body, _ = get(live_storeless, "/api")
+    assert status == 200 and json.loads(body)["recording"] is False
+
+    status, _ = post(live_storeless, "/api/games", record_payload(play_out()))
+    assert status == 503
 
 
 def test_the_outcome_stored_is_the_replayed_one_not_the_claimed_one(live):
