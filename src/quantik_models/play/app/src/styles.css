@@ -1,0 +1,908 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f1e8;
+  --ink: #20252b;
+  --muted: #65717c;
+  --line: #d8d0c2;
+  --panel: #fffaf1;
+  --panel-strong: #fff3d9;
+  --player-0: #176f82;
+  --player-1: #a33c44;
+  --uppercase-piece: #f8f4e8;
+  --uppercase-piece-text: #17242a;
+  --lowercase-piece: #b83d4b;
+  --lowercase-piece-text: #ffffff;
+  --accent: #c79018;
+  --accent-soft: #ffe4a3;
+  --region-line: #806f5d;
+  --focus: #276ef1;
+  --shadow: 0 22px 70px rgb(39 46 55 / 14%);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ink);
+  background:
+    linear-gradient(90deg, rgb(23 111 130 / 9%) 1px, transparent 1px),
+    linear-gradient(0deg, rgb(163 60 68 / 8%) 1px, transparent 1px),
+    var(--bg);
+  background-size: 42px 42px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: #fffdf8;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+button:hover {
+  border-color: #9a8e7b;
+  box-shadow: 0 8px 20px rgb(32 37 43 / 10%);
+  transform: translateY(-1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgb(39 110 241 / 30%);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  width: min(1180px, calc(100vw - 28px));
+  margin: 0 auto;
+  padding: 24px 0;
+}
+
+.workspace {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid rgb(32 37 43 / 12%);
+  border-radius: 8px;
+  background: rgb(255 250 241 / 92%);
+  box-shadow: var(--shadow);
+}
+
+.masthead,
+.section-heading,
+.input-row,
+.example-strip,
+.content-grid {
+  display: flex;
+  gap: 12px;
+}
+
+.masthead,
+.section-heading {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--player-0);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.75rem, 1.3rem + 1.6vw, 3rem);
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+h2 {
+  font-size: 1rem;
+}
+
+h3 {
+  font-size: 0.9rem;
+}
+
+.status-pill,
+.quiet-stat {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.status-pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #fffdf8;
+}
+
+.status-pill[data-state="valid"] {
+  color: var(--player-0);
+  border-color: rgb(23 111 130 / 35%);
+}
+
+.status-pill[data-state="invalid"] {
+  color: var(--player-1);
+  border-color: rgb(163 60 68 / 40%);
+}
+
+.qfen-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.qfen-panel label,
+.color-control span {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.input-row {
+  align-items: stretch;
+}
+
+textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--ink);
+  background: #fffdf8;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+textarea[aria-invalid="true"] {
+  border-color: var(--player-1);
+}
+
+.button-stack {
+  display: grid;
+  grid-template-rows: repeat(2, 1fr);
+  gap: 8px;
+  min-width: 92px;
+}
+
+.error-message {
+  min-height: 1.3em;
+  color: var(--player-1);
+  font-size: 0.9rem;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fffdf8;
+}
+
+.game-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fffdf8;
+}
+
+.player-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.player-controls label,
+.remote-control {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.remote-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.player-controls select,
+.player-controls input,
+.remote-control input {
+  min-width: 0;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.game-actions,
+.piece-tray {
+  margin-top: 14px;
+}
+
+.shape-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The count of that shape the side to move still holds. Two per shape per
+   player, so "0 left" is the difference between a shape you may not want
+   and one you cannot have. */
+.shape-remaining {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shape-button[data-selected="true"] .shape-remaining {
+  color: inherit;
+}
+
+.primary-button {
+  color: #fff;
+  border-color: var(--player-0);
+  background: var(--player-0);
+}
+
+.control-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.shape-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shape-button[data-selected="true"] {
+  border-color: var(--player-0);
+  box-shadow: 0 0 0 2px rgb(23 111 130 / 20%);
+}
+
+.game-message {
+  min-height: 1.3em;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.color-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "case picker"
+    "name picker";
+  align-items: center;
+  gap: 2px 12px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+}
+
+.color-control span {
+  grid-area: case;
+}
+
+.color-control strong {
+  grid-area: name;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.color-control input {
+  grid-area: picker;
+  width: 46px;
+  height: 38px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.example-strip {
+  flex-wrap: wrap;
+}
+
+.example-strip button {
+  min-width: 72px;
+}
+
+.content-grid {
+  align-items: start;
+}
+
+.board-panel,
+.side-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.board-panel {
+  flex: 1 1 620px;
+  min-width: 0;
+}
+
+.side-panel {
+  flex: 0 1 380px;
+  min-width: 290px;
+}
+
+.side-panel > section,
+.board-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--panel);
+}
+
+.board-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(62px, 1fr));
+  width: min(100%, 640px);
+  overflow: hidden;
+  border: 3px solid var(--region-line);
+  border-radius: 8px;
+  background: var(--region-line);
+}
+
+.board-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid #c6bdad;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 40%), transparent 60%),
+    var(--panel-strong);
+  min-height: 0;
+  border-radius: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.board-cell:hover {
+  border-color: #c6bdad;
+  box-shadow: none;
+  transform: none;
+}
+
+.board-cell.is-legal {
+  cursor: pointer;
+  box-shadow: inset 0 0 0 4px rgb(23 111 130 / 24%);
+}
+
+.board-cell.is-legal::after {
+  position: absolute;
+  width: 14%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: var(--player-0);
+  opacity: 0.7;
+  content: "";
+}
+
+.board-cell.is-legal:hover {
+  background: #dcece5;
+  box-shadow: inset 0 0 0 5px rgb(23 111 130 / 36%);
+}
+
+.board-cell.region-right {
+  border-right: 4px solid var(--region-line);
+}
+
+.board-cell.region-bottom {
+  border-bottom: 4px solid var(--region-line);
+}
+
+.board-cell[data-zone="1"],
+.board-cell[data-zone="2"] {
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 34%), transparent 60%),
+    #e7f0ec;
+}
+
+.board-cell.is-winning {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 4px var(--accent-soft);
+}
+
+.coordinate {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: rgb(32 37 43 / 45%);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.piece,
+.mini-piece,
+.piece-face {
+  display: grid;
+  place-items: center;
+}
+
+.piece,
+.mini-piece {
+  --piece-color: var(--uppercase-piece);
+  --piece-text: var(--uppercase-piece-text);
+  color: #fff;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.piece {
+  position: relative;
+  width: 54%;
+  max-width: 84px;
+  aspect-ratio: 1;
+  font-size: clamp(1.35rem, 0.9rem + 2.1vw, 2.6rem);
+  color: var(--piece-text);
+  filter: drop-shadow(0 14px 16px rgb(32 37 43 / 24%));
+  pointer-events: none;
+}
+
+.piece-face {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 30% 20%, rgb(255 255 255 / 70%), transparent 28%),
+    linear-gradient(135deg, rgb(255 255 255 / 34%), rgb(0 0 0 / 20%)),
+    var(--piece-color);
+  box-shadow:
+    inset 0 2px 10px rgb(255 255 255 / 35%),
+    inset 0 -10px 16px rgb(0 0 0 / 18%);
+}
+
+.piece-label {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 22%);
+}
+
+.mini-piece {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  color: var(--piece-text);
+  font-size: 0.8rem;
+  background:
+    radial-gradient(circle at 30% 20%, rgb(255 255 255 / 62%), transparent 30%),
+    linear-gradient(135deg, rgb(255 255 255 / 25%), rgb(0 0 0 / 16%)),
+    var(--piece-color);
+}
+
+.piece[data-player="0"],
+.mini-piece[data-player="0"] {
+  --piece-color: var(--uppercase-piece);
+  --piece-text: var(--uppercase-piece-text);
+}
+
+.piece[data-player="1"],
+.mini-piece[data-player="1"] {
+  --piece-color: var(--lowercase-piece);
+  --piece-text: var(--lowercase-piece-text);
+}
+
+.piece-cone .piece-face {
+  clip-path: polygon(50% 0, 96% 88%, 50% 100%, 4% 88%);
+}
+
+.mini-piece.piece-cone {
+  clip-path: polygon(50% 0, 96% 88%, 50% 100%, 4% 88%);
+}
+
+.piece-cylinder .piece-face,
+.mini-piece.piece-cylinder {
+  border-radius: 42% / 14%;
+}
+
+.piece-cylinder .piece-face::before {
+  position: absolute;
+  top: 4%;
+  left: 9%;
+  width: 82%;
+  height: 22%;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 28%);
+  content: "";
+}
+
+.piece-cube .piece-face,
+.mini-piece.piece-cube {
+  border-radius: 8px;
+}
+
+.piece-cube .piece-face::before {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 28%) 0 48%, transparent 49%),
+    linear-gradient(315deg, rgb(0 0 0 / 16%) 0 48%, transparent 49%);
+  content: "";
+}
+
+.piece-sphere .piece-face,
+.mini-piece.piece-sphere {
+  border-radius: 999px;
+}
+
+.win-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.win-list li,
+.empty-state {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fffdf8;
+}
+
+.win-list li:not(.empty-state) {
+  border-color: rgb(199 144 24 / 45%);
+  background: #fff4d5;
+  color: #6e4a00;
+  font-weight: 800;
+}
+
+.empty-state {
+  color: var(--muted);
+}
+
+.inventory-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.inventory-player {
+  display: grid;
+  gap: 8px;
+}
+
+.inventory-row,
+.legend-item {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inventory-row {
+  grid-template-columns: 28px minmax(68px, 1fr) 28px minmax(46px, auto);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.inventory-row strong {
+  color: var(--ink);
+  text-align: right;
+}
+
+.inventory-row.is-overused {
+  color: var(--player-1);
+}
+
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.legend-item {
+  grid-template-columns: 28px 20px minmax(0, 1fr);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.legend-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.move-history {
+  display: grid;
+  max-height: 240px;
+  gap: 6px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.move-history li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 2px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.86rem;
+}
+
+.move-history small {
+  color: var(--muted);
+  font-family: inherit;
+}
+
+@media (max-width: 850px) {
+  .content-grid,
+  .input-row {
+    flex-direction: column;
+  }
+
+  /* One column means the board scrolls out of reach of anything below it.
+     Sticking the tray to the bottom of the viewport keeps both halves of a
+     move — pick a shape, tap a cell — on screen at once. `sticky` rather
+     than `fixed` so it stops at the end of the board panel instead of
+     hovering over the controls for the rest of the page. */
+  .piece-tray {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 14px -12px -12px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  .piece-tray .control-label {
+    margin-bottom: 5px;
+  }
+
+  .shape-picker {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .shape-button {
+    justify-content: center;
+    min-height: 44px;
+    gap: 6px;
+  }
+
+  /* The word "Cone" is not what a thumb aims at; the shape is. */
+  .shape-button .shape-label {
+    display: none;
+  }
+
+  .board-panel {
+    flex: none;
+    width: 100%;
+  }
+
+  .button-stack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    min-width: 0;
+  }
+
+  .side-panel {
+    width: 100%;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .player-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    width: min(100vw - 16px, 1180px);
+    padding: 8px 0;
+  }
+
+  .workspace,
+  .side-panel > section,
+  .board-panel {
+    padding: 12px;
+  }
+
+  .masthead {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .board-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .coordinate {
+    top: 5px;
+    left: 5px;
+    font-size: 0.68rem;
+  }
+
+  .piece {
+    width: 58%;
+    font-size: 1.25rem;
+  }
+
+  .legend-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .player-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .remote-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* --- assessment ------------------------------------------------------ */
+
+.assessment-control {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.assessment-control select {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+}
+
+/* Player 0 fills from the left, player 1 owns the remainder, so the bar
+   reads the way the board does rather than needing a legend. */
+.evaluation-bar {
+  overflow: hidden;
+  height: 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--player-1);
+}
+
+.evaluation-fill {
+  width: 50%;
+  height: 100%;
+  background: var(--player-0);
+  transition: width 220ms ease;
+}
+
+/* No opinion is drawn as a flat grey bar, not as a level contest: a
+   50/50 split in the players' own colours is a claim, and "nobody asked"
+   is not that claim. */
+.evaluation-bar[data-known="false"] {
+  background: var(--line);
+}
+
+.evaluation-bar[data-known="false"] .evaluation-fill {
+  background: var(--line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .evaluation-fill {
+    transition: none;
+  }
+}
+
+.evaluation-caption {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.top-moves {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.top-moves li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+
+.top-move-prior {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.endpoint-override {
+  margin-bottom: 14px;
+}
+
+.endpoint-override summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.endpoint-note {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.endpoint-control {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.endpoint-control input {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+}

@@ -129,6 +129,101 @@ jobs:
             echo "ok $script"
           done
 
+      - name: Serve the vendored app and API on a free port
+        shell: bash
+        run: |
+          python - <<'PY'
+          import http.client
+          import json
+          import socket
+          import subprocess
+          import sys
+          import threading
+          import time
+
+          # Pick a free port
+          with socket.socket() as s:
+              s.bind(("", 0))
+              port = s.getsockname()[1]
+
+          srv = subprocess.Popen(
+              [sys.executable, "-m", "quantik_models.play",
+               "--host", "127.0.0.1",
+               "--port", str(port), "--no-store"],
+              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              text=True,
+          )
+
+          # Drain the pipe continuously, not just on the error paths — a
+          # server writing enough startup output to fill the OS pipe buffer
+          # would otherwise block on write() forever with nobody reading,
+          # deadlocking the job even on the success path.
+          output_lines: list[str] = []
+
+          def _drain() -> None:
+              for line in srv.stdout:
+                  output_lines.append(line)
+
+          reader = threading.Thread(target=_drain, daemon=True)
+          reader.start()
+
+          def _output() -> str:
+              reader.join(timeout=5)
+              return "".join(output_lines)
+
+          try:
+              # Wait for the server to start listening with a 30 second deadline
+              deadline = time.monotonic() + 30
+              while time.monotonic() < deadline:
+                  # Check if process has exited early
+                  if srv.poll() is not None:
+                      raise SystemExit(
+                          f"server exited with {srv.returncode} before becoming ready:\n{_output()}"
+                      )
+
+                  try:
+                      socket.create_connection(("127.0.0.1", port), timeout=0.5).close()
+                      break
+                  except OSError:
+                      time.sleep(0.2)
+              else:
+                  # Server didn't start within 30 seconds
+                  srv.terminate()
+                  try:
+                      srv.wait(timeout=5)
+                  except subprocess.TimeoutExpired:
+                      srv.kill()
+                      srv.wait()
+
+                  raise SystemExit(f"server did not become ready within 30 seconds:\n{_output()}")
+  
+              # Fetch / — should return the vendored app (HTML)
+              conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+              conn.request("GET", "/")
+              resp = conn.getresponse()
+              body = resp.read().decode()
+              assert resp.status == 200, f"GET / returned {resp.status}"
+              assert "text/html" in resp.getheader("Content-Type", "")
+              assert "Quantik" in body
+              print("GET / ok — HTML app served")
+  
+              # Fetch /api — should return JSON
+              conn.request("GET", "/api")
+              resp = conn.getresponse()
+              payload = json.loads(resp.read().decode())
+              assert resp.status == 200, f"GET /api returned {resp.status}"
+              assert isinstance(payload, dict)
+              print("GET /api ok — json:", list(payload.keys()))
+              conn.close()
+          finally:
+              srv.terminate()
+              try:
+                  srv.wait(timeout=5)
+              except subprocess.TimeoutExpired:
+                  srv.kill()
+                  srv.wait()
+          PY
+
       - name: The hub extra resolves and imports
         shell: bash
         run: |

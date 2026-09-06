@@ -131,6 +131,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 quantik_models = ["py.typed"]
+"quantik_models.play" = ["app/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
