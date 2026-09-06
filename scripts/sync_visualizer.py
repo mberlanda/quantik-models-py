@@ -85,7 +85,7 @@ def sync(source_dir: Path = Path("../quantik-qfen-visualizer")) -> None:
     source_json.write_text(
         json.dumps(
             {
-                "repository": str(source_dir.resolve()),
+                "repository": source_dir.name,
                 "commit": commit,
                 "synced": date.today().isoformat(),
             },
