@@ -147,31 +147,37 @@ jobs:
 
           srv = subprocess.Popen(
               [sys.executable, "-m", "quantik_models.play",
+               "--host", "127.0.0.1",
                "--port", str(port), "--no-store"],
+              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+              text=True,
           )
           try:
-              # Wait for the server to start listening
-              for _ in range(30):
-                  time.sleep(0.2)
+              # Wait for the server to start listening with a 30 second deadline
+              deadline = time.monotonic() + 30
+              while time.monotonic() < deadline:
+                  # Check if process has exited early
+                  if srv.poll() is not None:
+                      output, _ = srv.communicate()
+                      raise SystemExit(
+                          f"server exited with {srv.returncode} before becoming ready:\n{output}"
+                      )
+                  
                   try:
                       socket.create_connection(("127.0.0.1", port), timeout=0.5)
                       break
                   except OSError:
-                      continue
+                      time.sleep(0.2)
               else:
-                  # Server didn't start quickly enough - get any error output that might help debug 
+                  # Server didn't start within 30 seconds
+                  srv.terminate()
                   try:
-                      # Use a shorter timeout to avoid hanging, but still allow some time for output
-                      out, err = srv.communicate(timeout=1)
-                      raise SystemExit(f"server did not start:\n{err.decode()}")
+                      output, _ = srv.communicate(timeout=5)
                   except subprocess.TimeoutExpired:
-                      # If we can't get the output in 1 second just kill and error
-                      try:
-                          srv.kill()
-                          srv.wait(timeout=1)
-                      except:
-                          pass
-                      raise SystemExit("server did not start within timeout period")
+                      srv.kill()
+                      output, _ = srv.communicate()
+                  
+                  raise SystemExit(f"server did not become ready within 30 seconds:\n{output}")
   
               # Fetch / — should return the vendored app (HTML)
               conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
