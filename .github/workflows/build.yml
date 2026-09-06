@@ -148,7 +148,6 @@ jobs:
           srv = subprocess.Popen(
               [sys.executable, "-m", "quantik_models.play",
                "--port", str(port), "--no-store"],
-              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
           )
           try:
               # Wait for the server to start listening
