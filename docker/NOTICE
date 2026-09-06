@@ -2,12 +2,15 @@ This image bundles two things under different licences.
 
 Code — MIT
   quantik-models (this repo): see LICENSE.
-  quantik-qfen-visualizer (the browser app under app/): MIT, see its own
-  LICENSE at https://github.com/mberlanda/quantik-qfen-visualizer.
+  The vendored browser app (src/quantik_models/play/app/, served from the
+  installed package): MIT, sourced from quantik-qfen-visualizer — see its
+  own LICENSE at https://github.com/mberlanda/quantik-qfen-visualizer, and
+  app/SOURCE.json in this repo for the exact commit vendored.
 
-Model weights (under staging/) — CC BY-NC 4.0, non-commercial
-  Published at https://huggingface.co/brpoplpush. Each model directory's
-  manifest.json names its architecture; the Hub repo of the same name
+Model weights (under models/) — CC BY-NC 4.0, non-commercial
+  Fetched from https://huggingface.co/brpoplpush at image build time, not
+  baked in from a local checkout. Each model directory's manifest.json
+  names its architecture; the Hub repo of the same name
   (https://huggingface.co/brpoplpush/<name>) carries the full model card
   and the licence text.
 

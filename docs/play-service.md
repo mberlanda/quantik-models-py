@@ -248,25 +248,43 @@ one tunnel.
 ## Docker: one endpoint, no store, no torch
 
 ```bash
-scripts/build_docker_image.sh best    # swept-cpool only
-scripts/build_docker_image.sh full    # published lineup + v3-cpool
-docker run -p 8000:8000 quantik-play:best
+docker build -f docker/Dockerfile -t quantik-play .
+docker run -p 8000:8000 quantik-play
 ```
 
-`docker/Dockerfile` runs `--runtime onnx --no-store`: `onnxruntime` (the
-`[serve]` extra, 80 MB) evaluates the `model.onnx` graph every checkpoint
-already ships, so the image never installs torch (529 MB) at all, and it
-opens no database. `scripts/build_docker_image.sh` stages `manifest.json` +
-`model.onnx` from local `runs/train/*/best` checkpoints into
-`docker/staging/` before the build — no network fetch yet; pulling from the
-Hub instead is the production path workstream 13 still names as open.
+Build from `quantik-models-py`'s own root — no sibling `quantik-qfen-visualizer`
+checkout, no `docker/staging/` to populate first. Two things moved to get
+here (QW-030 M4), both already true of the image before this: it never
+bakes in torch, and it never opens a database.
 
-Measured 2026-08-30, `python:3.12-slim` base, one architecture per opponent:
+`docker/Dockerfile` is two stages. The first installs `.[serve,hub]` and
+runs `quantik-models-fetch --all --stage /app/models --copy` against a
+throwaway `HF_HOME`, pulling the four published `brpoplpush` checkpoints
+straight from the Hub — no local `runs/` checkpoint, no `stage_hub_repos.sh`
+step first. `--copy` matters here and is not optional: the default
+`--stage` behaviour symlinks into the Hub cache, which is perfectly legal
+on Linux and exactly wrong across a build-stage boundary — the cache lives
+only in this stage, so a symlink into it would resolve to nothing the
+moment `COPY --from=` carries `/app/models` alone into the next one.
+`hub.resolve` fetches both runtimes' artifacts unconditionally, so each
+staged model also carries a `model.safetensors` the second stage's
+`--runtime onnx` will never open; a `find -delete` in the same layer drops
+it before anything is copied out. The second stage installs only `.[serve]`
+(`onnxruntime`, not torch and not the onnx/onnxscript exporter — this image
+runs graphs, it does not produce them), copies in `docker/NOTICE` and the
+staged `/app/models`, and runs `--models models --runtime onnx --no-store`.
+No `--static` override: the vendored app is package data now (M1), so the
+default already finds it.
 
-| image | models staged | size |
-|---|---|---|
-| `quantik-play:best` | `cpool` (the lineup winner — see the lineup-results memory / `docs/benchmarks.md`) | 441 MB |
-| `quantik-play:full` | `cpool`, `attn`, `resnet`, `mlp`, `v3-cpool` | 498 MB |
+Measured 2026-09-06, `python:3.12-slim` base, all four published
+architectures (`cpool`, `attn`, `resnet`, `mlp`) staged: **498 MB.** The
+2026-08-30 figures below described a different build entirely — local
+`runs/train/*/best` checkpoints staged by hand via
+`scripts/build_docker_image.sh`, in two variants (`best`: `cpool` alone,
+441 MB; `full`: those four plus a fifth, `v3-cpool`, not in the published
+Hub lineup, 498 MB) — kept here for that context, not as a like-for-like
+comparison: this build has no `best`/single-model variant, and the local
+build script is not part of this path any more (see below).
 
 The `--runtime onnx` path is a second, independent way of running the same
 weights, not a second model — `tests/test_onnx_evaluator_agreement.py`
@@ -283,10 +301,17 @@ install had nothing to fall back to and failed on the first move with
 `pyproject.toml`: `quantik-core>=1.2` is now a base dependency, pulled from
 PyPI like any other install.
 
-**Still open**, per workstream 13: the browser client does not yet learn
-"no store" from `GET /api` and would show a `503` at the end of every game
-against a `--no-store` server; the image never fetches weights from the
-Hub (local checkpoints only, for now); nothing publishes to GHCR yet.
+**`scripts/build_docker_image.sh` and `docker/staging/` are superseded by
+this build**, not deleted by it — QW-030 M4's `allowed_paths` covers the
+Dockerfile, `NOTICE`, and this page, not the script. It still stages local
+checkpoints and builds from the `quantik-ns` workspace root the way the
+Dockerfile used to expect, which the current Dockerfile no longer does;
+treat it as stale until a follow-up either updates or removes it.
+
+**Still open:** nothing publishes to GHCR yet (QW-009 criterion 5); whether
+the public deployment ships all four architectures or a single "best" one
+is a product call this build's size is an input to, not the answer to (see
+QW-030 decision O3).
 
 ### Sharing a local build off your LAN
 
@@ -296,8 +321,8 @@ run`'s published port instead of the bare process:
 
 ```bash
 brew install cloudflared        # once
-scripts/build_docker_image.sh best
-docker run -p 8000:8000 quantik-play:best &
+docker build -f docker/Dockerfile -t quantik-play .
+docker run -p 8000:8000 quantik-play &
 cloudflared tunnel --url http://localhost:8000
 ```
 
