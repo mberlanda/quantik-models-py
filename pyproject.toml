@@ -53,9 +53,11 @@ dependencies = [
   # has a sibling `../quantik-core-py` installed editable; a clean install
   # (Docker, most of all — see docker/Dockerfile) had nothing to fall back
   # to and failed on the first classical move with `ModuleNotFoundError`.
-  # 1.2.0 matches the contract version this repo already targets
-  # (`export.checkpoint._supported_contract_version`).
-  "quantik-core>=1.2,<2",
+  # 1.3.0 is the floor because it adds SymmetryHandler.remap_action_index/
+  # inverse_transform_index (the action-index.v1 transform-remap contract
+  # from QW-001), which tests/test_fastboard.py cross-checks env.fastboard
+  # against unconditionally.
+  "quantik-core>=1.3,<2",
 ]
 
 [project.optional-dependencies]

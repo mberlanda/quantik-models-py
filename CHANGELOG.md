@@ -9,6 +9,8 @@ What counts as a breaking change here is written down in
 
 ## Unreleased
 
+## 1.1.0 - 2026-09-07
+
 ### Added
 
 - **`quantik-models-play` serves the board and the API on one port with no
@@ -39,6 +41,14 @@ What counts as a breaking change here is written down in
   four published architectures from the Hugging Face Hub at build time
   instead of a hand-staged local `runs/` copy — no sibling
   `quantik-qfen-visualizer` build context. Measured 498 MB.
+
+### Changed
+
+- Bumped the `quantik-core` dependency floor from `>=1.2` to `>=1.3`. That
+  release adds `SymmetryHandler.remap_action_index`/`inverse_transform_index`
+  (the `action-index.v1` transform-remap contract from QW-001), which
+  `tests/test_fastboard.py`'s cross-check against `env.fastboard` now
+  exercises unconditionally rather than skipping on an older `quantik-core`.
 
 ### Fixed
 
