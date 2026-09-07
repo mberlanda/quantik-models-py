@@ -511,3 +511,129 @@ def test_a_digest_that_survives_a_refetch_is_a_hard_error(tmp_path, monkeypatch)
     monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(d))
     with pytest.raises(hub.HubError, match="forced re-download"):
         hub.load_evaluator("cpool")
+
+
+# --- stage -----------------------------------------------------------
+
+
+def _write_stageable_layout(root):
+    """A snapshot shaped like a real one: both artifacts, digests intact.
+
+    `write_hub_layout` alone is enough for `resolve`/`load_evaluator`, which
+    only ever touch one artifact at a time. `stage` copies the whole
+    directory across, onnx graph included, so this needs both files
+    present with hashes that actually match — the way a real Hub snapshot
+    always is, and the way `--models <dir> --runtime onnx` requires.
+    """
+    from quantik_models.export.digest import file_digest
+
+    d = write_hub_layout(root)
+    (d / "model.onnx").write_bytes(b"graph")
+    manifest = json.loads((d / "manifest.json").read_text())
+    manifest["weights_hash"] = file_digest(d / "model.safetensors")
+    manifest["onnx_hash"] = file_digest(d / "model.onnx")
+    (d / "manifest.json").write_text(json.dumps(manifest))
+    return d
+
+
+def test_stage_materializes_a_directory_scan_models_accepts_as_ready(
+    tmp_path, monkeypatch
+) -> None:
+    from quantik_models.play import registry as play_registry
+
+    snapshot = _write_stageable_layout(tmp_path / "cache")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+
+    targets = hub.stage(["cpool"], tmp_path / "staging")
+    assert [t.name for t in targets] == ["cpool"]
+
+    # Filenames stay exactly as the snapshot has them — `model.safetensors`,
+    # not renamed to `weights.safetensors` — which is why this is checked
+    # under the `onnx` runtime: see `stage`'s docstring for why the default
+    # `torch` runtime does not (yet) see a Hub-staged model as ready.
+    assert (targets[0] / "model.safetensors").is_file()
+    assert not (targets[0] / "weights.safetensors").exists()
+
+    models = play_registry.scan_models(tmp_path / "staging", runtime="onnx")
+    assert [m.model_id for m in models] == ["cpool"]
+    assert models[0].status == "ready", models[0].reason
+
+
+def test_the_staged_name_is_the_short_name_not_the_hub_repo_id(
+    tmp_path, monkeypatch
+) -> None:
+    snapshot = _write_stageable_layout(tmp_path / "cache")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+
+    [target] = hub.stage(["cpool"], tmp_path / "staging")
+    assert target.name == "cpool"
+    assert hub.NAMESPACE not in target.name
+    assert hub.PUBLISHED["cpool"].architecture not in target.name
+
+
+def test_staging_the_same_model_twice_is_idempotent(tmp_path, monkeypatch) -> None:
+    snapshot = _write_stageable_layout(tmp_path / "cache")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+
+    first = hub.stage(["cpool"], tmp_path / "staging")
+    second = hub.stage(["cpool"], tmp_path / "staging")
+    assert first == second
+    assert (tmp_path / "staging" / "cpool" / "manifest.json").is_file()
+
+
+def test_stage_falls_back_to_a_real_copy_when_symlinks_are_unavailable(
+    tmp_path, monkeypatch
+) -> None:
+    """Windows without symlink privilege, or a filesystem that plain
+    refuses — forced here rather than left to whatever the test machine
+    happens to support."""
+    import pathlib
+
+    snapshot = _write_stageable_layout(tmp_path / "cache")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+
+    def refuse(self, target, target_is_directory=False):
+        raise OSError("symlinks are not available")
+
+    monkeypatch.setattr(pathlib.Path, "symlink_to", refuse)
+
+    [target] = hub.stage(["cpool"], tmp_path / "staging")
+    assert not target.is_symlink()
+    assert target.is_dir()
+    assert (target / "manifest.json").is_file()
+    assert (target / "model.onnx").is_file()
+
+
+def test_stage_copy_true_forces_real_files_even_when_symlinks_would_work(
+    tmp_path, monkeypatch
+) -> None:
+    """The Docker case: a symlink into this *stage*'s Hub cache would
+    happily succeed on Linux and then dangle the moment `COPY --from=`
+    carries only `dest` into the next stage without the cache behind it.
+    `copy=True` is how the image build says "no, a real file" without
+    needing the platform to refuse the symlink for it."""
+    snapshot = _write_stageable_layout(tmp_path / "cache")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+
+    [target] = hub.stage(["cpool"], tmp_path / "staging", copy=True)
+    assert not target.is_symlink()
+    assert target.is_dir()
+    assert (target / "model.onnx").is_file()
+
+
+def test_the_fetch_cli_stages_and_prints_the_staged_paths(tmp_path, monkeypatch, capsys):
+    snapshot = _write_stageable_layout(tmp_path / "cache")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+
+    assert hub.main(["cpool", "--stage", str(tmp_path / "staging")]) == 0
+    out = capsys.readouterr().out
+    assert "cpool" in out
+    assert str(tmp_path / "staging" / "cpool") in out
+
+
+def test_the_fetch_cli_copy_flag_reaches_stage(tmp_path, monkeypatch) -> None:
+    snapshot = _write_stageable_layout(tmp_path / "cache")
+    monkeypatch.setattr(hub, "_snapshot_download", lambda **kw: str(snapshot))
+
+    assert hub.main(["cpool", "--stage", str(tmp_path / "staging"), "--copy"]) == 0
+    assert not (tmp_path / "staging" / "cpool").is_symlink()

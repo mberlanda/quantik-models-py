@@ -57,6 +57,7 @@ __all__ = [
     "repo_id",
     "resolve",
     "prefetch",
+    "stage",
     "load_evaluator",
     "verify",
 ]
@@ -356,6 +357,101 @@ def prefetch(
     ]
 
 
+def _staged_name(manifest: dict[str, Any]) -> str:
+    """The short name a staged directory is named after.
+
+    Not `repo_id(name)` and not the caller's own argument — a bare Hub id
+    (`brpoplpush/quantik-cpool-c191-b6`) or a fork's id is not what
+    `--models <dir>` expects a model_id to look like, and it is not what a
+    caller later passes to `hub.load_evaluator`. Derived from the manifest
+    instead, so it comes out the same whether `name` was a short name or a
+    full `<owner>/<repo>` id. Mirrors `export.huggingface._short_name`;
+    duplicated rather than imported so this module does not reach into the
+    publishing side for two lines.
+    """
+    spec = manifest.get("architecture_spec") or {}
+    arch = spec.get("arch")
+    return arch if arch else str(manifest["architecture"]).split("-", 1)[0]
+
+
+def _materialize(source: Path, target: Path, *, copy: bool = False) -> None:
+    """Put `source`'s contents at `target`, replacing whatever was there.
+
+    Symlinked when the platform allows it and `copy` was not requested —
+    cheap, and enough for local use. `copy=True` skips straight to a real
+    copy; pass it whenever `target` has to outlive `source`, which a
+    symlink's target surviving the *platform* does not guarantee: a Hub
+    cache directory that is itself only a build stage's local disk does
+    not cross into a later `COPY --from=`, so a Docker build stages into
+    `copy=True` deliberately rather than relying on a Linux host "allowing"
+    the symlink that would otherwise dangle in the next stage. Also falls
+    back to a real copy on `OSError` (Windows without symlink privilege, or
+    a filesystem that plain refuses) even when `copy` was not asked for.
+
+    Removes any previous `target` first — staging the same model twice
+    must replace it, not merge into it or raise on the second call.
+    """
+    if target.is_symlink() or target.is_file():
+        target.unlink()
+    elif target.is_dir():
+        import shutil
+
+        shutil.rmtree(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not copy:
+        try:
+            target.symlink_to(source, target_is_directory=True)
+            return
+        except OSError:
+            pass
+    import shutil
+
+    shutil.copytree(source, target)
+
+
+def stage(
+    names: list[str] | None,
+    dest: str | Path,
+    *,
+    revision: str = "main",
+    cache_dir: str | Path | None = None,
+    copy: bool = False,
+) -> list[Path]:
+    """Resolve each of `names` and materialize it under `dest/<short-name>/`.
+
+    The result is exactly the directory shape `play.registry.scan_models`
+    already expects — one subdirectory per model, `manifest.json` beside
+    its artifact — so `--models dest` picks it up with no translation step.
+
+    `copy=True` forces a real copy instead of the default symlink — the
+    Docker image needs this: it stages into one build stage and
+    `COPY --from=`s only `dest` into the next, and a symlink into that
+    build stage's `HF_HOME` would resolve to nothing once the stage that
+    made it is gone. A local `--models` directory has no such boundary, so
+    the default favours the cheap symlink.
+
+    Filenames are kept exactly as the snapshot has them. Notably, that is
+    `model.safetensors`, not `weights.safetensors`:
+    `export.huggingface.stage` renames on the way *to* the Hub, and
+    renaming it back here would be one more inconsistency to track rather
+    than a fix. `arena.registry.weights_path` already reads both names;
+    `play.registry`'s default (`torch`) runtime does not yet, so a
+    directory staged this way reads `"ready"` under `--runtime onnx`
+    today — which is what the Docker image (`--runtime onnx`, no torch
+    installed) actually uses. Widening `play.registry`'s acceptance to
+    match `arena.registry` is that module's change to make, not this one's.
+    """
+    import json
+
+    targets = []
+    for resolved in prefetch(names, revision=revision, cache_dir=cache_dir):
+        manifest = json.loads((resolved.path / "manifest.json").read_text())
+        target = Path(dest) / _staged_name(manifest)
+        _materialize(resolved.path, target, copy=copy)
+        targets.append(target)
+    return targets
+
+
 def artifact_path(checkpoint: str | Path, *, runtime: str = "torch") -> Path:
     """The file `runtime` will load out of a checkpoint directory.
 
@@ -503,6 +599,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--all", action="store_true", help="every published model")
     parser.add_argument("--revision", default="main", help="branch, tag or commit sha")
     parser.add_argument("--cache-dir", default=None, help="override HF_HOME's cache")
+    parser.add_argument(
+        "--stage",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="also materialize each model under DIR/<short-name>/, so "
+        "'quantik-models-play --models DIR' picks it up unchanged "
+        "(symlinked when the platform allows it, copied otherwise)",
+    )
+    parser.add_argument(
+        "--copy",
+        action="store_true",
+        help="with --stage, force a real copy instead of a symlink — needed "
+        "when DIR has to outlive this process, e.g. a Docker build stage",
+    )
     args = parser.parse_args(argv)
 
     if not args.models and not args.all:
@@ -510,15 +621,28 @@ def main(argv: list[str] | None = None) -> int:
 
     names = list(PUBLISHED) if args.all else args.models
     try:
-        resolved = prefetch(names, revision=args.revision, cache_dir=args.cache_dir)
+        if args.stage is not None:
+            targets = stage(
+                names,
+                args.stage,
+                revision=args.revision,
+                cache_dir=args.cache_dir,
+                copy=args.copy,
+            )
+        else:
+            resolved = prefetch(names, revision=args.revision, cache_dir=args.cache_dir)
     except (HubError, KeyError, ImportError) as exc:
         # The message is the product here; a traceback through
         # huggingface_hub is not something the reader can act on.
         print(f"error: {exc}", flush=True)
         return 1
 
-    for item in resolved:
-        print(f"{item.repo}@{item.commit or item.revision} -> {item.path}")
+    if args.stage is not None:
+        for target in targets:
+            print(f"{target.name} -> {target}")
+    else:
+        for item in resolved:
+            print(f"{item.repo}@{item.commit or item.revision} -> {item.path}")
     return 0
 
 
