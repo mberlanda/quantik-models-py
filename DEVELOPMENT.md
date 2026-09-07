@@ -176,12 +176,27 @@ python -m quantik_models.train.preflight --preset medium --epochs 16
 Versioning policy, and what counts as a breaking change here, is
 [`docs/decisions/0002-versioning-and-release.md`](docs/decisions/0002-versioning-and-release.md).
 
-1. **Bump `__version__`** in `src/quantik_models/__init__.py`. That is the
+1. **Re-sync the vendored visualizer app**, if `quantik-qfen-visualizer` has
+   moved since the last release (check `src/quantik_models/play/app/SOURCE.json`'s
+   `commit` against its `main`):
+
+   ```bash
+   .venv/bin/python scripts/sync_visualizer.py
+   ```
+
+   Requires a clean sibling checkout — the script refuses a dirty source
+   tree. This is the same "release-time, not per-PR" discipline as step 7's
+   Hub model-card sync, below, for the same reason: the app is a byte copy
+   of another repository's `main`, not a build product, and needs a
+   deliberate, reviewable step to move (`docs/play-service.md`, "The
+   vendored app"). A release that ships a stale app is the failure mode
+   this step exists to prevent.
+2. **Bump `__version__`** in `src/quantik_models/__init__.py`. That is the
    only place the number appears — `pyproject.toml` reads it statically.
-2. **Move the `Unreleased` section of `CHANGELOG.md`** under the new version
+3. **Move the `Unreleased` section of `CHANGELOG.md`** under the new version
    with today's date. `tests/test_packaging.py` fails if the released
    version has no entry.
-3. **Verify locally**, exactly as the release workflow will:
+4. **Verify locally**, exactly as the release workflow will:
 
    ```bash
    .venv/bin/python -m pytest -q
@@ -197,16 +212,16 @@ Versioning policy, and what counts as a breaking change here, is
    mistake here is one-way: an sdist that picked up `runs/` uploads
    gigabytes of CC-BY-NC weights to PyPI under an MIT package, and **PyPI
    never lets a filename be reused**.
-4. **Rehearse against TestPyPI** if anything about the packaging changed:
+5. **Rehearse against TestPyPI** if anything about the packaging changed:
    run `publish.yml` via `workflow_dispatch` with target `testpypi`, then
    install from there into a clean venv.
-5. **Merge, then publish a GitHub Release** tagged `vX.Y.Z`. The release
+6. **Merge, then publish a GitHub Release** tagged `vX.Y.Z`. The release
    event triggers `publish.yml`, which refuses to build if the tag and
    `__version__` disagree, runs the suite and the type check, and uploads
    through **trusted publishing** — there is no long-lived PyPI token stored
    in this repository.
 
-6. **Re-stage and push the four model cards**, once the version is on PyPI
+7. **Re-stage and push the four model cards**, once the version is on PyPI
    and not before. The generated card's install line names a released
    version (`pip install 'quantik-models[torch,hub]>=X.Y.Z'`), so pushing it
    ahead of the upload publishes an instruction that does not work yet:

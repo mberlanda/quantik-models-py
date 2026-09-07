@@ -189,23 +189,27 @@ never take the lock.
 ## Running it
 
 ```bash
-.venv/bin/python -m quantik_models.play --models staging
+.venv/bin/python -m quantik_models.play --models staging --runtime onnx
 ```
 
 Prints what it found and where it is:
 
 ```
 quantik play service 0.1.0
+  runtime    onnx
   models     staging  (4 ready of 5 found)
     ok cpool-c191-b6
     -- attn-c96-b4  (weights hash 3f9c... does not match manifest 'a12e...')
   opponents  14
   store      /Users/you/.local/share/quantik/games.db
-  app        /Users/you/Code/quantik-ns/quantik-qfen-visualizer
+  app        /Users/you/.venv/lib/python3.12/site-packages/quantik_models/play/app
 
   local      http://127.0.0.1:8000
   this WiFi  http://192.168.4.27:8000
 ```
+
+`app` is the vendored browser app inside the installed package (see "The
+vendored app", below) unless `--static` overrides it.
 
 The second address is the one to type into a phone. It is resolved by
 opening a UDP socket toward TEST-NET-1 and reading back the local address
@@ -221,6 +225,50 @@ The store defaults to `~/.local/share/quantik/games.db`, deliberately not
 under `runs/`. A checkpoint can be retrained; a game somebody played
 cannot be replayed, and `runs/` is gitignored and routinely deleted
 wholesale.
+
+## The vendored app
+
+The browser app `--static` serves by default lives at
+`src/quantik_models/play/app/` — an exact copy of `quantik-qfen-visualizer`,
+not a build product (QW-030 D1, D2). **`quantik-qfen-visualizer` is the
+source of truth**; nothing under `play/app/` is ever edited directly. A
+sibling `SOURCE.json` records where the copy came from:
+
+```json
+{
+  "repository": "https://github.com/mberlanda/quantik-qfen-visualizer",
+  "commit": "3d6e134d...",
+  "synced": "2026-09-07"
+}
+```
+
+The copy is refreshed by hand, at release time, not on every visualizer
+PR (QW-030 D3 — syncing per-PR would put this repo's CI on the critical
+path of a CSS tweak):
+
+```bash
+python scripts/sync_visualizer.py                # ../quantik-qfen-visualizer by default
+python scripts/sync_visualizer.py path/to/checkout
+```
+
+It refuses to run against a dirty source tree — a recorded commit that
+does not match the actual bytes is worse than no record — and
+`tests/test_play_app_assets.py` asserts that every script and stylesheet
+`index.html` references exists in the synced tree, so a partial sync fails
+CI instead of shipping a blank page. It is a release-checklist step (see
+`DEVELOPMENT.md`), not something a feature PR here needs to run.
+
+**Working on the visualizer itself?** Point `--static` at the live
+checkout instead of waiting for a sync:
+
+```bash
+.venv/bin/python -m quantik_models.play --models staging --runtime onnx \
+  --static ../quantik-qfen-visualizer
+```
+
+Edits to `index.html`/`src/*.js` there are visible on reload, same as
+opening it from `file://` — this repo's server is just a second way to
+reach the same page, with the API behind it.
 
 ## Reaching it off your LAN
 
@@ -419,7 +467,15 @@ GET  /*                         the visualizer
 ```
 
 `GET /api` exists because somebody with the URL should not have to read
-this file, or ask, to find out where the model list is.
+this file, or ask, to find out where the model list is. It also answers
+`"recording": <bool>` — whether `--no-store` was passed, i.e. whether
+`POST /api/games` will do anything. The visualizer reads it once at
+startup and skips the POST (and the "not recorded" message) entirely when
+it's `false`, rather than showing a public, storeless visitor a failed
+save on every finished game (QW-030 M2/V5, D6). A server that predates
+this field is read as recording — the field's absence, not its value,
+is what a pre-M2 deployment looks like, and defaulting the other way would
+silently stop recording games against every already-deployed service.
 
 `POST /api/games` answers **201** when it wrote the game and **200** when
 the id was already present, so a page reload after the result screen is a

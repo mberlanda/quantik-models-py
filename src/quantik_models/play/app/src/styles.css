@@ -98,6 +98,39 @@ textarea:focus-visible {
   gap: 12px;
 }
 
+/* The board is the destination, not one panel among several: visually it
+   comes right after the mode chooser and the primary "New game" action,
+   ahead of setup controls and examples that source order would otherwise
+   put first. DOM order (and tab order) is untouched — only paint order
+   moves, via `order` on .workspace's own grid items. */
+.masthead {
+  order: 1;
+}
+
+.mode-chooser {
+  order: 2;
+}
+
+.game-panel {
+  order: 3;
+}
+
+.content-grid {
+  order: 4;
+}
+
+.example-strip {
+  order: 5;
+}
+
+.settings-panel {
+  order: 6;
+}
+
+.advanced-drawer {
+  order: 7;
+}
+
 .masthead,
 .section-heading {
   align-items: center;
@@ -132,6 +165,42 @@ h2 {
 
 h3 {
   font-size: 0.9rem;
+}
+
+.mode-chooser {
+  flex-wrap: wrap;
+}
+
+.mode-button {
+  display: flex;
+  flex: 1 1 200px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 0;
+  padding: 12px 16px;
+  text-align: left;
+  background: var(--panel);
+}
+
+.mode-button strong {
+  font-size: 0.95rem;
+}
+
+.mode-button span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.mode-button[data-selected="true"] {
+  border-color: var(--player-0);
+  background: color-mix(in srgb, var(--player-0) 10%, var(--panel));
+  box-shadow: 0 0 0 2px rgb(23 111 130 / 20%);
+}
+
+.mode-button[data-selected="true"] span {
+  color: var(--ink);
 }
 
 .status-pill,
@@ -215,13 +284,36 @@ textarea[aria-invalid="true"] {
   background: #fffdf8;
 }
 
+/* No card chrome here: this section sits above the board, and the packet
+   wants only the mode chooser and "New game" to read as prominent there.
+   A bordered panel would compete with the board for that attention. */
 .game-panel {
   display: grid;
-  gap: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 16px;
-  background: #fffdf8;
+  gap: 10px;
+}
+
+.game-panel .section-heading h2 {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+#turn-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.game-actions button:not(.primary-button) {
+  color: var(--muted);
+  border-color: var(--line);
+  background: transparent;
+  box-shadow: none;
+}
+
+#new-game-button {
+  padding: 0 26px;
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .player-controls {
@@ -372,27 +464,37 @@ textarea[aria-invalid="true"] {
 }
 
 .board-panel {
-  flex: 1 1 620px;
+  flex: 1 1 720px;
   min-width: 0;
 }
 
 .side-panel {
-  flex: 0 1 380px;
-  min-width: 290px;
+  flex: 0 1 340px;
+  min-width: 270px;
 }
 
-.side-panel > section,
 .board-panel {
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 10px;
+  padding: 18px;
   background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+/* Quieter than the board: same family of panel, lighter border and no
+   lift, so assessment / lines / inventory / history / legend read as
+   supporting material rather than a second stage. */
+.side-panel > section {
+  border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
 }
 
 .board-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(62px, 1fr));
-  width: min(100%, 640px);
+  grid-template-columns: repeat(4, minmax(70px, 1fr));
+  width: min(100%, 760px);
   overflow: hidden;
   border: 3px solid var(--region-line);
   border-radius: 8px;
@@ -795,6 +897,10 @@ textarea[aria-invalid="true"] {
   .remote-controls {
     grid-template-columns: 1fr;
   }
+
+  .mode-button {
+    flex: 1 1 100%;
+  }
 }
 
 
@@ -874,6 +980,90 @@ textarea[aria-invalid="true"] {
 .top-move-prior {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Recessive by design: this is the debugging/lab surface, not the
+   playground. No card border, no background panel, no accent colour —
+   just a hairline separator and muted text, so it reads as "more options
+   exist" rather than competing with the board or the mode chooser. */
+.advanced-drawer {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.advanced-drawer > summary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.advanced-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-drawer > summary::before {
+  display: inline-block;
+  margin-right: 6px;
+  content: "▸";
+  transition: transform 150ms ease;
+}
+
+.advanced-drawer[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.advanced-drawer-content {
+  display: grid;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+/* Same quiet disclosure treatment as the drawer, since it sits right above
+   the board and must not out-weigh it — but it fails open by default
+   (see rules.js), so a first-time visitor sees the rules without having
+   to notice there's a triangle to click. */
+.how-to-play {
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.how-to-play summary {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  list-style: none;
+  cursor: pointer;
+}
+
+.how-to-play summary::-webkit-details-marker {
+  display: none;
+}
+
+.how-to-play summary::before {
+  display: inline-block;
+  margin-right: 6px;
+  content: "▸";
+  transition: transform 150ms ease;
+}
+
+.how-to-play[open] summary::before {
+  transform: rotate(90deg);
+}
+
+#how-to-play-points {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+#how-to-play-points li + li {
+  margin-top: 4px;
 }
 
 .endpoint-override {

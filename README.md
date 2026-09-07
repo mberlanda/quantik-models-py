@@ -182,11 +182,14 @@ finished games:
 
 ```bash
 pip install 'quantik-models[serve,hub]'
-quantik-models-play --models staging
+quantik-models-fetch --all --stage staging
+quantik-models-play --models staging --runtime onnx
 ```
 
-It prints a LAN address to open on a phone. `--no-store` opens no database,
-which is the configuration the public container runs.
+The first command pulls the four published checkpoints from the Hugging
+Face Hub — no training run, no local `runs/` checkout. It prints a LAN
+address to open on a phone. `--no-store` opens no database, which is the
+configuration the public container runs.
 [`docs/play-service.md`](docs/play-service.md).
 
 ## Training your own
