@@ -9,6 +9,37 @@ What counts as a breaking change here is written down in
 
 ## Unreleased
 
+### Added
+
+- **`quantik-models-play` serves the board and the API on one port with no
+  sibling checkout.** The browser app is now vendored as package data
+  (`src/quantik_models/play/app/`, synced from `quantik-qfen-visualizer` at
+  release time — see `docs/play-service.md`, "The vendored app"), so
+  `pip install 'quantik-models[serve,hub]'` followed by
+  `quantik-models-play` works from a venv created outside the `quantik-ns`
+  workspace. `--static` still exists, now as an override for developing
+  against a live visualizer checkout.
+- **The app opens with a mode prompt, not a control panel.** Four ways to
+  play (against a model, watch two engines, two players, or just the board)
+  render first; QFEN entry, seed, per-player controller selects, endpoint
+  overrides, and trace import/export moved into one collapsed "Advanced"
+  disclosure. A collapsible how-to-play explainer states the placement
+  restriction and win condition, checked against `quantik-core-rust` and
+  `quantik-core-py`'s own statements of the rule.
+- **`GET /api` reports `"recording": <bool>`.** A client talking to a
+  storeless server (`--no-store`, the public deployment's configuration)
+  now records nothing and shows no storage error, rather than a 503 at the
+  end of every game.
+- **`hub.stage()`** (`quantik-models-fetch --stage DIR [--copy]`)
+  materializes fetched checkpoints directly under a `--models`-shaped
+  directory, symlinked by default and copied with `--copy` — the latter
+  needed across a Docker build-stage boundary, where a symlink into the
+  stage's own Hub cache would dangle.
+- **The Docker image builds from `quantik-models-py` alone**, fetching all
+  four published architectures from the Hugging Face Hub at build time
+  instead of a hand-staged local `runs/` copy — no sibling
+  `quantik-qfen-visualizer` build context. Measured 498 MB.
+
 ### Fixed
 
 - `env.fastboard`'s D4 spatial-symmetry index (`spatial` in
