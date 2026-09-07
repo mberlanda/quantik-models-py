@@ -19,6 +19,11 @@
     // reaches the API at the same address without anyone typing it. A
     // default of localhost here would work on exactly one machine.
     serviceBase: "",
+    // Empty means "no mode chosen yet" — the mode chooser shows a neutral
+    // prompt rather than one button pre-selected. It matches none of
+    // modes.js's ids on purpose, so a first-time visitor sees the prompt
+    // and a returning one sees whatever they last picked.
+    mode: "",
   });
 
   function normalizeTheme(input = {}) {
@@ -108,6 +113,7 @@
       simulations: normalizeSimulations(input.simulations),
       analysisOpponent: normalizeModelId(input.analysisOpponent),
       serviceBase: normalizeServiceBase(input.serviceBase),
+      mode: normalizeMode(input.mode),
     };
   }
 
@@ -116,6 +122,14 @@
   }
 
   function normalizeModelId(value) {
+    return String(value ?? "").trim();
+  }
+
+  // Not validated against modes.js's MODES ids on purpose — that would make
+  // this module depend on that one, and applyMode() already treats an
+  // unrecognized id as "no mode chosen" rather than throwing, so there is
+  // nowhere here that needs to know the valid set.
+  function normalizeMode(value) {
     return String(value ?? "").trim();
   }
 

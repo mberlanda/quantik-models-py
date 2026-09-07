@@ -186,7 +186,35 @@
     };
   }
 
-  async function recordGame(body, { baseUrl, fetch } = {}) {
+  /**
+   * What GET /api says about this server, read defensively: anything short
+   * of an explicit "false" is read as recording being on. That covers an
+   * older server that predates this field (decisions.md#D6 — absent means
+   * on) and, deliberately going further, a server that cannot be reached
+   * at all: a network failure is not evidence of a storeless server, only
+   * evidence that this one request failed. The real POST attempt in
+   * recordGame is what eventually finds out, not a capability probe.
+   */
+  async function fetchCapabilities({ baseUrl, fetch } = {}) {
+    const fetchImplementation = fetch || global.fetch;
+    try {
+      const response = await fetchImplementation(requestUrl(baseUrl, "/api"), {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return { recording: true };
+      const payload = await response.json();
+      return { recording: payload.recording === undefined ? true : Boolean(payload.recording) };
+    } catch {
+      return { recording: true };
+    }
+  }
+
+  async function recordGame(body, { baseUrl, fetch, recording = true } = {}) {
+    if (!recording) {
+      // The server said so itself: nothing to post, and nothing wrong
+      // either. The caller shows this as a plain fact, not an error.
+      return { recorded: false, skipped: true };
+    }
     const fetchImplementation = fetch || global.fetch;
     const response = await fetchImplementation(requestUrl(baseUrl, "/api/games"), {
       method: "POST",
@@ -198,6 +226,7 @@
 
   global.QuantikPlay = Object.freeze({
     fetchOpponents,
+    fetchCapabilities,
     createOpponentEngine,
     createFinishWatcher,
     buildGameRecord,

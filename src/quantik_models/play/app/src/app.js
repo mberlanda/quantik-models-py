@@ -8,6 +8,9 @@
   const Play = global.QuantikPlay;
   const Examples = global.QuantikExamples;
   const Trace = global.QuantikTrace;
+  const Layout = global.QuantikLayout;
+  const Modes = global.QuantikModes;
+  const Rules = global.QuantikRules;
   const SHAPES = Qfen.getShapes();
   const SHAPE_META = {
     A: { label: "Cone", className: "piece-cone" },
@@ -21,8 +24,18 @@
   let game;
   let selectedShape = "A";
   let theme = Settings.readTheme();
+  // Empty means no mode has been chosen yet — the chooser shows a neutral
+  // prompt and the controller selects keep whatever index.html already has
+  // them set to (decisions.md#D7).
+  let selectedMode = Settings.readProfile().mode;
   let engines = [];
   let opponents = [];
+  // Optimistic until GET /api answers otherwise — decisions.md#D6 and its
+  // extension in fetchCapabilities: an older server, an HTTP error, and an
+  // unreachable one all mean "assume it records," so the first game of a
+  // session is never wrongly announced as unsaved before the real answer
+  // arrives.
+  let capabilities = { recording: true };
   // The request in flight, so a fast sequence of moves cannot let an
   // earlier answer land after a later one and describe the wrong board.
   let analysisToken = 0;
@@ -38,9 +51,10 @@
 
   function init() {
     for (const id of [
-      "autoplay-button", "board-grid", "copy-button", "error-message", "examples",
-      "export-button", "game-message", "import-button", "import-file", "inventory",
-      "legend", "lowercase-color", "move-history", "new-game-button", "piece-count",
+      "advanced-drawer", "autoplay-button", "board-grid", "copy-button", "error-message", "examples",
+      "export-button", "game-message", "how-to-play", "how-to-play-points", "how-to-play-summary",
+      "import-button", "import-file", "inventory",
+      "legend", "lowercase-color", "mode-chooser", "move-history", "new-game-button", "piece-count",
       "player-0-controller", "player-1-controller", "ply-count", "qfen-input",
       "opponent-0", "opponent-1", "player-name", "service-base",
       "remote-endpoint-0", "remote-endpoint-1", "reset-button", "reset-colors-button", "seed-input",
@@ -53,10 +67,20 @@
     }
 
     applyTheme(theme);
+    initializeMode();
     renderExamples();
     renderLegend();
     renderShapePicker();
+    renderRules();
     bindEvents();
+    elements.advancedDrawer.open = Layout.readDrawerOpen();
+    elements.advancedDrawer.addEventListener("toggle", () => {
+      Layout.writeDrawerOpen(elements.advancedDrawer.open);
+    });
+    elements.howToPlay.open = Rules.readHowToPlayOpen();
+    elements.howToPlay.addEventListener("toggle", () => {
+      Rules.writeHowToPlayOpen(elements.howToPlay.open);
+    });
     startGame(elements.qfenInput.value.trim());
   }
 
@@ -95,6 +119,14 @@
     elements.playerName.value = profile.playerName || "";
     elements.serviceBase.value = profile.serviceBase || "";
     loadOpponents();
+    loadCapabilities();
+  }
+
+  async function loadCapabilities() {
+    // fetchCapabilities never rejects — it already turns every failure into
+    // the safe "assume it records" default — so there is nothing to catch
+    // here beyond that.
+    capabilities = await Play.fetchCapabilities({ baseUrl: serviceBase() });
   }
 
   function saveProfile() {
@@ -102,7 +134,52 @@
       playerName: elements.playerName.value,
       analysisOpponent: elements.analysisOpponent.value,
       serviceBase: elements.serviceBase.value,
+      mode: selectedMode,
     });
+  }
+
+  // Applies a persisted mode's controller assignment before the first
+  // render, then draws the chooser. Nothing is forced onto the selects when
+  // no mode is stored — index.html's own defaults (human / tactical) stand,
+  // exactly as they did before the chooser existed.
+  function initializeMode() {
+    if (selectedMode) {
+      const assignment = Modes.applyMode(currentControllers(), selectedMode);
+      elements.player0Controller.value = assignment.player0;
+      elements.player1Controller.value = assignment.player1;
+    }
+    renderModeChooser();
+  }
+
+  function currentControllers() {
+    return { player0: elements.player0Controller.value, player1: elements.player1Controller.value };
+  }
+
+  function renderModeChooser() {
+    elements.modeChooser.replaceChildren();
+    for (const mode of Modes.MODES) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "mode-button";
+      button.dataset.selected = String(mode.id === selectedMode);
+      const label = document.createElement("strong");
+      label.textContent = mode.label;
+      const description = document.createElement("span");
+      description.textContent = mode.description;
+      button.append(label, description);
+      button.addEventListener("click", () => selectMode(mode.id));
+      elements.modeChooser.append(button);
+    }
+  }
+
+  function selectMode(modeId) {
+    selectedMode = modeId;
+    const assignment = Modes.applyMode(currentControllers(), modeId);
+    elements.player0Controller.value = assignment.player0;
+    elements.player1Controller.value = assignment.player1;
+    configureEngines();
+    saveProfile();
+    renderModeChooser();
   }
 
   function serviceBase() {
@@ -445,14 +522,21 @@
         opponentSeat,
         engines,
       });
-      const result = await Play.recordGame(body, { baseUrl: serviceBase() });
+      const result = await Play.recordGame(body, {
+        baseUrl: serviceBase(),
+        recording: capabilities.recording,
+      });
       // A disagreement is reported, not swallowed: it is the only signal
-      // that these rules and quantik-core's have drifted apart.
-      elements.gameMessage.textContent = result.discrepancies?.length
-        ? `Recorded, but the service disagreed: ${result.discrepancies.join("; ")}`
-        : result.recorded
-          ? "Game recorded."
-          : "Game was already recorded.";
+      // that these rules and quantik-core's have drifted apart. A skip is
+      // reported too, but as a plain fact — this server was never asked,
+      // so there is no HTTP status to show and nothing went wrong.
+      elements.gameMessage.textContent = result.skipped
+        ? "Not saved — this server keeps no record of games."
+        : result.discrepancies?.length
+          ? `Recorded, but the service disagreed: ${result.discrepancies.join("; ")}`
+          : result.recorded
+            ? "Game recorded."
+            : "Game was already recorded.";
     } catch (error) {
       elements.gameMessage.textContent = `Not recorded: ${error.message}`;
     }
@@ -606,6 +690,16 @@
       }
       elements.inventory.append(group);
     });
+  }
+
+  function renderRules() {
+    elements.howToPlaySummary.textContent = Rules.RULES.title;
+    elements.howToPlayPoints.replaceChildren();
+    for (const point of Rules.RULES.points) {
+      const item = document.createElement("li");
+      item.textContent = point;
+      elements.howToPlayPoints.append(item);
+    }
   }
 
   function renderLegend() {

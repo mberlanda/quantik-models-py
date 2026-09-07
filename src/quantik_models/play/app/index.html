@@ -17,23 +17,7 @@
           <output id="status-pill" class="status-pill" aria-live="polite">Ready</output>
         </div>
 
-        <form class="qfen-panel" id="qfen-form">
-          <label for="qfen-input">QFEN</label>
-          <div class="input-row">
-            <textarea
-              id="qfen-input"
-              name="qfen"
-              rows="2"
-              spellcheck="false"
-              autocomplete="off"
-            >A.bC/..../d..B/...a</textarea>
-            <div class="button-stack" aria-label="QFEN actions">
-              <button type="button" id="copy-button">Copy</button>
-              <button type="button" id="reset-button">Reset</button>
-            </div>
-          </div>
-          <p id="error-message" class="error-message" role="alert"></p>
-        </form>
+        <div class="mode-chooser" id="mode-chooser" role="group" aria-label="Choose how to play"></div>
 
         <section class="game-panel" aria-labelledby="game-heading">
           <div class="section-heading">
@@ -42,36 +26,6 @@
               <h2 id="game-heading">Game controls</h2>
             </div>
             <strong id="turn-label">Player 0 to move</strong>
-          </div>
-          <div class="player-controls">
-            <label>Player 0 (uppercase)
-              <select id="player-0-controller">
-                <option value="human">Human</option>
-                <option value="random">Random engine</option>
-                <option value="tactical">Tactical engine</option>
-                <option value="service">Trained model</option>
-                <option value="remote">Remote engine</option>
-              </select>
-            </label>
-            <label>Player 1 (lowercase)
-              <select id="player-1-controller">
-                <option value="tactical">Tactical engine</option>
-                <option value="human">Human</option>
-                <option value="random">Random engine</option>
-                <option value="service">Trained model</option>
-                <option value="remote">Remote engine</option>
-              </select>
-            </label>
-            <label>Seed
-              <input id="seed-input" type="number" value="1" step="1">
-            </label>
-            <label>Autoplay speed
-              <select id="speed-select">
-                <option value="1200">Slow</option>
-                <option value="500" selected>Normal</option>
-                <option value="120">Fast</option>
-              </select>
-            </label>
           </div>
           <div class="remote-controls">
             <label class="remote-control" for="player-name">Your name
@@ -84,21 +38,12 @@
             <label class="remote-control" for="opponent-1">Player 1 model
               <select id="opponent-1"></select>
             </label>
-            <label class="remote-control" for="remote-endpoint-0">Player 0 remote endpoint
-              <input id="remote-endpoint-0" type="url" placeholder="http://localhost:8000/move">
-            </label>
-            <label class="remote-control" for="remote-endpoint-1">Player 1 remote endpoint
-              <input id="remote-endpoint-1" type="url" placeholder="http://localhost:8001/move">
-            </label>
           </div>
           <div class="game-actions">
             <button type="button" id="new-game-button" class="primary-button">New game</button>
             <button type="button" id="step-button">Step engine</button>
             <button type="button" id="autoplay-button">Start autoplay</button>
             <button type="button" id="undo-button">Undo</button>
-            <button type="button" id="export-button">Export trace</button>
-            <button type="button" id="import-button">Import trace</button>
-            <input id="import-file" type="file" accept="application/json,.json" hidden>
           </div>
           <p id="game-message" class="game-message" aria-live="polite"></p>
         </section>
@@ -108,18 +53,6 @@
             <h2 id="settings-heading">Settings</h2>
             <button type="button" id="reset-colors-button">Reset colors</button>
           </div>
-          <details class="endpoint-override">
-            <summary>Play service endpoint</summary>
-            <p class="endpoint-note">
-              The app talks to the service it was served from. Set this only when
-              the page came from somewhere else — opened from a file, or served
-              separately from the API.
-            </p>
-            <label class="endpoint-control" for="service-base">Override
-              <input id="service-base" type="url" placeholder="same origin as this page"
-                     autocomplete="off" spellcheck="false">
-            </label>
-          </details>
 
           <div class="settings-grid">
             <label class="color-control" for="uppercase-color">
@@ -143,6 +76,10 @@
               <h2 id="board-heading">Board</h2>
               <span id="piece-count" class="quiet-stat">0 pieces</span>
             </div>
+            <details class="how-to-play" id="how-to-play">
+              <summary><strong id="how-to-play-summary"></strong></summary>
+              <ol id="how-to-play-points"></ol>
+            </details>
             <div id="board-grid" class="board-grid" aria-label="Quantik board"></div>
             <div class="piece-tray">
               <span class="control-label">Piece</span>
@@ -202,6 +139,88 @@
             </section>
           </aside>
         </div>
+
+        <details class="advanced-drawer" id="advanced-drawer">
+          <summary>Advanced</summary>
+          <div class="advanced-drawer-content">
+            <form class="qfen-panel" id="qfen-form">
+              <label for="qfen-input">QFEN</label>
+              <div class="input-row">
+                <textarea
+                  id="qfen-input"
+                  name="qfen"
+                  rows="2"
+                  spellcheck="false"
+                  autocomplete="off"
+                >A.bC/..../d..B/...a</textarea>
+                <div class="button-stack" aria-label="QFEN actions">
+                  <button type="button" id="copy-button">Copy</button>
+                  <button type="button" id="reset-button">Reset</button>
+                </div>
+              </div>
+              <p id="error-message" class="error-message" role="alert"></p>
+            </form>
+
+            <div class="player-controls">
+              <label>Player 0 (uppercase)
+                <select id="player-0-controller">
+                  <option value="human">Human</option>
+                  <option value="random">Random engine</option>
+                  <option value="tactical">Tactical engine</option>
+                  <option value="service">Trained model</option>
+                  <option value="remote">Remote engine</option>
+                </select>
+              </label>
+              <label>Player 1 (lowercase)
+                <select id="player-1-controller">
+                  <option value="tactical">Tactical engine</option>
+                  <option value="human">Human</option>
+                  <option value="random">Random engine</option>
+                  <option value="service">Trained model</option>
+                  <option value="remote">Remote engine</option>
+                </select>
+              </label>
+              <label>Seed
+                <input id="seed-input" type="number" value="1" step="1">
+              </label>
+              <label>Autoplay speed
+                <select id="speed-select">
+                  <option value="1200">Slow</option>
+                  <option value="500" selected>Normal</option>
+                  <option value="120">Fast</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="remote-controls">
+              <label class="remote-control" for="remote-endpoint-0">Player 0 remote endpoint
+                <input id="remote-endpoint-0" type="url" placeholder="http://localhost:8000/move">
+              </label>
+              <label class="remote-control" for="remote-endpoint-1">Player 1 remote endpoint
+                <input id="remote-endpoint-1" type="url" placeholder="http://localhost:8001/move">
+              </label>
+            </div>
+
+            <details class="endpoint-override">
+              <summary>Play service endpoint</summary>
+              <p class="endpoint-note">
+                The app talks to the service it was served from. Set this only when
+                the page came from somewhere else — opened from a file, or served
+                separately from the API.
+              </p>
+              <label class="endpoint-control" for="service-base">Override
+                <input id="service-base" type="url" placeholder="same origin as this page"
+                       autocomplete="off" spellcheck="false">
+              </label>
+            </details>
+
+            <div class="game-actions">
+              <button type="button" id="export-button">Export trace</button>
+              <button type="button" id="import-button">Import trace</button>
+              <input id="import-file" type="file" accept="application/json,.json" hidden>
+            </div>
+          </div>
+        </details>
       </section>
     </main>
 
@@ -212,6 +231,9 @@
     <script src="src/play.js"></script>
     <script src="src/examples.js"></script>
     <script src="src/trace.js"></script>
+    <script src="src/layout.js"></script>
+    <script src="src/modes.js"></script>
+    <script src="src/rules.js"></script>
     <script src="src/app.js"></script>
   </body>
 </html>
