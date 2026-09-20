@@ -135,6 +135,9 @@ def test_atol_admits_an_ulp_of_noise_but_default_refuses() -> None:
     with pytest.raises(NonUniformPolicyError):
         dense_to_mask(target, w)
     assert int(dense_to_mask(target, w, atol=1e-6)[0]) == 0b110
+    # the admitted row is canonicalised: the ulp of deviation does not survive the round trip
+    back, _ = mask_to_dense(dense_to_mask(target, w, atol=1e-6))
+    assert back[0].tobytes() == _row(1, 2).tobytes() and back[0].tobytes() != target[0].tobytes()
 
 
 def test_shape_validation() -> None:

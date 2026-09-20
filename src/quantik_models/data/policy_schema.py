@@ -15,8 +15,9 @@ weight, or a nonzero target under weight 0, is refused rather than dropped.
 
 Uniformity is checked for *exact* equality with ``float32(1 / n)`` by default, because that
 is what makes dense -> mask -> dense bit-exact. Every labelled row of the published v1
-corpus satisfies it. ``atol`` loosens the check, but then the round trip only reproduces
-the row to within ``atol``.
+corpus satisfies it. ``atol`` admits a *near*-uniform row and canonicalises it: the mask
+keeps only the support, and `mask_to_dense` always emits exact ``float32(1 / n)``, so the
+row's deviation is discarded and the round trip is NOT within ``atol`` of the input.
 """
 
 from __future__ import annotations
@@ -59,6 +60,10 @@ def dense_to_mask(
     Raises `NonUniformPolicyError` (a `ValueError`) if any row is not exactly a uniform
     distribution over its support with weight 1, or a zero row with weight 0. The message
     names the offending rows (index, plus ``row_ids[i]`` when given) and the reason.
+
+    ``atol`` (default 0, exact) admits rows within ``atol`` of uniform. Such a row is
+    canonicalised, not preserved: its deviation is dropped and the round trip returns the
+    exact uniform row.
     """
     target = np.asarray(policy_target)
     weight = np.asarray(policy_weight)
