@@ -356,10 +356,17 @@ checkpoints and builds from the `quantik-ns` workspace root the way the
 Dockerfile used to expect, which the current Dockerfile no longer does;
 treat it as stale until a follow-up either updates or removes it.
 
-**Still open:** nothing publishes to GHCR yet (QW-009 criterion 5); whether
-the public deployment ships all four architectures or a single "best" one
-is a product call this build's size is an input to, not the answer to (see
-QW-030 decision O3).
+### Publishing to GHCR
+
+The image is published to **`ghcr.io/mberlanda/quantik-models-play`** on
+releases and manual dispatch, triggered by the `.github/workflows/publish-image.yml`
+workflow. Tags follow release versions (e.g. `v1.2.0`) and the `latest` tag points
+to the most recent release.
+
+**Licensing note:** A consumer pulling this image is accepting an MIT license for
+the code and CC BY-NC 4.0 for the model weights bundled at build time. The image's
+`LABEL org.opencontainers.image.licenses` and the `/app/NOTICE` file both declare
+this split.
 
 ### Sharing a local build off your LAN
 
