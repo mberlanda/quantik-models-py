@@ -15,6 +15,9 @@ the freshness check ahead of agent construction.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -78,11 +81,27 @@ def test_a_refused_model_is_listed_with_its_reason_but_offers_no_opponent(tmp_pa
 
 
 def test_a_foreign_schema_is_a_400(service):
-    body = request_for(EMPTY, schema="quantik.engine-request.v2")
+    body = request_for(EMPTY, schema="engine-request.v2")
     with pytest.raises(svc.ServiceError) as caught:
         service.choose_move("random", body)
     assert caught.value.status == 400
     assert "schema" in caught.value.message
+
+
+def test_the_legacy_prefixed_request_schema_is_still_accepted(service):
+    """One-cycle migration (QW-019 D3): the old spelling in, the bare one out."""
+    body = request_for("A.../..../..../....", schema=svc.LEGACY_REQUEST_SCHEMA)
+    assert svc.LEGACY_REQUEST_SCHEMA == "quantik.engine-request.v1"
+    response = service.choose_move("random", body)
+    assert response["action_index"] in body["legal_action_indices"]
+    assert response["schema"] == "engine-response.v1"
+
+
+def test_a_prefixed_foreign_version_is_still_a_400(service):
+    body = request_for(EMPTY, schema="quantik.engine-request.v2")
+    with pytest.raises(svc.ServiceError) as caught:
+        service.choose_move("random", body)
+    assert caught.value.status == 400
 
 
 @pytest.mark.parametrize(
@@ -181,7 +200,7 @@ def test_a_classical_opponent_returns_a_legal_move(service, opponent_id):
     qfen = "A.../..../..../...."
     body = request_for(qfen)
     response = service.choose_move(opponent_id, body)
-    assert response["schema"] == svc.RESPONSE_SCHEMA
+    assert response["schema"] == svc.RESPONSE_SCHEMA == "engine-response.v1"
     assert response["action_index"] in body["legal_action_indices"]
     assert response["engine_version"] == opponent_id
     assert response["elapsed_ms"] >= 0
@@ -243,6 +262,29 @@ def test_refresh_picks_up_a_newly_staged_model(tmp_path):
     assert [m["model_id"] for m in service.list_models()] == ["cpool"]
 
 
+# --- the registered response schema (QW-019 D4) --------------------------
+
+_RESPONSE_SCHEMA_FILE = (
+    Path(__file__).resolve().parents[2]
+    / "quantik-core-contracts"
+    / "schemas"
+    / "engine-response-v1.json"
+)
+
+
+def _validate_against_contract(response: dict) -> None:
+    jsonschema = pytest.importorskip("jsonschema")
+    if not _RESPONSE_SCHEMA_FILE.is_file():
+        pytest.skip(f"contracts checkout not found at {_RESPONSE_SCHEMA_FILE}")
+    schema = json.loads(_RESPONSE_SCHEMA_FILE.read_text())
+    jsonschema.validate(response, schema)
+
+
+def test_a_service_response_validates_against_the_registered_schema(service):
+    body = request_for("A.../..../..../....")
+    _validate_against_contract(service.choose_move("minimax-d2", body))
+
+
 # --- the network path ---------------------------------------------------
 
 
@@ -273,3 +315,5 @@ def test_a_neural_opponent_reports_the_networks_own_read(tmp_path):
     assert response["engine_version"] == "tiny@0"
     assert len(response["policy"]) == fb.ACTION_COUNT
     assert -1.0 <= response["value"] <= 1.0
+    # The optional `policy` and `value` fields are only ever present here.
+    _validate_against_contract(response)

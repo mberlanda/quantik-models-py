@@ -1,8 +1,8 @@
 """The move handler: everything the play service does, minus the HTTP.
 
 This module is deliberately transport-free. `PlayService.choose_move` takes
-a decoded `quantik.engine-request.v1` dict and returns a decoded
-`quantik.engine-response.v1` dict; a `ServiceError` carries the status code
+a decoded `engine-request.v1` dict and returns a decoded
+`engine-response.v1` dict; a `ServiceError` carries the status code
 the eventual server should send. Keeping the rules here rather than in a
 request handler means all of it is unit-testable without a socket, and it
 is the same split `quantik-api-rust` uses (`validate_request` and
@@ -30,8 +30,13 @@ from ..export.digest import file_digest
 from . import opponents as op
 from . import registry as reg
 
-REQUEST_SCHEMA = "quantik.engine-request.v1"
-RESPONSE_SCHEMA = "quantik.engine-response.v1"
+REQUEST_SCHEMA = "engine-request.v1"
+RESPONSE_SCHEMA = "engine-response.v1"
+# The pre-registration spelling of the request name. Accepted on input for one
+# minor cycle and never emitted (QW-019 decisions.md#D3); the response side has
+# no legacy constant because nothing emits the prefixed form any more. Removing
+# it means deleting this constant, the `in` check below, and its test.
+LEGACY_REQUEST_SCHEMA = "quantik.engine-request.v1"
 # Local to this service, and named so it cannot be mistaken for one of the
 # two above: `quantik-core-contracts` defines the request and response pair
 # for *playing*, and there is no contract for an analysis. Inventing a
@@ -91,7 +96,7 @@ def validate_request(request: Any) -> tuple[str, int, tuple[int, ...], dict[str,
     if not isinstance(request, dict):
         raise ServiceError(400, "request body must be a JSON object")
     schema = request.get("schema")
-    if schema != REQUEST_SCHEMA:
+    if schema not in (REQUEST_SCHEMA, LEGACY_REQUEST_SCHEMA):
         raise ServiceError(400, f"schema must be {REQUEST_SCHEMA!r}, got {schema!r}")
 
     qfen = request.get("qfen")

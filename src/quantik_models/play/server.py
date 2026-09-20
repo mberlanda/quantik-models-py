@@ -46,7 +46,7 @@ _API_INDEX = {
         {"method": "GET", "path": "/api/games?player=NAME",
          "description": "recorded games, split by seat"},
         {"method": "POST", "path": "/api/move/{opponent_id}",
-         "description": "quantik.engine-request.v1 in, quantik.engine-response.v1 out"},
+         "description": "engine-request.v1 in, engine-response.v1 out"},
         {"method": "POST", "path": "/api/analyse/{opponent_id}",
          "description": "the network's value and policy for a position, without playing a move"},
         {"method": "POST", "path": "/api/games",
