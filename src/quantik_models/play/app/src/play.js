@@ -37,7 +37,8 @@
     // POST body from a fixed literal with no hook for extra fields. That
     // is why this wraps it rather than changing it: engines.js keeps its
     // contract test, and its request stays exactly the
-    // quantik.engine-request.v1 the Rust gateway also accepts.
+    // engine-request.v1 the Rust gateway accepts (it also accepts the
+    // legacy prefixed spelling for one minor cycle).
     const url = requestUrl(baseUrl, `/api/move/${encodeURIComponent(opponent.id)}`);
     return Engines.createRemoteEngine(url, {
       fetch,
@@ -74,7 +75,7 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        schema: "quantik.engine-request.v1",
+        schema: "engine-request.v1",
         qfen: game.qfen,
         side_to_move: game.sideToMove,
         legal_action_indices: Game.getLegalMoves(game).map((move) =>

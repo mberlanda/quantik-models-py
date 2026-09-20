@@ -51,7 +51,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            schema: "quantik.engine-request.v1",
+            schema: "engine-request.v1",
             qfen: game.qfen,
             side_to_move: game.sideToMove,
             legal_action_indices: legalActionIndices,
