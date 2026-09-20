@@ -59,6 +59,7 @@ The documents to read if you want to know how much to trust the rest.
 
 - [`pipeline.md`](pipeline.md) — how data gets from the solver to a trained model.
 - [`corpora.md`](corpora.md) — what is in each corpus, the ply distribution, how to merge and extend one.
+- [`corpus-structure.md`](corpus-structure.md) — measured, not quoted: policy density per corpus, the per-ply label table that shows the sampling cap, both policy schemas with byte costs, and the ply-3 floor.
 - [`labeling-strategy.md`](labeling-strategy.md) — what a label is here, and why none of them come from game outcomes.
 - [`tensor-structure.md`](tensor-structure.md) — the `(B, 9, 4, 4)` input contract, and the fixture that tells the two encodings apart.
 - [`retrain-and-finetune.md`](retrain-and-finetune.md) — `--init-from`, `--freeze`, `--patience`, and two silent failures.
