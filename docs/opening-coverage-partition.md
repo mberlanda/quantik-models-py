@@ -28,7 +28,7 @@ paper proposes; the rejected options are written down beside it.
 3. **What happens to the old 640-position probe and the 99.63%.**
    **RECOMMENDED: retire it as a held-out set today, keep the number as a dated,
    scoped historical figure.** It already stopped being held out when v2 was
-   built; W-anything does not do that.
+   built, so this initiative does not cause that.
 4. **How the new rows enter training.** The default ply-balanced sampler would
    give the 55 new positions at plies 0-2 about **21% of all training samples**.
    **RECOMMENDED: keep the default for the primary arm** (it is what every
