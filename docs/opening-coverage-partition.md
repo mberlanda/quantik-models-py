@@ -47,8 +47,8 @@ one. The RECOMMENDED marker is kept as the record of what was proposed.
    solve makes exact, network after; add a work item, because none of W2-W7's
    `allowed_paths` covers the service.**
 
-Two scope problems with the packet itself, for the coordinator, are in
-"Flags on the packet" at the end.
+The two scope problems in the packet itself, and the other open items, are under
+"Follow-ups" at the end.
 
 ## What the evidence changes
 
