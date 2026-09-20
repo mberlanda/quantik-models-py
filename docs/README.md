@@ -47,7 +47,7 @@ In the order the measurements get harder to fool.
 1. [`shift-evaluation.md`](shift-evaluation.md) — accuracy on solved positions the corpus never saw. Held out up to all 192 symmetries.
 2. [`autoplay.md`](autoplay.md) — the arena. Networks against each other, and why autoplay generates positions rather than labels.
 3. [`oracle-benchmark.md`](oracle-benchmark.md) — **the only non-relative measurement.** The field against a fixed classical engine, which is what answers "is any of this good" rather than "which of these is better".
-4. [`opening-coverage-partition.md`](opening-coverage-partition.md) — **proposal, pending human review.** The train/test partition for the opening-coverage expansion, decided before any labelling, and the arena comparison that will judge it.
+4. [`opening-coverage-partition.md`](opening-coverage-partition.md) — **decided 2026-09-20.** The train/test partition for the opening-coverage expansion, decided before any labelling, and the arena comparison that will judge it.
 
 ## What went wrong, and what it cost
 

@@ -1,7 +1,8 @@
 # Opening coverage: the train/test partition, decided before anything is labelled
 
-> **Status: proposal. A human decides this before W2 is dispatched.** Nothing
-> is labelled, trained or changed by this document. Every measurement below was
+> **Status: decided 2026-09-20. All six recommendations accepted, with frontier 5
+> for decision 1. W2 may be dispatched.** Nothing is labelled, trained or changed
+> by this document. Every measurement below was
 > read from files on the author's machine on 2026-09-20 (`runs/` is gitignored,
 > so none of it can be re-checked from a fresh clone); the commands that
 > reproduce each number are in the last section.
@@ -11,35 +12,36 @@ held-out probe and the 99.63% figure with it. Reading the code and the corpora
 shows that premise is **partly wrong, in both directions**, and that changes
 which decisions matter. Read "What the evidence changes" before the decisions.
 
-## Decisions needed
+## Decisions
 
-Each is argued in its own section below. **RECOMMENDED** marks the option this
-paper proposes; the rejected options are written down beside it.
+All six were accepted by the user on 2026-09-20 as recommended. Each is argued in
+its own section below; the rejected options stay written down beside the decided
+one. The RECOMMENDED marker is kept as the record of what was proposed.
 
-1. **Scope of the solve.** Frontier 6 as the packet says, frontier 5, or plies
+1. **[DECIDED 2026-09-20]** **Scope of the solve.** Frontier 6 as the packet says, frontier 5, or plies
    0-2 only?
    **RECOMMENDED: frontier 5** (exact values plies 0-5, exact policy plies 0-4,
    about 70 minutes to finish), with frontier 6 conditional on the arena result.
-2. **How the probe is protected.** Exclude by canonical key, redraw a fresh
+2. **[DECIDED 2026-09-20]** **How the probe is protected.** Exclude by canonical key, redraw a fresh
    probe, or hold out a structural family?
    **RECOMMENDED: exclude the existing 7,800-position `probe-large.jsonl` by
    canonical key at every ply**, applied to the merged result. It is the
    existing default; this decision makes it the written contract.
-3. **What happens to the old 640-position probe and the 99.63%.**
+3. **[DECIDED 2026-09-20]** **What happens to the old 640-position probe and the 99.63%.**
    **RECOMMENDED: retire it as a held-out set today, keep the number as a dated,
    scoped historical figure.** It already stopped being held out when v2 was
    built, so this initiative does not cause that.
-4. **How the new rows enter training.** The default ply-balanced sampler would
+4. **[DECIDED 2026-09-20]** **How the new rows enter training.** The default ply-balanced sampler would
    give the 55 new positions at plies 0-2 about **21% of all training samples**.
    **RECOMMENDED: keep the default for the primary arm** (it is what every
    baseline was trained with), pre-register the expected deep-band cost, and
    name the ablation that runs if it is exceeded.
-5. **The judging comparison, fixed now.** Which arena, which baselines, which
+5. **[DECIDED 2026-09-20]** **The judging comparison, fixed now.** Which arena, which baselines, which
    start depths, what counts as a pass?
    **RECOMMENDED: matched-budget head-to-head against `patience-cpool-v3`,
    policy arena at start plies 2, 3 and 6, plus `minimax-d2` and `uniform-mcts`
    controls; a stated decision rule and a stated consequence of a null.**
-6. **The opening book stays preferred, and who builds that.** Acceptance
+6. **[DECIDED 2026-09-20]** **The opening book stays preferred, and who builds that.** Acceptance
    criterion 7 has no work item that can satisfy it.
    **RECOMMENDED: an exact-lookup layer in the play service for the plies the
    solve makes exact, network after; add a work item, because none of W2-W7's
@@ -116,7 +118,7 @@ was never trained on the first few plies and has no opinion there"
 consults an exact book. `docs/corpora.md:160-167` already says to prefer the
 book for opening play; nothing implements it here.
 
-## D1. Scope of the solve
+## D1. Scope of the solve (DECIDED 2026-09-20)
 
 **Options**
 
@@ -149,13 +151,13 @@ not the cost; the cost is a result nobody can attribute, which is what the
 ADR was written to prevent. Also rejected: solving ply 6 and skipping ply 5
 (policy at ply 4 needs every ply-5 child solved).
 
-**RECOMMENDED: B**, run as the treatment, and escalate to A only if B's arena
+**RECOMMENDED and DECIDED 2026-09-20: B (frontier 5)**, run as the treatment, and escalate to A only if B's arena
 result (D5) is a win that then wants ply-5 policy. C's rows are a strict subset
 of B's, so nothing is thrown away by choosing B; it can be run first as W3 as the
 packet already sequences it. Evidence: F1, F4; `scripts/solve_opening.py:70-121`
 (resumable solve), `:125-160` (back-induction).
 
-## D2. How the probe is protected
+## D2. How the probe is protected (DECIDED 2026-09-20)
 
 **Options**
 
@@ -189,11 +191,11 @@ v2 and v3 already carry (v3 shares zero keys with the probe, verified by
 comparison, but it means the probe measures "unseen position", not "unseen
 subtree".
 
-**RECOMMENDED: A.** If the reviewer wants an extrapolation claim, C is the
+**RECOMMENDED and DECIDED 2026-09-20: A.** If the reviewer wants an extrapolation claim, C is the
 follow-up, as its own initiative. Evidence: F2; `scripts/build_probe.py:36-50`;
 `merge_corpus.py:8-14` (why exclusion is on the merged result).
 
-## D3. The old 640 probe and the 99.63%
+## D3. The old 640 probe and the 99.63% (DECIDED 2026-09-20)
 
 **Options**
 
@@ -208,7 +210,7 @@ follow-up, as its own initiative. Evidence: F2; `scripts/build_probe.py:36-50`;
   Rejected for the same reason, and because 68 of those 160 are already trained
   on; excluding them removes rows v3 has.
 
-**RECOMMENDED: A.** The decision the packet asked for ("retired, retained,
+**RECOMMENDED and DECIDED 2026-09-20: A.** The decision the packet asked for ("retired, retained,
 reconstructed; ambiguity is not acceptable") is: **retired as a probe, retained as
 history.** The sentence that replaces the bare number wherever it appears is:
 "measured on the 640-position original probe against the v1 corpus; that probe
@@ -217,7 +219,7 @@ out". Where the figure lives: `articles/part-vii-the-audit.md:124` and
 `articles/preview.html:291` (articles repo, W7), and
 `scripts/build_report.py:550` (this repo; see flags).
 
-## D4. How the new rows enter training
+## D4. How the new rows enter training (DECIDED 2026-09-20)
 
 `TrainConfig.balance_plies` defaults to `True` (`src/quantik_models/train/supervised.py:84`),
 and `ply_sampling_weights` makes every ply equally likely per draw
@@ -244,14 +246,15 @@ arguably what one wants, but 22% fewer samples on plies 3-13 is the same
   gives 55 rows a vanishing share and would very likely produce a null at plies
   0-2 by construction, a false negative on the whole initiative.
 
-**RECOMMENDED: A for the primary arm**, with a pre-registered tripwire: if the
+**RECOMMENDED and DECIDED 2026-09-20: A for the primary arm**, with a pre-registered tripwire: if the
 deep band (plies 7-12 on `probe-large`) falls by more than 0.5 points, that is
 reported as a cost of the treatment, and the B-style ablation is the named
 follow-up rather than a reason to reinterpret the primary result afterwards.
-Whether `balance_plies` is a CLI flag was not checked; W5 must confirm before it
-relies on either arm.
+`balance_plies` is a CLI flag: `--balance-plies` / `--no-balance-plies`, generated
+from the config dataclass (`supervised.py:403-410`). Arms A and C therefore need no
+code change; only the capped-mass ablation (B) does.
 
-## D5. The comparison that judges the result
+## D5. The comparison that judges the result (DECIDED 2026-09-20)
 
 Held-out policy accuracy has failed to predict play strength five times (ADR
 0014 counts the fifth). It is therefore reported, never the criterion.
@@ -292,13 +295,13 @@ Held-out policy accuracy has failed to predict play strength five times (ADR
 (b) A fit check on all 781 canonical positions at plies 0-3 against the exact
 optimal sets: kept as a **secondary report only**, because these positions are
 training data by construction, so it measures fit, not generalization. (c) The
-arena as above: **RECOMMENDED**.
+arena as above: **RECOMMENDED and DECIDED 2026-09-20**.
 
 Cost note for the reviewer: 300 games times the pairings above at three depths is
 the same shape as `evaluate_lineup.sh` today, so the arena cost is known from
 `runs/eval/`; the training run is the expensive line.
 
-## D6. The opening book stays preferred, and who builds it
+## D6. The opening book stays preferred, and who builds it (DECIDED 2026-09-20)
 
 **Options**
 
@@ -315,7 +318,7 @@ the same shape as `evaluate_lineup.sh` today, so the arena cost is known from
 - **C. Trust the stronger network everywhere.** Rejected by QW-021 decision 4:
   the book is exact, the network at best approximates it.
 
-**RECOMMENDED: B.** The Rust opening book already exists in `quantik-core-rust`
+**RECOMMENDED and DECIDED 2026-09-20: B.** The Rust opening book already exists in `quantik-core-rust`
 (workspace repository map); whether the service should call that or read the
 `opening-exact.npz` this solve produces is a design question for whoever owns the
 work item, and this paper does not decide it.
@@ -361,17 +364,27 @@ probe overlap in F3 from the same call on `probe.jsonl`.
   still open; D1's option C and the ply 0-2 rows under B inherit that caveat.
 - The per-level solve timings are status.md's, not re-measured; this work did no
   solve.
-- Whether `balance_plies` is exposed on the command line (D4).
 - Arena costs for the D5 conditions.
 
-## Flags on the packet, for the coordinator
+## Follow-ups
 
-- **W6's `allowed_paths` do not contain the figure.** `docs/models.md`,
-  `docs/labeling-strategy.md` and `README.md` do not quote 99.63%; the only
-  occurrence in this repository is `scripts/build_report.py:550`, which W6 may not
-  edit. Either widen W6 or record that this repository has nothing to rescope.
-- **Acceptance criterion 7 has no work item.** None of W2-W7 may edit
-  `src/quantik_models/play/`. Add a W8 or drop the criterion.
+Resolved with the decisions above, and owed by the coordinator:
+
+- **New W8 owns criterion 7.** Its `allowed_paths` cover `src/quantik_models/play/`
+  (and its tests). Scope per D6: exact lookup for plies 0-4 (frontier 5), uniform
+  over the optimal set, network beyond; retire the opening-temperature rationale
+  at `opponents.py:33-51`. Whether it reads `opening-exact.npz` or the
+  `quantik-core-rust` book is W8's design question.
+- **W6 is widened** to cover the 99.63% mention: `scripts/build_report.py:550`
+  in this repository, and `articles/part-vii-the-audit.md:124` and
+  `articles/preview.html:291` (W7's repository; W7's `**/*.md` does not cover the
+  HTML file). The replacement wording is in D3. `docs/models.md`,
+  `docs/labeling-strategy.md` and `README.md` do not quote the figure.
+- **QW-027 oracle confirmation is still open.** The induced plies 0-2 values are
+  consistent with v3, not independently confirmed. W3 should not treat them as
+  independent labels until it lands.
+- **`balance_plies` is a CLI flag** (settled above, D4); W5 need only record which
+  arm used which setting.
 - **This document adds one line to `docs/README.md`**, outside W1's single
   allowed path, because `tests/test_docs_crossrefs.py::test_the_index_links_every_document`
-  fails on any `docs/*.md` the index does not link. Without it `main` goes red.
+  fails on any `docs/*.md` the index does not link.
