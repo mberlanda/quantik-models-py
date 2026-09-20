@@ -10,8 +10,9 @@ level, so the induction has the precondition it needs.
 a lost position look won or drops an optimal move, and nothing downstream notices. So
 before inducting, the set of canonical keys of v3's ply-3 rows is compared, as a
 *set*, with the complete `runs/canonical/level03.npy`. A count can match while the sets
-differ, so counts are never the check. On any difference the run aborts and names the
-missing keys.
+differ, so counts are never the check. Every ply-3 row must also carry a policy label
+(non-zero optimal_mask), since v3 mixes labelled and value-only rows. On any failure the
+run aborts and names the offending keys.
 
 Labels come only from exact induction over the oracle's ply-3 values
 (`canonical-invariants.md#I4`); nothing here reads a game outcome. Nothing is written
@@ -67,6 +68,22 @@ def assert_complete_level(corpus_boards: np.ndarray, canonical_boards: np.ndarra
         )
 
 
+def assert_labelled(corpus: ExactCorpus) -> None:
+    """Raise `IncompleteLevelError` if any ply-3 row is value-only (zero `optimal_mask`).
+
+    v3 mixes labelled and value-only rows at other plies, so a ply-3 row can carry a
+    value without an exact policy label. The frontier must be exactly oracle-labelled.
+    """
+    at3 = corpus.plies == FRONTIER_PLY
+    bad = at3 & (corpus.optimal_mask == 0)
+    if bad.any():
+        keys = np.unique(fb.canonical_keys(corpus.boards[bad]))
+        raise IncompleteLevelError(
+            f"refusing to back-induct: {len(keys)} ply-{FRONTIER_PLY} position(s) are value-only "
+            f"(zero optimal_mask, no policy label): {_fmt(keys)}"
+        )
+
+
 def _canonical_children(boards: np.ndarray) -> np.ndarray:
     """One representative per canonical class of live children of `boards`."""
     legal = fb.legal_masks(boards)
@@ -99,6 +116,7 @@ def induct_shallow(corpus: ExactCorpus, level03: np.ndarray) -> tuple[ExactCorpu
     """Guarded induction of plies 2, 1, 0 from `corpus`'s ply-3 rows."""
     boards3, won3 = frontier_rows(corpus)
     assert_complete_level(boards3, level03)
+    assert_labelled(corpus)
 
     keys = fb.canonical_keys(boards3)
     order = np.argsort(keys)

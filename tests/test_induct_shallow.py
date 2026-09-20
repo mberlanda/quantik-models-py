@@ -34,7 +34,7 @@ def _synthetic_ply3_corpus(level3: np.ndarray, rng: np.random.Generator) -> Exac
     n = len(level3)
     return ExactCorpus(
         boards=level3,
-        optimal_mask=np.zeros(n, np.uint64),
+        optimal_mask=np.ones(n, np.uint64),
         value_target=np.where(rng.random(n) < 0.5, 1.0, -1.0).astype(np.float32),
         plies=np.full(n, 3, np.int16),
     )
@@ -55,6 +55,15 @@ def test_incomplete_level_aborts_naming_the_missing_keys():
         ish.induct_shallow(short, level3)
     for key in dropped:
         assert f"{int(key):#018x}" in str(info.value)
+
+
+def test_value_only_ply3_row_aborts_naming_its_key():
+    level3 = _level3_from_engine()
+    corpus = _synthetic_ply3_corpus(level3, np.random.default_rng(5))
+    corpus.optimal_mask[42] = 0
+    with pytest.raises(ish.IncompleteLevelError, match="value-only") as info:
+        ish.induct_shallow(corpus, level3)
+    assert f"{int(fb.canonical_keys(level3[[42]])[0]):#018x}" in str(info.value)
 
 
 def test_equal_count_but_different_set_still_aborts():
