@@ -56,30 +56,30 @@ jobs:
 
     steps:
       - name: Check out model repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: quantik-models-py
 
       - name: Check out contracts repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mberlanda/quantik-core-contracts
           path: quantik-core-contracts
 
       - name: Check out Rust core repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mberlanda/quantik-core-rust
           path: quantik-core-rust
 
       - name: Check out Python core repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mberlanda/quantik-core-py
           path: quantik-core-py
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -112,7 +112,7 @@ jobs:
         run: python scripts/verify_smoke_outputs.py "$OUT"
 
       - name: Upload generated smoke artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quantik-e2e-data-pipeline
           path: ${{ github.workspace }}/quantik-e2e-data

@@ -68,30 +68,30 @@ jobs:
 
     steps:
       - name: Check out model repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: quantik-models-py
 
       - name: Check out contracts repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mberlanda/quantik-core-contracts
           path: quantik-core-contracts
 
       - name: Check out Rust core repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mberlanda/quantik-core-rust
           path: quantik-core-rust
 
       - name: Check out Python core repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: mberlanda/quantik-core-py
           path: quantik-core-py
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -158,7 +158,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/quantik-core-py/src
 
       - name: Upload checkpoint artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: smoke-checkpoint
           path: ${{ env.OUT }}/checkpoint
