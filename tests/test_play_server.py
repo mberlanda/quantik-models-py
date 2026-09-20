@@ -149,7 +149,7 @@ def test_an_unknown_api_route_is_a_404_in_json_not_html(live):
 def test_a_move_comes_back_legal(live):
     status, body = post(live, "/api/move/random", move_request("A.../..../..../...."))
     assert status == 200
-    assert body["schema"] == "quantik.engine-response.v1"
+    assert body["schema"] == "engine-response.v1"
     assert body["engine_version"] == "random"
     assert body["action_index"] in move_request("A.../..../..../....")["legal_action_indices"]
 
