@@ -180,7 +180,9 @@ downloader.
 The test above was run. `cpool/medium` was retrained on both corpora at 40
 epochs with `--patience 5`, lr 6e-4, seed 20260828, everything else held —
 `patience-cpool-v2` and `patience-cpool-v3` — and all four checkpoints were
-put through `scripts/evaluate_lineup.sh` at seed 20260829, 300 games per
+put through `scripts/evaluate_lineup.sh` at seed 20260829 (the first run; see
+[`patience-arena-second-seed.md`](patience-arena-second-seed.md) for its re-run on an
+independent seed), 300 games per
 ordered pairing.
 
 **The v3 advantage does not survive the longer budget.**

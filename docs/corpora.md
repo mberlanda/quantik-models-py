@@ -189,7 +189,8 @@ Honestly: **unknown, and it is the largest gap in this project's evidence.**
   settle.
 - **Arena seed.** Genuinely does move results — the arena is seeded separately
   and deliberately never reuses a training seed, so a seed-linked bias shows up
-  rather than hiding. `20260829` and `20260909` are **spent**; use a third.
+  rather than hiding. `20260829`, `20260909`, `20261001` and `20261015` are **spent** as arena
+  seeds; use a fresh one.
 - **Corpus-generation seed.** Changes *which* positions autoplay reaches. Since
   positions are deduplicated on canonical key and labels are exact, two seeds
   produce overlapping but different row sets — merging them is legitimate and is
