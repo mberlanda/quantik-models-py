@@ -49,6 +49,7 @@ In the order the measurements get harder to fool.
 3. [`oracle-benchmark.md`](oracle-benchmark.md) — **the only non-relative measurement.** The field against a fixed classical engine, which is what answers "is any of this good" rather than "which of these is better".
 4. [`opening-coverage-partition.md`](opening-coverage-partition.md) — **decided 2026-09-20.** The train/test partition for the opening-coverage expansion, decided before any labelling, and the arena comparison that will judge it.
 5. [`patience-arena-second-seed.md`](patience-arena-second-seed.md) — the patience-lineup arena re-run on an independent seed (20261015), side by side with the original, and whether the cpool-vs-attn ranking held.
+6. [`opening-arena-ply0.md`](opening-arena-ply0.md) — the arena from the empty board and from ply 1: distinct-games audit first, then seat-split leaderboards with the `uniform-mcts` control. Measured data only.
 
 ## What went wrong, and what it cost
 
