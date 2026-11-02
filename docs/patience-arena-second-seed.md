@@ -17,18 +17,18 @@ Everything below is measured. The verdict above is the only interpretation.
 Run before this document was written:
 
 ```text
-grep -rn "20261015" <worktree>/scripts/ <worktree>/docs/ <worktree>/src/ <checkout>/runs/
+grep -rn "20261015" scripts/ docs/ src/ runs/
 ```
 
-Output, verbatim:
+Output, with paths shown relative to the repository root:
 
 ```text
-/Users/mauroberlanda/Code/quantik-ns/quantik-models-py/runs/eval/patience-seed-20261015/mcts-p6/games.json:2:  "seed": 20261015,
-/Users/mauroberlanda/Code/quantik-ns/quantik-models-py/runs/eval/patience-seed-20261015/shift.md:31:wrote runs/eval/patience-seed-20261015/shift.json
-/Users/mauroberlanda/Code/quantik-ns/quantik-models-py/runs/eval/patience-seed-20261015/policy-p3/games.json:2:  "seed": 20261015,
-/Users/mauroberlanda/Code/quantik-ns/quantik-models-py/runs/eval/patience-seed-20261015/policy-p6/games.json:2:  "seed": 20261015,
-/Users/mauroberlanda/Code/quantik-ns/quantik-models-py/runs/eval/patience-seed-20261015/policy-p9/games.json:2:  "seed": 20261015,
-/Users/mauroberlanda/Code/quantik-ns/quantik-models-py/runs/eval/patience-seed-20261015/mcts-p3/games.json:2:  "seed": 20261015,
+runs/eval/patience-seed-20261015/mcts-p6/games.json:2:  "seed": 20261015,
+runs/eval/patience-seed-20261015/shift.md:31:wrote runs/eval/patience-seed-20261015/shift.json
+runs/eval/patience-seed-20261015/policy-p3/games.json:2:  "seed": 20261015,
+runs/eval/patience-seed-20261015/policy-p6/games.json:2:  "seed": 20261015,
+runs/eval/patience-seed-20261015/policy-p9/games.json:2:  "seed": 20261015,
+runs/eval/patience-seed-20261015/mcts-p3/games.json:2:  "seed": 20261015,
 ```
 
 All six hits are outputs of this run (its `seed` field and its `wrote` line). None is in `scripts/`, `docs/`, `src/`, or the original run. That agrees with the seed being unspent before the run. The pre-launch grep was not recorded, so this is consistency evidence, not a before-and-after check. The grep matches the literal string only.
@@ -55,6 +55,10 @@ Ordered pairings per arena: 12 for policy, 20 for MCTS. The arena's own warning 
 | patience-seed-20261015 (20261015) | mcts-p6 | 20 | 231/300 (mlp-mcts128 vs attn-mcts128) | 0 | reportable |
 
 **Policy ply 9 is not reportable on either seed**, and no win rate for it appears in this document. The original seed's policy-p9 audit also fails (worst pairing 135/300), so the QW-012 policy-p9 numbers should not be cited either.
+
+![Distinct games per game played for the worst pairing of each arena, both seeds, with the 0.5 threshold](figures/patience-second-seed-audit.svg)
+
+Worst pairing's distinct games per game played, for each arena and seed, against the 0.5 threshold. Policy ply 9 falls below it on both seeds (0.45 and 0.45), which is why it is not reportable. The two figures below leave policy ply 9 out.
 
 ## Win rates by seat, both seeds
 
@@ -98,6 +102,10 @@ Each cell is one agent's win rate in one seat, over all of its games in that sea
 | resnet-mcts128 | 84.2% (1010/1200) [82.7%, 831/1005] | 29.8% (357/1200) [33.8%, 336/995] | 83.5% (1002/1200) [82.4%, 823/999] | 30.9% (371/1200) [34.5%, 339/984] |
 | uniform-mcts128 (control) | 33.8% (406/1200) [26.1%, 248/952] | 8.1% (97/1200) [7.5%, 72/956] | 35.2% (422/1200) [26.8%, 255/952] | 7.8% (93/1200) [7.8%, 77/988] |
 
+![MCTS-128 win rate per network, by seat, at plies 3 and 6, both seeds](figures/patience-second-seed-seats.svg)
+
+Each network's MCTS-128 win rate in the mover and responder seats at start plies 3 and 6, raw games, field-relative, for seed 20260829 (light) and seed 20261015 (dark). The uniform control is not drawn.
+
 ## cpool minus attn, per seat, both seeds
 
 Each cell is cpool's rate minus attn's rate in the same seat, field-relative. The raw half-width uses game counts (what the arena would report). The distinct half-width uses distinct games, which is the independent-trial count for deterministic agents. Both are Wald 95% intervals, rough, treating each agent-seat's games as independent.
@@ -112,6 +120,10 @@ Each cell is cpool's rate minus attn's rate in the same seat, field-relative. Th
 | mcts-p3 | responder | +4.9 ±4.0 (+4.9 ±4.0) | +2.5 ±4.0 (+2.6 ±4.0) |
 | mcts-p6 | mover | -1.2 ±3.0 (-1.2 ±3.4) | +2.6 ±3.0 (+3.7 ±3.4) |
 | mcts-p6 | responder | -0.4 ±3.8 (+0.3 ±4.3) | +0.3 ±3.7 (+1.0 ±4.2) |
+
+![cpool minus attn win rate per seat at MCTS-128, both seeds, with Wald 95% intervals](figures/patience-second-seed-margin.svg)
+
+cpool minus attn per seat for MCTS-128 at plies 3 and 6, one point per seed. Filled markers use raw games and open markers use distinct games, each with its Wald 95% half-width as in the table above. The dotted line is zero. Policy arenas are not drawn.
 
 ## The 0.8-point margin, on the pooled leaderboard
 
@@ -153,7 +165,7 @@ At ply 6 the head-to-head favours cpool on both seeds. The interval on the new s
 
 ## Reproduction
 
-The tables were produced from `runs/eval/<run>/<arena>/games.json` with `quantik_models.arena.autoplay` (`distinct_games`, `leaderboard`), run under the main checkout's `.venv`. Those helper scripts are not committed, since this work item's allowed paths are this document alone. The new run was launched with `SEED=20261015 scripts/evaluate_lineup.sh <dir> resnet=... mlp=... cpool=... attn=...`. The arena itself is `src/quantik_models/arena/autoplay.py`.
+The tables were produced from `runs/eval/<run>/<arena>/games.json` with `quantik_models.arena.autoplay` (`distinct_games`, `leaderboard`), run under the repo venv. The tables were computed by throwaway helper scripts that are not committed; the figures are regenerated by `scripts/plot_patience_second_seed.py <original-run-dir> <new-run-dir>`, which recomputes the same quantities and reproduces the tables' numbers. The new run was launched with `SEED=20261015 scripts/evaluate_lineup.sh <dir> resnet=... mlp=... cpool=... attn=...`. The arena itself is `src/quantik_models/arena/autoplay.py`.
 
 ## Not done here
 
