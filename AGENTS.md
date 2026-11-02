@@ -38,6 +38,12 @@ and the rejected options are the part that has aged best.
 Do not split the difference. Held-out accuracy has failed to predict play
 strength four separate times; when it disagrees with the arena, say so.
 
+**Never commit a path from your own file system.** No `/Users/...`, `/home/...`,
+worktree or scratchpad paths, and no output copied from a terminal that contains
+one, in code, docs, commit messages or PR bodies. Write repo-relative paths
+(`runs/eval/<run>/...`, `scripts/...`) and describe the environment in words
+("the repo venv"). Scripts take paths as arguments rather than hard-coding them.
+
 ## Where work is tracked
 
 `quantik-workspace` is the control plane and the source of truth for what
