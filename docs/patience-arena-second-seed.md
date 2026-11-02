@@ -1,6 +1,6 @@
 # Patience-lineup arena on an independent seed
 
-**Verdict.** The cpool-vs-attn ranking holds at ply 3 in the mover seat on both seeds (+8.0 and +7.5 points, each ±3.4), but the 0.8-point ply-6 MCTS-128 margin does not survive: its pooled sign reverses on seed 20261015 (attn +0.8 becomes cpool +1.5), and that reversal sits inside the noise band for the pooled margin (±3.1) and for raw mover-seat rates (+2.6 ±3.0), but only marginally outside it for distinct-game mover-seat rates (+3.7 ±3.4), so two seeds do not settle ply 6.
+**Verdict.** The cpool-vs-attn ranking holds at ply 3 for MCTS-128 in the mover seat against the field on both seeds (+8.0 and +7.5 points, each ±3.4; the policy-only ply-3 comparison and the cpool-vs-attn head-to-head at ply 3 are weaker, see below), and the head-to-head favours cpool at ply 6 on both seeds (+4.0 ±7.5, +7.7 ±7.1), but the 0.8-point ply-6 MCTS-128 margin does not survive: its pooled sign reverses on seed 20261015 (attn +0.8 becomes cpool +1.5), and that reversal sits inside the noise band for the pooled margin (±3.1) and for raw mover-seat rates (+2.6 ±3.0), but only marginally outside it for distinct-game mover-seat rates (+3.7 ±3.4), so two seeds do not settle ply 6.
 
 Everything below is measured. The verdict above is the only interpretation.
 
