@@ -310,25 +310,20 @@ Same four checkpoints, retrained with `--patience 5 --epochs 60` in place
 of the fixed 16-epoch budget above. `scripts/evaluate_lineup.sh`, output
 `runs/eval/patience-2026-08-30/`.
 
-> **Seed caveat.** This run took the script's default seed, `20260829`,
-> because nothing overrode it — the same value already spent on
-> `runs/eval/epoch-test/`, a different comparison. The workspace task that
-> commissioned this run (QW-012) explicitly called for a fresh arena seed
-> for exactly the reason the script's own comment gives: reusing one makes
-> seed-linked bias invisible rather than absent. Caught after the ~3.6h run
-> finished, not before. The ranking below is not being withdrawn on the
-> strength of this alone, but it has not been confirmed on an independent
-> seed either — treat a re-run on a fresh seed as unfinished business, not
-> optional polish. Tracked as `QW-026` in `quantik-workspace`.
+> **The first run, seed `20260829`.** This run took the script's default
+> seed, which was already spent on `runs/eval/epoch-test/`. The independent-seed
+> re-run on `20261015` is in [`patience-arena-second-seed.md`](patience-arena-second-seed.md),
+> with both runs side by side and the verdict. The tables below are the first
+> run's and are not confirmed on the second seed where that document says so.
 
-On raw policy (`net-policy`, deterministic — the ply-9 row is directional
-only, since its worst pairing replays just 135 of 300 distinct games):
+On raw policy (`net-policy`, deterministic). Policy ply 9 is not reportable:
+its worst pairing replays just 135 of 300 distinct games, on both seeds, so
+its row is omitted here (see the linked document):
 
 | start ply | 1st | 2nd | 3rd | 4th | distinct games (worst pairing) |
 |---|---|---|---|---|---|
 | 3 | `cpool` 55.0% | `attn` 52.2% | `mlp`/`resnet` 46.4% (tied) | | 297/300 |
 | 6 | `attn` 52.6% | `cpool` 51.9% | `resnet` 50.8% | `mlp` 44.8% | 244/300 |
-| 9 | `cpool` 51.1% | `attn` 50.3% | `mlp` 49.6% | `resnet` 49.0% | 135/300 |
 
 Under 128-simulation MCTS, where distinct-game coverage is far better:
 
@@ -338,10 +333,10 @@ Under 128-simulation MCTS, where distinct-game coverage is far better:
 | 6 | `attn` 58.4% · `cpool` 57.6% · `resnet` 57.0% · `mlp` 56.1% | 21.0% | 230/300 |
 
 The cpool/attn "tie" ADR 0001 reported on fixed-budget top-1 does not
-survive this arena: `cpool` wins ply-3 MCTS by 6.5 points, the widest gap
-in either table, and only loses ply-6 MCTS to `attn` by 0.8 points —
-inside the noise a single seed and imperfect game diversity can produce,
-not a second regime the way the ResNet-vs-`cpool` split above was.
+survive this arena: `cpool` leads at ply-3 MCTS-128, and that lead holds on
+the independent seed. The first run's 0.8-point ply-6 margin for `attn` does
+not survive the independent seed either, and the ply-6 head-to-head favours
+`cpool` there; see [`patience-arena-second-seed.md`](patience-arena-second-seed.md).
 `resnet`/`mlp` stay mid-pack under MCTS despite gaining the most top-1 from
 the longer training budget, which is this document's point restated: raw
 policy accuracy and play strength are separate measurements.
@@ -359,10 +354,13 @@ undertrained; at the correct rate `cpool` beats it at ply 3 by a
 significant margin. And search does not flatten the field: several pairings
 are now significant that previously were not.
 
-The one claim that does survive, in weakened form, is depth dependence —
-`attn` leads at ply 6 and `cpool` at plies 3 and 9. But it is a
-`cpool`-versus-`attn` effect, not the ResNet-versus-`cpool` story that was
-written down.
+The depth dependence the first run still suggested, in weakened form — `attn`
+leading at ply 6 and `cpool` at plies 3 and 9 — is not supported by the
+independent-seed re-run: the ply-9 policy audit fails on both seeds, and the
+ply-6 margin does not survive (see
+[`patience-arena-second-seed.md`](patience-arena-second-seed.md)). What
+remains is `cpool` leading at ply 3, a `cpool`-versus-`attn` effect, not the
+ResNet-versus-`cpool` story that was written down.
 
 ## What this still does not establish
 
