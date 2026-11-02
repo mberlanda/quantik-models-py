@@ -89,7 +89,7 @@ patience-cpool, patience-cpool-v2. Each has its own checkpoint under
 The seed is not a training seed. A search of the repo docs, scripts, src and
 tests, the workspace tasks and context, and `runs/train` found no use of
 20261001 as a training seed. The seed is reserved for this arena in the
-workspace packets. `plan.md` also contains a GAMES=6 smoke command with this
+workspace packets. The initiative plan also contains a GAMES=6 smoke command with this
 seed. This document does not examine whether that smoke run produced output.
 
 ## 3. Leaderboards
