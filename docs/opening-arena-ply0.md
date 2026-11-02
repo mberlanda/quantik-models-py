@@ -21,11 +21,11 @@ document. The raw counts are given so another cutoff can be applied to them.
 | Config | Start ply | Family | Pairings x games | Worst pairing (distinct/games) | Worst ratio | Distinct across pairings (min / median / max) | Audit |
 |---|---|---|---|---|---|---|---|
 | A | 0 | policy | 30 x 300 | resnet vs patience-cpool-v2: 292/300 | 97.3% | 292 / 300 / 300 | pass |
-| A | 0 | MCTS (128 sims) | 42 x 300 | cpool-mcts128 vs patience-cpool-v2-mcts128: 103/300 | 34.3% | 103 / 209 / 279 | **FAIL: not reportable** |
+| A | 0 | MCTS (128 sims) | 42 x 300 | cpool-mcts128 vs patience-cpool-v2-mcts128: 103/300 | 34.3% | 103 / 208.5 / 279 | **FAIL: not reportable** |
 | A | 1 | policy | 30 x 300 | patience-cpool-v2 vs mlp: 296/300 | 98.7% | 296 / 300 / 300 | pass |
-| A | 1 | MCTS (128 sims) | 42 x 300 | uniform-mcts128 vs cpool-mcts128: 257/300 | 85.7% | 257 / 289 / 298 | pass |
+| A | 1 | MCTS (128 sims) | 42 x 300 | uniform-mcts128 vs cpool-mcts128: 257/300 | 85.7% | 257 / 288 / 298 | pass |
 | B (rerun, TEMP_PLIES=6) | 0 | policy | 30 x 300 | resnet vs patience-cpool-v2: 299/300 | 99.7% | 299 / 300 / 300 | pass |
-| B (rerun, TEMP_PLIES=6) | 0 | MCTS (128 sims) | 42 x 300 | cpool-mcts128 vs patience-cpool-v2-mcts128: 244/300 | 81.3% | 244 / 291 / 300 | pass |
+| B (rerun, TEMP_PLIES=6) | 0 | MCTS (128 sims) | 42 x 300 | cpool-mcts128 vs patience-cpool-v2-mcts128: 244/300 | 81.3% | 244 / 290.5 / 300 | pass |
 
 Config A, start ply 0, MCTS fails the audit. Its win rates are not reported
 anywhere in this document, and its seat split is omitted too. Its data remain
