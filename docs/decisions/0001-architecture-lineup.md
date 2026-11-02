@@ -1,5 +1,15 @@
 # 1. Which architectures to train, and which to only write down
 
+> **Discrepancy note, 2026-11-02 (QW-026, for coordinator review).** The
+> independent-seed re-run of the patience-lineup arena,
+> [`../patience-arena-second-seed.md`](../patience-arena-second-seed.md),
+> does not confirm the ply-6 MCTS-128 margin reported in the section
+> "Outcome under patience-based budgets" below: the 0.8-point margin for
+> `attn` reverses on the second seed and sits inside the noise, and the
+> ply-6 head-to-head favours `cpool` on both seeds. The ply-3 `cpool` lead
+> holds on both seeds. The decision under "Decision" is not rewritten
+> here; whether it still follows from the evidence is for review.
+
 > **About the numbers in this document.** Every measurement comes from a
 > specific run of a specific checkpoint, and the checkpoints live under
 > `runs/`, which is gitignored — so nothing here can be verified from a
@@ -280,23 +290,23 @@ from the extra epochs (+0.0092, +0.0144) than `cpool`/`attn` did (+0.0023,
 16-epoch cap was actually cutting off.
 
 That is still only top-1. `scripts/evaluate_lineup.sh` against
-`runs/train/patience-{arch}/best` (`runs/eval/patience-2026-08-30/`) is
-what settles whether it changes anything downstream — see
+`runs/train/patience-{arch}/best` (the first run, `runs/eval/patience-2026-08-30/`)
+is what settles whether it changes anything downstream — see
 `shift-evaluation.md` and `autoplay.md` for the restated tables. Short
 version: the earlier "`attn` matches `cpool`" reading was a top-1 artifact
 of an unconverged `attn`. Under 128-simulation search from ply-3 starts the
-gap is real — `cpool` 66.4% to `attn`'s 59.9% — and `cpool`'s deep/value
-advantage widens rather than closes. `attn` still edges `cpool` at ply-6
-MCTS starts by 0.8 points, which is inside the noise a single seed and
-imperfect game-diversity can produce, not a second regime the way the
-ResNet-vs-`cpool` split was in the superseded section below.
+`cpool` lead over `attn` is real and holds on the independent seed, and
+`cpool`'s deep/value advantage widens rather than closes. The first run's
+ply-6 MCTS-128 margin for `attn` does not survive the second seed; the
+verdict and the numbers for both seeds are in
+[`../patience-arena-second-seed.md`](../patience-arena-second-seed.md),
+not restated here.
 
-**That arena ran on `20260829`**, a seed already spent on a different
-comparison (`runs/eval/epoch-test/`) — the workspace task that commissioned
-this run (QW-012) explicitly called for a fresh one and the run did not use
-one. See `autoplay.md`'s "Seed caveat" for detail. The ranking above stands
-provisionally; an independent-seed re-run has not happened yet. Tracked as
-`QW-026` in `quantik-workspace`.
+**The first run of that arena used `20260829`**, a seed already spent on a
+different comparison (`runs/eval/epoch-test/`). The workspace task that
+commissioned it (QW-012) called for a fresh seed and the run did not use one.
+The independent-seed re-run (`20261015`, QW-026) is in
+[`../patience-arena-second-seed.md`](../patience-arena-second-seed.md).
 
 ## Outcome, 2026-08-28 (superseded — measured at the ResNet's learning rate)
 
