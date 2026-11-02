@@ -1,7 +1,7 @@
 # Opening arena from ply 0 and ply 1: measured results
 
-This document records what the ply-0 and ply-1 arena runs measured. It contains
-no interpretation. The arena was run with `scripts/evaluate_opening_arena.sh`,
+This document records what the ply-0 and ply-1 arena runs measured. Sections 1
+to 5 contain no interpretation; sections 6 and 7 read them. The arena was run with `scripts/evaluate_opening_arena.sh`,
 which is not modified.
 
 The distinct-games audit comes first, because every win rate below depends on it.
@@ -226,8 +226,158 @@ No win rates. See section 1.
 - **One training seed per checkpoint.** No margin in this document has a
   run-to-run error bar. Every checkpoint was trained once.
 - **Rates are over games, not distinct games.** The distinct counts in section
-  1 show how many of the 300 games in each pairing differ. No confidence
-  intervals are computed here.
+  1 show how many of the 300 games in each pairing differ. Sections 1 to 5
+  compute no confidence intervals; section 6 computes them from the tables.
 - **Config B is not a replacement for Config A.** It is a separate
   configuration with its own audit. Config A's MCTS cell at start ply 0 remains
   not reportable.
+
+## 6. Reading
+
+**There is no full strength ordering between the checkpoints at ply 0: `patience-cpool-v2` is separable from the other five in every reportable table, and those five are not reliably ordered among themselves, though all six are far above the uniform-priors control.**
+
+Method. Every interval below is a 95% normal approximation, 1.96 x sqrt(p(1-p)/n),
+on a single seat rate from the section 3 tables (n = 1,500 for policy, 1,800 for
+MCTS). That is about +/-2.5 points for a policy rate near 50% and +/-2.3 for MCTS.
+A difference between two agents in the same seat is judged against the
+root-sum-square of the two half-widths, about 3.5 points for policy and 3.1 for
+MCTS. Two limits make these intervals optimistic: each agent's games are 300 per
+opponent rather than independent draws, and each checkpoint was trained once, so
+a gap between checkpoints is not a gap between architectures. A difference inside
+its interval is called indistinguishable, never an order. No rate below pools the
+two seats; where a "balanced mean" appears it is the unweighted average of the two
+seat rates, which have equal denominators.
+
+**1. `patience-cpool-v2` is above everything else, in both seats.** Its margin
+over the best other agent in the same seat, per table:
+
+| Table | Mover seat | Responder seat |
+|---|---|---|
+| A, start ply 0, policy | 76.3 vs 58.0 (+18.3) | 74.6 vs 40.9 (+33.7) |
+| A, start ply 1, policy | 74.1 vs 40.7 (+33.4) | 77.3 vs 58.2 (+19.1) |
+| A, start ply 1, MCTS | 69.9 vs 54.7 (+15.2) | 76.8 vs 73.1 (+3.7) |
+| B, start ply 0, policy | 79.7 vs 57.1 (+22.6) | 78.5 vs 42.5 (+36.0) |
+| B, start ply 0, MCTS | 78.5 vs 72.3 (+6.2) | 74.6 vs 53.2 (+21.4) |
+
+Every margin exceeds its interval. The smallest, +3.7 for A start ply 1 MCTS
+responder, clears a half-width of about 2.8 only narrowly. Config A MCTS at start
+ply 0 is excluded (audit failure). The v2 gap is the one result that holds across
+configs, start plies, seats and policy versus MCTS.
+
+**2. The other five (cpool, attn, resnet, mlp, patience-cpool) are not a ladder.**
+- *Rank depends on seat.* In A start ply 0 policy, cpool is last as mover (48.9;
+  below resnet 58.0, attn 56.7, patience-cpool 57.6 and mlp 54.5, each gap larger
+  than the 3.5 interval) and first or tied-first as responder (40.9, against
+  resnet 31.7 and attn 34.1 with cpool above both beyond the interval, and
+  indistinguishable from patience-cpool 38.4). Against resnet alone the sign flips
+  with both gaps outside noise: -9.1 as mover, +9.2 as responder. A start ply 1
+  MCTS flips cpool against attn the same way: mover 50.7 vs 34.2, responder 57.1 vs
+  65.7. The flip is not present in every table (in B start ply 0 policy cpool
+  is not above resnet as mover but still above as responder), so the claim is that
+  the order is seat-dependent, not that it flips everywhere.
+- *Rank depends on search.* With policy only, mlp is lowest or tied-lowest as the
+  second player of the full game in all three tables (A start ply 0 responder 28.3,
+  tied with resnet 31.7 within the interval; A start ply 1 mover 29.3, below resnet
+  34.8 and attn 35.1; B start ply 0 responder 27.1, below resnet 31.9). With MCTS it is
+  not: in B start ply 0 cpool is lowest as mover (40.3, against 64.4 to 72.3 for the
+  other four) and attn and mlp are lowest as responder (40.9 and 42.2, indistinguishable).
+- *Rank depends on TEMP_PLIES.* Config A and Config B differ only in TEMP_PLIES
+  (4 versus 6) at start ply 0 policy. The same checkpoint moves by more than the
+  between-agent differences: mlp as mover 54.5 to 45.3 (-9.2), resnet as mover 58.0
+  to 51.8 (-6.2), both beyond the 3.5 interval. So the order among the five
+  is not a property of the checkpoints alone; it moves with the opening randomisation.
+- *The balanced means of the five are close.* Policy, A start ply 0: patience-cpool
+  48.0, attn 45.4, cpool 44.9, resnet 44.8, mlp 41.4, so attn, cpool and resnet span
+  0.6 points. With MCTS the means spread more (B start ply 0: resnet 61.0,
+  patience-cpool 58.9, mlp 57.1, attn 52.7, cpool 43.3) but the seat-level order behind
+  them is the one that flips, as above.
+
+**3. What the control shows.** `uniform-mcts128` (uniform priors, value zero, same
+search) wins 12/1,800 as mover and 10/1,800 as responder in B start ply 0 (0.7%
+and 0.6%), and 2/1,800 and 5/1,800 in A start ply 1. Every network-guided agent
+beats it. The reading "search does the work and the networks are interchangeable"
+is therefore rejected: with the same 128 simulations and no network, the agent
+almost never wins. The control separates "a trained checkpoint" from "no
+checkpoint"; it does not separate checkpoints from one another, and it cannot say
+the networks differ at ply 0 itself. The control plays whole games, so its deficit
+comes from every ply the network guides, not from the empty board. The packet
+states the checkpoints' ply-0 priors are uniform to three decimals (max legal
+prior 0.016-0.023); no table in this document measures that, so it is context, not
+evidence.
+
+**4. Start ply 0 adds nothing over start ply 1 for the policy agents.** Compare a
+role-matched pair (the first player of the full game is the ply-0 mover and the
+ply-1 responder). First-player rates for ply 0 and ply 1: cpool 48.9/49.7, attn
+56.7/53.9, resnet 58.0/58.2, mlp 54.5/55.4, patience-cpool 57.6/53.9, v2
+76.3/77.3. Second-player rates: cpool 40.9/40.7, attn 34.1/35.1, resnet 31.7/34.8,
+mlp 28.3/29.3, patience-cpool 38.4/37.5, v2 74.6/74.1. All twelve differences are at
+most 3.7 points; only that largest one (patience-cpool, first player) falls marginally
+outside its interval of about 3.5, and the other eleven are inside it. So the
+empty board and the board after one random ply give the same picture for policy
+agents. The MCTS comparison is not clean: ply 0 is Config B and ply 1 is Config A,
+and cpool-mcts128 as first player is 40.3 at ply 0 (B) against 57.1 at ply 1 (A),
+a 16.8-point gap this document does not explain.
+
+**5. Mover parity.** The mover is the first player at start ply 0 and the second
+player of the full game at start ply 1, because one random ply has already been
+played. The seat effect is large and its sign follows the full-game role, not the
+word "mover": in A start ply 0 policy the mover seat wins 5,280/9,000 games, in A
+start ply 1 policy it wins 3,774/9,000, i.e. the first player of the full game
+wins 58.7% and 58.1% of games respectively; B start ply 0 policy gives 5,103/9,000
+(56.7%). For the five non-v2 agents the gap between an agent's two seat rates is
+8 to 26 points, larger than most between-agent gaps above, which is why a pooled
+rate would mostly measure which seat an agent happened to fill. The figure for
+`patience-cpool-v2` is the exception (76.3 and 74.6, a 1.7-point gap). Any
+statement about an agent must name which seat of the full game it holds.
+
+**Rejected readings.**
+- *Search does the work, networks interchangeable.* Rejected by the control (item 3).
+- *A single strength ladder of all six.* Rejected by items 2 and 5: order among the
+  five changes with seat, search and TEMP_PLIES.
+- *Rank by the printed pooled leaderboard or by balanced mean alone.* Rejected: the
+  pooled rate is seat-confounded, and a balanced mean hides the seat reversals in
+  item 2.
+- *Read the failed Config A MCTS ply-0 cell, or treat Config B as its repair.*
+  Rejected: no rates from the failed cell, and Config B is a separate configuration.
+
+**What the data cannot settle.** Whether the five non-v2 checkpoints have a true
+order, at any single seat and search setting, needs one or more of the following,
+none of which was run here:
+1. The head-to-head matrix per ordered pairing (300 games each), recomputed from the
+   existing `games.json` files with no new games, to check transitivity among the five.
+2. One configuration repeated with a different arena seed, to measure how much of the
+   Config A / Config B movement is TEMP_PLIES and how much is sampling noise.
+3. More games. Resolving a 2-point difference between two agents in one seat at
+   p near 0.5 needs about 4,800 games per agent-seat (1.96 x sqrt(2 x 0.25 / n) = 0.02),
+   against 1,500 now.
+4. More than one training seed per architecture (QW-026 is the independent-seed work),
+   to separate checkpoint from architecture.
+
+## 7. What this unblocks in QW-010
+
+**A ply-0-derived ladder is supportable only as a two-step one, not as easy / medium /
+hard from these checkpoints.** What the evidence supports: `patience-cpool-v2` is the
+top opponent in this roster (balanced mean 75.5 in A start ply 0 policy, 79.1 in B; 76.5
+in B MCTS), above every other checkpoint in both seats, and uniform-priors search is a floor
+(0.6% in B MCTS). It does not support placing cpool, attn, resnet, mlp or
+patience-cpool at distinct levels, because their order depends on seat, search and
+TEMP_PLIES (Reading, item 2). A middle tier built from those five would rank them on an
+order that changes when the opening randomisation changes.
+
+What QW-010 should do instead:
+1. Use ply-1 or ply-0 numbers interchangeably for policy agents (Reading, item 4), and
+   keep every number seat-labelled with the full-game role, per its own constraint.
+2. Take the top level from `patience-cpool-v2`, citing the margins in item 1.
+3. Source the lower levels from a dimension that moves strength by more than the
+   between-checkpoint noise. The tables here show only one such dimension, network versus
+   no network (the control), which is too wide a gap to make an easy level. Candidates
+   already named in the initiative are the minimax and search-budget ladder in
+   `docs/oracle-benchmark.md`; these were not measured here and need their own seat-balanced
+   arena before they are used.
+4. Treat any mapping of the five middle checkpoints as unsettled until run 1 in "What the
+   data cannot settle" (zero new games) has been done; run 2 and 3 only if it is ambiguous.
+
+Rejected for QW-010: ranking the middle five by balanced mean (the spread, 41.4 to 48.0 in
+A start ply 0 policy, is not stable across configs); using the ply-3/6/9 tables as a
+stand-in (already rejected in the initiative's decisions); and presenting `cpool-v3` as
+an extra level (no data here concerns it).
